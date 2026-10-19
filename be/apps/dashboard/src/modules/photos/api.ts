@@ -142,6 +142,10 @@ export async function deletePhotoAssets(ids: string[], options?: { deleteFromSto
   })
 }
 
+export async function reindexPhotoAi(id: string): Promise<{ status: string }> {
+  return await coreApi<{ status: string }>(`/photos/assets/${id}/ai/reindex`, { method: 'POST' })
+}
+
 export async function updatePhotoAssetTags(id: string, tags: string[]): Promise<PhotoAssetListItem> {
   const asset = await coreApi<PhotoAssetListItem>(`/photos/assets/${id}/tags`, {
     method: 'PATCH',

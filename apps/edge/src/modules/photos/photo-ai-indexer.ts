@@ -314,12 +314,16 @@ export class PhotoAiIndexer {
       const oldAiSet = new Set(oldAiTags.map((tag) => tag.toLowerCase()))
       const manualTags = (asset.manifest.data.tags ?? []).filter((tag) => !oldAiSet.has(tag.toLowerCase()))
       const nextTags = mergeDisplayTags(manualTags, aiTags)
-      if (nextTags.join('\0') === (asset.manifest.data.tags ?? []).join('\0')) {
+      const currentAiTags = asset.manifest.data.aiTags ?? []
+      if (
+        nextTags.join('\0') === (asset.manifest.data.tags ?? []).join('\0') &&
+        currentAiTags.join('\0') === aiTags.join('\0')
+      ) {
         return
       }
       const nextManifest = {
         ...asset.manifest,
-        data: { ...asset.manifest.data, tags: nextTags },
+        data: { ...asset.manifest.data, tags: nextTags, aiTags },
       }
       const updated = await db
         .update(photoAssets)

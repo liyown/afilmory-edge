@@ -14,7 +14,7 @@ export const PageFooter = () => {
   const isTwoLine = showICP && showPolice
 
   return (
-    <footer className="pointer-events-none fixed inset-x-0 bottom-0 z-100">
+    <footer className="pointer-events-none fixed inset-x-0 bottom-0 z-30">
       <LinearBlur
         className="absolute inset-x-0 bottom-0 z-[-1] h-20"
         tint="var(--color-background)"

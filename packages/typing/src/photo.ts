@@ -32,9 +32,9 @@ export interface ToneAnalysis {
 }
 
 // Video source sum type: Live Photo or Motion Photo
-export type VideoSource
-  = | { type: 'live-photo', videoUrl: string, s3Key: string }
-    | { type: 'motion-photo', offset: number, size?: number, presentationTimestamp?: number }
+export type VideoSource =
+  | { type: 'live-photo'; videoUrl: string; s3Key: string }
+  | { type: 'motion-photo'; offset: number; size?: number; presentationTimestamp?: number }
 
 export interface PhotoInfo {
   title: string
@@ -116,6 +116,8 @@ export interface PhotoManifestItem extends PhotoInfo {
   digest?: string
   exif: PickedExif | null
   keywords: string[]
+  /** AI-generated tags; also merged into `tags` for filtering. */
+  aiTags?: string[]
   regions: PhotoRegion[]
   toneAnalysis: ToneAnalysis | null // 影调分析结果
   location: LocationInfo | null // 地理位置信息（反向地理编码）

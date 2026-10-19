@@ -65,7 +65,7 @@ export const PhotosRoot = () => {
               ? t('search.empty')
               : search.degraded
                 ? t('search.aiUnavailable')
-                : null}
+                : t('action.search.results', { count: photos.length })}
         </div>
       )}
 

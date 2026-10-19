@@ -78,45 +78,45 @@ export interface PhotoSyncLogEvent {
   payload: PhotoSyncLogPayload
 }
 
-export type PhotoSyncProgressEvent
-  = | {
-    type: 'start'
-    payload: {
-      summary: PhotoSyncResultSummary
-      totals: PhotoSyncStageTotals
-      options: { dryRun: boolean }
-    }
-  }
+export type PhotoSyncProgressEvent =
   | {
-    type: 'stage'
-    payload: {
-      stage: PhotoSyncProgressStage
-      status: 'start' | 'complete'
-      processed: number
-      total: number
-      summary: PhotoSyncResultSummary
+      type: 'start'
+      payload: {
+        summary: PhotoSyncResultSummary
+        totals: PhotoSyncStageTotals
+        options: { dryRun: boolean }
+      }
     }
-  }
   | {
-    type: 'action'
-    payload: {
-      stage: PhotoSyncProgressStage
-      index: number
-      total: number
-      action: PhotoSyncAction
-      summary: PhotoSyncResultSummary
+      type: 'stage'
+      payload: {
+        stage: PhotoSyncProgressStage
+        status: 'start' | 'complete'
+        processed: number
+        total: number
+        summary: PhotoSyncResultSummary
+      }
     }
-  }
   | {
-    type: 'complete'
-    payload: PhotoSyncResult
-  }
-  | {
-    type: 'error'
-    payload: {
-      message: string
+      type: 'action'
+      payload: {
+        stage: PhotoSyncProgressStage
+        index: number
+        total: number
+        action: PhotoSyncAction
+        summary: PhotoSyncResultSummary
+      }
     }
-  }
+  | {
+      type: 'complete'
+      payload: PhotoSyncResult
+    }
+  | {
+      type: 'error'
+      payload: {
+        message: string
+      }
+    }
   | PhotoSyncLogEvent
 
 export interface PhotoAssetManifestPayload {
@@ -136,6 +136,7 @@ export interface PhotoAssetListItem {
   publicUrl: string | null
   size: number | null
   syncStatus: 'pending' | 'synced' | 'conflict'
+  aiStatus?: 'pending' | 'processing' | 'ready' | 'failed' | 'skipped'
 }
 
 export interface PhotoAssetSummary {

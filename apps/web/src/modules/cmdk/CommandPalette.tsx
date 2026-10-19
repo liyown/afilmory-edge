@@ -38,6 +38,7 @@ interface CommandPaletteProps {
 }
 
 const allTags = photoLoader.getAllTags()
+const manualTags = photoLoader.getAllManualTags()
 const allCameras = photoLoader.getAllCameras()
 const allLenses = photoLoader.getAllLenses()
 
@@ -49,14 +50,14 @@ const BRACKET_CORNERS = [
 ] as const
 
 const getLocationTokens = (
-  location?: { locationName?: string | null, city?: string | null, country?: string | null } | null,
+  location?: { locationName?: string | null; city?: string | null; country?: string | null } | null,
 ) => {
   if (!location) {
     return []
   }
 
   const tokens = [location.locationName, location.city, location.country]
-    .map(token => token?.trim())
+    .map((token) => token?.trim())
     .filter((token): token is string => typeof token === 'string' && token.length > 0)
 
   const uniqueTokens: string[] = []
@@ -100,12 +101,12 @@ const searchPhotos = (photos: ReturnType<typeof photoLoader.getPhotos>, query: s
   return photos.filter((photo) => {
     const matchesTitle = photo.title?.toLowerCase().includes(lowerQuery)
     const matchesDescription = photo.description?.toLowerCase().includes(lowerQuery)
-    const matchesTags = photo.tags?.some(tag => tag.toLowerCase().includes(lowerQuery))
-    const matchesCamera
-      = photo.exif?.Make?.toLowerCase().includes(lowerQuery) || photo.exif?.Model?.toLowerCase().includes(lowerQuery)
+    const matchesTags = photo.tags?.some((tag) => tag.toLowerCase().includes(lowerQuery))
+    const matchesCamera =
+      photo.exif?.Make?.toLowerCase().includes(lowerQuery) || photo.exif?.Model?.toLowerCase().includes(lowerQuery)
     const matchesLens = photo.exif?.LensModel?.toLowerCase().includes(lowerQuery)
     const locationTokens = getLocationTokens(photo.location)
-    const matchesLocation = locationTokens.some(token => token.toLowerCase().includes(lowerQuery))
+    const matchesLocation = locationTokens.some((token) => token.toLowerCase().includes(lowerQuery))
 
     return matchesTitle || matchesDescription || matchesTags || matchesCamera || matchesLens || matchesLocation
   })
@@ -119,12 +120,13 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
 
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [includeAiTags, setIncludeAiTags] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   const updateTagFilterMode = useCallback(
     (mode: 'union' | 'intersection') => {
-      setGallerySetting(prev => ({
+      setGallerySetting((prev) => ({
         ...prev,
         tagFilterMode: mode,
       }))
@@ -135,7 +137,7 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
   const handleReset = useCallback(() => {
     setQuery('')
     setSelectedIndex(0)
-    setGallerySetting(prev => ({
+    setGallerySetting((prev) => ({
       ...prev,
       selectedTags: [],
       selectedCameras: [],
@@ -169,9 +171,10 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
   const commands = useMemo((): Command[] => {
     const cmds: Command[] = []
 
-    // Filter commands - Tags
-    if (allTags.length > 0) {
-      allTags.forEach((tag) => {
+    // Filter commands - Tags (manual by default; AI tags can be toggled in).
+    const visibleTags = includeAiTags ? allTags : manualTags
+    if (visibleTags.length > 0) {
+      visibleTags.forEach((tag) => {
         const isActive = gallerySetting.selectedTags.includes(tag)
         cmds.push({
           id: `tag-${tag}`,
@@ -181,9 +184,9 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
           icon: 'i-mingcute-tag-line',
           active: isActive,
           action: () => {
-            setGallerySetting(prev => ({
+            setGallerySetting((prev) => ({
               ...prev,
-              selectedTags: isActive ? prev.selectedTags.filter(t => t !== tag) : [...prev.selectedTags, tag],
+              selectedTags: isActive ? prev.selectedTags.filter((t) => t !== tag) : [...prev.selectedTags, tag],
             }))
           },
           keywords: ['tag', 'filter', tag],
@@ -203,10 +206,10 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
           icon: 'i-mingcute-camera-line',
           active: isActive,
           action: () => {
-            setGallerySetting(prev => ({
+            setGallerySetting((prev) => ({
               ...prev,
               selectedCameras: isActive
-                ? prev.selectedCameras.filter(c => c !== camera.displayName)
+                ? prev.selectedCameras.filter((c) => c !== camera.displayName)
                 : [...prev.selectedCameras, camera.displayName],
             }))
           },
@@ -227,10 +230,10 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
           icon: <MageLens />,
           active: isActive,
           action: () => {
-            setGallerySetting(prev => ({
+            setGallerySetting((prev) => ({
               ...prev,
               selectedLenses: isActive
-                ? prev.selectedLenses.filter(l => l !== lens.displayName)
+                ? prev.selectedLenses.filter((l) => l !== lens.displayName)
                 : [...prev.selectedLenses, lens.displayName],
             }))
           },
@@ -265,7 +268,7 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
         icon: 'i-mingcute-star-line',
         active: isActive,
         action: () => {
-          setGallerySetting(prev => ({
+          setGallerySetting((prev) => ({
             ...prev,
             selectedRatings: isActive ? null : rating,
           }))
@@ -290,7 +293,7 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
         hideFromDefault: true,
         // Non-toggling: selecting an active preset re-applies the same range (no-op).
         action: () => {
-          setGallerySetting(prev => ({
+          setGallerySetting((prev) => ({
             ...prev,
             selectedDateRange: presetRange,
           }))
@@ -313,12 +316,12 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
     })
 
     // Clear all filters
-    const hasFilters
-      = gallerySetting.selectedTags.length > 0
-        || gallerySetting.selectedCameras.length > 0
-        || gallerySetting.selectedLenses.length > 0
-        || gallerySetting.selectedRatings !== null
-        || gallerySetting.selectedDateRange !== null
+    const hasFilters =
+      gallerySetting.selectedTags.length > 0 ||
+      gallerySetting.selectedCameras.length > 0 ||
+      gallerySetting.selectedLenses.length > 0 ||
+      gallerySetting.selectedRatings !== null ||
+      gallerySetting.selectedDateRange !== null
 
     if (hasFilters) {
       cmds.push({
@@ -328,7 +331,7 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
         subtitle: t('action.clear.filters'),
         icon: 'i-mingcute-close-line',
         action: () => {
-          setGallerySetting(prev => ({
+          setGallerySetting((prev) => ({
             ...prev,
             selectedTags: [],
             selectedCameras: [],
@@ -358,7 +361,7 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
           ),
           action: () => {
             const allPhotos = photoLoader.getPhotos()
-            const photoIndex = allPhotos.findIndex(p => p.id === photo.id)
+            const photoIndex = allPhotos.findIndex((p) => p.id === photo.id)
             if (photoIndex !== -1) {
               openViewer(photoIndex)
               navigate(`/photos/${photo.id}`)
@@ -373,20 +376,20 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
     }
 
     return cmds
-  }, [t, gallerySetting, query, navigate, onClose, setGallerySetting, openViewer, updateTagFilterMode])
+  }, [t, gallerySetting, query, navigate, onClose, setGallerySetting, openViewer, updateTagFilterMode, includeAiTags])
 
   // Filter commands based on query
   const filteredCommands = useMemo(() => {
     if (!query.trim()) {
       // Show all filters when no query - group by type
-      const activeFilters = commands.filter(cmd => cmd.active && !cmd.hideFromDefault)
-      const allFilters = commands.filter(cmd => cmd.type === 'filter' && !cmd.hideFromDefault)
+      const activeFilters = commands.filter((cmd) => cmd.active && !cmd.hideFromDefault)
+      const allFilters = commands.filter((cmd) => cmd.type === 'filter' && !cmd.hideFromDefault)
 
       // Prioritize active filters, then show all available filters
       const uniqueFilters = new Map<string, Command>()
 
       // First add active filters
-      activeFilters.forEach(cmd => uniqueFilters.set(cmd.id, cmd))
+      activeFilters.forEach((cmd) => uniqueFilters.set(cmd.id, cmd))
 
       // Then add remaining filters
       allFilters.forEach((cmd) => {
@@ -412,12 +415,12 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
       switch (e.key) {
         case 'ArrowDown': {
           e.preventDefault()
-          setSelectedIndex(prev => Math.min(prev + 1, filteredCommands.length - 1))
+          setSelectedIndex((prev) => Math.min(prev + 1, filteredCommands.length - 1))
           break
         }
         case 'ArrowUp': {
           e.preventDefault()
-          setSelectedIndex(prev => Math.max(prev - 1, 0))
+          setSelectedIndex((prev) => Math.max(prev - 1, 0))
           break
         }
         case 'Enter': {
@@ -458,7 +461,7 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
           onClick={onClose}
         >
           <m.div
-            className="border-border bg-background relative w-full max-w-2xl border"
+            className="border-border bg-background relative w-full min-w-0 max-w-2xl border"
             style={{
               boxShadow: '0 12px 32px rgba(0,0,0,0.45), 0 4px 12px rgba(0,0,0,0.3)',
             }}
@@ -466,9 +469,9 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
             animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
             exit={{ opacity: 0, scale: 0.98, filter: 'blur(6px)' }}
             transition={Spring.smooth(0.32)}
-            onClick={e => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
-            {BRACKET_CORNERS.map(corner => (
+            {BRACKET_CORNERS.map((corner) => (
               <m.span
                 key={corner.cls}
                 aria-hidden
@@ -481,7 +484,7 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
             ))}
 
             <div className="overflow-hidden">
-              <div className="border-border relative flex items-center gap-2.5 border-b px-3 py-3">
+              <div className="border-border relative flex items-center gap-2 border-b px-3 py-3">
                 <i className="i-mingcute-search-line text-text-tertiary shrink-0 text-lg" />
                 <input
                   ref={inputRef}
@@ -489,40 +492,55 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
                   name="search"
                   autoComplete="off"
                   value={query}
-                  onChange={e => setQuery(e.target.value)}
+                  onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={t('action.search.placeholder')}
-                  className="text-text placeholder-text-tertiary flex-1 bg-transparent text-sm outline-none focus-visible:outline-none"
+                  className="text-text placeholder-text-tertiary min-w-0 flex-1 bg-transparent text-sm outline-none focus-visible:outline-none"
                 />
                 <button
                   type="button"
                   onClick={handleReset}
-                  className="border-border bg-fill-quaternary text-text-secondary hover:bg-fill-secondary hover:text-text inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-all duration-200"
+                  className="border-border bg-fill-quaternary text-text-secondary hover:bg-fill-secondary hover:text-text inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-all duration-200"
                 >
                   <i className="i-mingcute-refresh-1-line text-sm" />
-                  {t('action.reset')}
+                  <span className="hidden sm:inline">{t('action.reset')}</span>
                 </button>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="border-border bg-fill-quaternary text-text-secondary hover:bg-fill-secondary hover:text-text inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-all duration-200"
+                  className="border-border bg-fill-quaternary text-text-secondary hover:bg-fill-secondary hover:text-text inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-all duration-200"
                 >
                   <i className="i-mingcute-close-line text-sm" />
-                  {t('action.close')}
+                  <span className="hidden sm:inline">{t('action.close')}</span>
                 </button>
               </div>
 
-              <div className="border-border bg-fill-quaternary text-text-secondary relative flex items-center justify-between gap-3 border-b px-3 py-1.5 text-xs">
-                <div className="flex items-center gap-2">
+              <div className="border-border bg-fill-quaternary text-text-secondary relative flex items-center justify-between gap-2 border-b px-3 py-1.5 text-xs">
+                <div className="hidden shrink-0 items-center gap-2 whitespace-nowrap sm:flex">
                   <i className="i-mingcute-filter-3-line text-sm" />
                   <span>{t('action.tag.match.label')}</span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex min-w-0 items-center justify-end gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setIncludeAiTags((value) => !value)}
+                    className={clsxm(
+                      'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1 text-xs font-medium transition-all duration-200 sm:px-2.5',
+                      includeAiTags
+                        ? 'border-accent/50 bg-accent/15 text-accent'
+                        : 'border-transparent bg-fill-tertiary text-text-secondary hover:text-text',
+                    )}
+                    aria-pressed={includeAiTags}
+                  >
+                    {includeAiTags && <i className="i-mingcute-check-line text-xs" aria-hidden="true" />}
+                    {t('action.tag.include-ai')}
+                  </button>
+                  <div className="bg-fill-tertiary mx-0.5 h-4 w-px shrink-0 sm:mx-1" aria-hidden="true" />
                   <button
                     type="button"
                     onClick={() => updateTagFilterMode('union')}
                     className={clsxm(
-                      'rounded-full px-3 py-1 text-xs font-medium transition-all duration-200',
+                      'shrink-0 whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium transition-all duration-200 sm:px-3',
                       gallerySetting.tagFilterMode === 'union'
                         ? 'bg-accent text-white'
                         : 'bg-fill-tertiary text-text-secondary hover:text-text',
@@ -534,7 +552,7 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
                     type="button"
                     onClick={() => updateTagFilterMode('intersection')}
                     className={clsxm(
-                      'rounded-full px-3 py-1 text-xs font-medium transition-all duration-200',
+                      'shrink-0 whitespace-nowrap rounded-full px-2 py-1 text-xs font-medium transition-all duration-200 sm:px-3',
                       gallerySetting.tagFilterMode === 'intersection'
                         ? 'bg-accent text-white'
                         : 'bg-fill-tertiary text-text-secondary hover:text-text',
@@ -610,9 +628,7 @@ export const CommandPalette = ({ isOpen, onClose }: CommandPaletteProps) => {
                     </span>
                   </div>
                   {filteredCommands.length > 0 && (
-                    <span>
-                      {t('action.results', { count: filteredCommands.length })}
-                    </span>
+                    <span>{t('action.results', { count: filteredCommands.length })}</span>
                   )}
                 </div>
               </div>

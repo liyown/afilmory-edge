@@ -33,7 +33,28 @@ class PhotoLoader {
   getAllTags() {
     const tagSet = new Set<string>()
     this.photos.forEach((photo) => {
-      photo.tags.forEach(tag => tagSet.add(tag))
+      photo.tags.forEach((tag) => tagSet.add(tag))
+    })
+    return Array.from(tagSet).sort()
+  }
+
+  getAllManualTags() {
+    const tagSet = new Set<string>()
+    this.photos.forEach((photo) => {
+      const aiTags = new Set((photo.aiTags ?? []).map((tag) => tag.toLowerCase()))
+      photo.tags.forEach((tag) => {
+        if (!aiTags.has(tag.toLowerCase())) {
+          tagSet.add(tag)
+        }
+      })
+    })
+    return Array.from(tagSet).sort()
+  }
+
+  getAllAiTags() {
+    const tagSet = new Set<string>()
+    this.photos.forEach((photo) => {
+      photo.aiTags?.forEach((tag) => tagSet.add(tag))
     })
     return Array.from(tagSet).sort()
   }

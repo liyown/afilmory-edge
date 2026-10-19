@@ -68,9 +68,14 @@ export class PersonalPhotoController {
   }
 
   @Post('ai/reindex')
-  async reindexAi(@Body() body: { limit?: number }) {
+  async reindexAi(@Body() body: { limit?: number; force?: boolean }) {
     const limit = Number.isFinite(body?.limit) ? Math.min(Math.max(Number(body?.limit), 1), 50) : 10
-    return await this.photos.reindexAi(limit)
+    return await this.photos.reindexAi(limit, Boolean(body?.force))
+  }
+
+  @Post('assets/:id/ai/reindex')
+  async reindexAiAsset(@Param('id') id: string) {
+    return await this.photos.reindexAiAsset(id)
   }
 
   @Get('storage-url')

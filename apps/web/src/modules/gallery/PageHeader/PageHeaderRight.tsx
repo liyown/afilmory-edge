@@ -36,22 +36,24 @@ export const PageHeaderRight = () => {
   const hasViewCustomization = gallerySetting.columns !== 'auto' || gallerySetting.sortOrder !== 'desc'
 
   // 计算过滤器数量
-  const filterCount
-    = gallerySetting.selectedTags.length
-      + gallerySetting.selectedCameras.length
-      + gallerySetting.selectedLenses.length
-      + (gallerySetting.selectedRatings !== null ? 1 : 0)
+  const filterCount =
+    gallerySetting.selectedTags.length +
+    gallerySetting.selectedCameras.length +
+    gallerySetting.selectedLenses.length +
+    (gallerySetting.selectedRatings !== null ? 1 : 0)
 
   return (
     <div className="flex items-center gap-1 lg:gap-1.5">
       {/* Action Buttons */}
       <div className="bg-material-medium/40 flex items-center gap-1 rounded-lg">
-        <ActionIconButton
-          icon="i-mingcute-search-line"
-          title={t('action.search.unified.title')}
-          onClick={() => setCommandPaletteOpen(true)}
-          badge={filterCount}
-        />
+        <div className="hidden sm:block">
+          <ActionIconButton
+            icon="i-mingcute-filter-3-line"
+            title={t('action.filter.title')}
+            onClick={() => setCommandPaletteOpen(true)}
+            badge={filterCount}
+          />
+        </div>
 
         {/* Desktop only: Map Link */}
         {!isMobile && (
@@ -98,13 +100,19 @@ export const PageHeaderRight = () => {
 const MoreActionMenu = () => {
   const { t } = useTranslation()
   const [settings, setSettings] = useAtom(gallerySettingAtom)
+  const setCommandPaletteOpen = useSetAtom(isCommandPaletteOpenAtom)
+  const filterCount =
+    settings.selectedTags.length +
+    settings.selectedCameras.length +
+    settings.selectedLenses.length +
+    (settings.selectedRatings !== null ? 1 : 0)
 
-  const githubUrl
-    = siteConfig.social && siteConfig.social.github
+  const githubUrl =
+    siteConfig.social && siteConfig.social.github
       ? resolveSocialUrl(siteConfig.social.github, { baseUrl: 'https://github.com/' })
       : undefined
-  const twitterUrl
-    = siteConfig.social && siteConfig.social.twitter
+  const twitterUrl =
+    siteConfig.social && siteConfig.social.twitter
       ? resolveSocialUrl(siteConfig.social.twitter, { baseUrl: 'https://twitter.com/', stripAt: true })
       : undefined
   const hasRss = true
@@ -121,9 +129,19 @@ const MoreActionMenu = () => {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[180px]">
+        <DropdownMenuItem onClick={() => setCommandPaletteOpen(true)} className="justify-between">
+          <span className="flex items-center gap-2">
+            <i className="i-mingcute-filter-3-line text-base" />
+            {t('action.filter.title')}
+          </span>
+          {filterCount > 0 && (
+            <span className="bg-accent rounded-full px-1.5 text-[10px] text-white">{filterCount}</span>
+          )}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <div className="px-2 py-1.5 text-xs font-medium text-white/50">{t('action.view.title')}</div>
         <DropdownMenuItem
-          onClick={() => setSettings(prev => ({ ...prev, viewMode: 'masonry' }))}
+          onClick={() => setSettings((prev) => ({ ...prev, viewMode: 'masonry' }))}
           className="justify-between"
         >
           <span className="flex items-center gap-2">
@@ -133,7 +151,7 @@ const MoreActionMenu = () => {
           {settings.viewMode === 'masonry' && <i className="i-mingcute-check-line text-base" />}
         </DropdownMenuItem>
         <DropdownMenuItem
-          onClick={() => setSettings(prev => ({ ...prev, viewMode: 'list' }))}
+          onClick={() => setSettings((prev) => ({ ...prev, viewMode: 'list' }))}
           className="justify-between"
         >
           <span className="flex items-center gap-2">
@@ -264,8 +282,7 @@ const LoginButton = () => {
     try {
       const { url } = await authApi.signInSocial(provider)
       window.location.href = url
-    }
-    catch (error) {
+    } catch (error) {
       console.error('Sign in failed:', error)
     }
   }
@@ -285,7 +302,7 @@ const LoginButton = () => {
       <DropdownMenuContent align="end" className="min-w-[200px]">
         <div className="px-2 py-1.5 text-xs text-white/50">{t('comments.chooseProvider')}</div>
         <DropdownMenuSeparator />
-        {socialProviders?.providers.map(provider => (
+        {socialProviders?.providers.map((provider) => (
           <DropdownMenuItem
             key={provider.id}
             onClick={() => handleSignIn(provider.id)}
@@ -340,7 +357,7 @@ const LoginPlatformIcon = ({ provider }: { provider: string }) => {
 const UserMenuButton = ({
   user,
 }: {
-  user: { id: string, name?: string | null, image?: string | null, role?: string | null }
+  user: { id: string; name?: string | null; image?: string | null; role?: string | null }
 }) => {
   const { t } = useTranslation()
   const setSessionUser = useSetAtom(sessionUserAtom)
@@ -357,11 +374,9 @@ const UserMenuButton = ({
       await authApi.signOut()
       setSessionUser(null)
       await queryClient.invalidateQueries({ queryKey: ['session'] })
-    }
-    catch (error) {
+    } catch (error) {
       console.error('Sign out failed:', error)
-    }
-    finally {
+    } finally {
       setIsSigningOut(false)
     }
   }

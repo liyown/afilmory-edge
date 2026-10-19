@@ -7,7 +7,7 @@ import { isNil } from 'es-toolkit/compat'
 import { useAtomValue } from 'jotai'
 import { m } from 'motion/react'
 import type { FC } from 'react'
-import { Fragment, useCallback, useMemo } from 'react'
+import { Fragment, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { isExiftoolLoadedAtom } from '~/atoms/app'
@@ -30,6 +30,39 @@ import { PhotoRegionsSection } from './PhotoRegionsSection'
 import { RawExifViewer } from './RawExifViewer'
 
 const captureChipClassName = 'border-accent/20 bg-accent/10 flex h-6 items-center gap-2 rounded-md border px-2'
+const MAX_VISIBLE_TAGS = 6
+
+function PhotoTagsSection({ tags, onTagClick }: { tags: string[]; onTagClick: (tag: string) => void }) {
+  const { t } = useTranslation()
+  const [expanded, setExpanded] = useState(false)
+  const visibleTags = expanded ? tags : tags.slice(0, MAX_VISIBLE_TAGS)
+
+  return (
+    <ExifSection title={t('exif.tags')}>
+      <div className="flex flex-wrap gap-1.5">
+        {visibleTags.map((tag) => (
+          <MotionButtonBase
+            type="button"
+            onClick={() => onTagClick(tag)}
+            key={tag}
+            className="glassmorphic-btn border-accent/20 bg-accent/10 inline-flex cursor-pointer items-center rounded-full border px-2 py-1 text-xs text-white/90 backdrop-blur-sm"
+          >
+            {tag}
+          </MotionButtonBase>
+        ))}
+        {tags.length > MAX_VISIBLE_TAGS && (
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            className="rounded-full border border-white/15 px-2 py-1 text-xs text-white/60 transition-colors hover:border-white/30 hover:text-white"
+          >
+            {expanded ? t('exif.tags-collapse') : t('exif.tags-expand', { count: tags.length - MAX_VISIBLE_TAGS })}
+          </button>
+        )}
+      </div>
+    </ExifSection>
+  )
+}
 
 interface ExifPanelBaseProps {
   currentPhoto: PhotoManifestItem
@@ -189,57 +222,57 @@ export const ExifPanelContent: FC<ExifPanelContentProps> = ({
           </ExifRowGroup>
         </ExifSection>
 
-        {formattedExifData
-          && (formattedExifData.shutterSpeed
-            || formattedExifData.iso
-            || formattedExifData.aperture
-            || formattedExifData.exposureBias
-            || formattedExifData.focalLength35mm) && (
-          <ExifSection title={t('exif.capture.parameters')}>
-            <div className="grid grid-cols-2 gap-2">
-              {formattedExifData.focalLength35mm && (
-                <div className={captureChipClassName}>
-                  <StreamlineImageAccessoriesLensesPhotosCameraShutterPicturePhotographyPicturesPhotoLens className="text-sm text-white/70" />
-                  <span className="text-xs">
-                    {formattedExifData.focalLength35mm}
-                    mm
-                  </span>
-                </div>
-              )}
+        {formattedExifData &&
+          (formattedExifData.shutterSpeed ||
+            formattedExifData.iso ||
+            formattedExifData.aperture ||
+            formattedExifData.exposureBias ||
+            formattedExifData.focalLength35mm) && (
+            <ExifSection title={t('exif.capture.parameters')}>
+              <div className="grid grid-cols-2 gap-2">
+                {formattedExifData.focalLength35mm && (
+                  <div className={captureChipClassName}>
+                    <StreamlineImageAccessoriesLensesPhotosCameraShutterPicturePhotographyPicturesPhotoLens className="text-sm text-white/70" />
+                    <span className="text-xs">
+                      {formattedExifData.focalLength35mm}
+                      mm
+                    </span>
+                  </div>
+                )}
 
-              {formattedExifData.aperture && (
-                <div className={captureChipClassName}>
-                  <TablerAperture className="text-sm text-white/70" />
-                  <span className="text-xs">{formattedExifData.aperture}</span>
-                </div>
-              )}
+                {formattedExifData.aperture && (
+                  <div className={captureChipClassName}>
+                    <TablerAperture className="text-sm text-white/70" />
+                    <span className="text-xs">{formattedExifData.aperture}</span>
+                  </div>
+                )}
 
-              {formattedExifData.shutterSpeed && (
-                <div className={captureChipClassName}>
-                  <MaterialSymbolsShutterSpeed className="text-sm text-white/70" />
-                  <span className="text-xs">{formattedExifData.shutterSpeed}</span>
-                </div>
-              )}
+                {formattedExifData.shutterSpeed && (
+                  <div className={captureChipClassName}>
+                    <MaterialSymbolsShutterSpeed className="text-sm text-white/70" />
+                    <span className="text-xs">{formattedExifData.shutterSpeed}</span>
+                  </div>
+                )}
 
-              {formattedExifData.iso && (
-                <div className={captureChipClassName}>
-                  <CarbonIsoOutline className="text-sm text-white/70" />
-                  <span className="text-xs">
-                    ISO
-                    {formattedExifData.iso}
-                  </span>
-                </div>
-              )}
+                {formattedExifData.iso && (
+                  <div className={captureChipClassName}>
+                    <CarbonIsoOutline className="text-sm text-white/70" />
+                    <span className="text-xs">
+                      ISO
+                      {formattedExifData.iso}
+                    </span>
+                  </div>
+                )}
 
-              {formattedExifData.exposureBias && (
-                <div className={captureChipClassName}>
-                  <MaterialSymbolsExposure className="text-sm text-white/70" />
-                  <span className="text-xs">{formattedExifData.exposureBias}</span>
-                </div>
-              )}
-            </div>
-          </ExifSection>
-        )}
+                {formattedExifData.exposureBias && (
+                  <div className={captureChipClassName}>
+                    <MaterialSymbolsExposure className="text-sm text-white/70" />
+                    <span className="text-xs">{formattedExifData.exposureBias}</span>
+                  </div>
+                )}
+              </div>
+            </ExifSection>
+          )}
 
         <PhotoRegionsSection
           regions={regions}
@@ -248,20 +281,7 @@ export const ExifPanelContent: FC<ExifPanelContentProps> = ({
         />
 
         {currentPhoto.tags && currentPhoto.tags.length > 0 && (
-          <ExifSection title={t('exif.tags')}>
-            <div className="flex flex-wrap gap-1.5">
-              {currentPhoto.tags.map(tag => (
-                <MotionButtonBase
-                  type="button"
-                  onClick={() => handleTagClick(tag)}
-                  key={tag}
-                  className="glassmorphic-btn border-accent/20 bg-accent/10 inline-flex cursor-pointer items-center rounded-full border px-2 py-1 text-xs text-white/90 backdrop-blur-sm"
-                >
-                  {tag}
-                </MotionButtonBase>
-              ))}
-            </div>
-          </ExifSection>
+          <PhotoTagsSection tags={currentPhoto.tags} onTagClick={handleTagClick} />
         )}
 
         {currentPhoto.toneAnalysis && (
@@ -273,7 +293,7 @@ export const ExifPanelContent: FC<ExifPanelContentProps> = ({
                   const toneTypeMap = {
                     'low-key': t('exif.tone.low-key'),
                     'high-key': t('exif.tone.high-key'),
-                    'normal': t('exif.tone.normal'),
+                    normal: t('exif.tone.normal'),
                     'high-contrast': t('exif.tone.high-contrast'),
                   }
                   return toneTypeMap[currentPhoto.toneAnalysis!.toneType] || currentPhoto.toneAnalysis!.toneType
@@ -324,12 +344,12 @@ export const ExifPanelContent: FC<ExifPanelContentProps> = ({
               </ExifSection>
             )}
 
-            {(formattedExifData.exposureMode
-              || formattedExifData.exposureProgram
-              || formattedExifData.meteringMode
-              || formattedExifData.whiteBalance
-              || formattedExifData.lightSource
-              || formattedExifData.flash) && (
+            {(formattedExifData.exposureMode ||
+              formattedExifData.exposureProgram ||
+              formattedExifData.meteringMode ||
+              formattedExifData.whiteBalance ||
+              formattedExifData.lightSource ||
+              formattedExifData.flash) && (
               <ExifSection title={t('exif.capture.mode')}>
                 <ExifRowGroup>
                   {!isNil(formattedExifData.exposureProgram) && (
@@ -454,12 +474,12 @@ export const ExifPanelContent: FC<ExifPanelContentProps> = ({
               </ExifSection>
             )}
 
-            {(formattedExifData.brightnessValue
-              || formattedExifData.shutterSpeedValue
-              || formattedExifData.apertureValue
-              || formattedExifData.sensingMethod
-              || formattedExifData.focalPlaneXResolution
-              || formattedExifData.focalPlaneYResolution) && (
+            {(formattedExifData.brightnessValue ||
+              formattedExifData.shutterSpeedValue ||
+              formattedExifData.apertureValue ||
+              formattedExifData.sensingMethod ||
+              formattedExifData.focalPlaneXResolution ||
+              formattedExifData.focalPlaneYResolution) && (
               <ExifSection title={t('exif.technical.parameters')}>
                 <ExifRowGroup>
                   {formattedExifData.brightnessValue && (

@@ -14,7 +14,7 @@ interface PageHeaderProps {
 
 export const PageHeader = ({ dateRange, location, showDateRange }: PageHeaderProps) => {
   return (
-    <header className="fixed top-0 right-0 left-0 z-100">
+    <header className="fixed top-0 right-0 left-0 z-30">
       <LinearBlur
         className="pointer-events-none absolute inset-x-0 z-[-1] h-15"
         tint="var(--color-background)"
@@ -26,7 +26,9 @@ export const PageHeader = ({ dateRange, location, showDateRange }: PageHeaderPro
         <PageHeaderSearch />
         <PageHeaderCenter dateRange={dateRange} location={location} showDateRange={showDateRange} />
         <div className="flex items-center gap-1.5 lg:gap-2">
-          <ViewModeSegment />
+          <div className="hidden sm:block">
+            <ViewModeSegment />
+          </div>
           <PageHeaderRight />
         </div>
       </div>

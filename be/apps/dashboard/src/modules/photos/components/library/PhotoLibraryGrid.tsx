@@ -21,6 +21,7 @@ import {
   HardDrive,
   Info,
   MoreHorizontal,
+  Sparkles,
   Square,
   Tags,
   Trash2,
@@ -29,12 +30,14 @@ import {
 import type { ReactNode } from 'react'
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { useShallow } from 'zustand/shallow'
 
 import { viewportAtom } from '~/atoms/viewport'
 import { LinearBorderPanel } from '~/components/common/LinearBorderPanel'
 import { stopPropagation } from '~/lib/dom'
 
+import { reindexPhotoAi } from '../../api'
 import type { PhotoAssetListItem } from '../../types'
 import { DeleteFromStorageOption } from './DeleteFromStorageOption'
 import { Masonry } from './Masonry'
@@ -100,7 +103,9 @@ function PhotoGridItem({
   onOpenAsset,
   onDeleteAsset,
   onEditTags,
+  onRetryAi,
   isDeleting,
+  isRetryingAi,
 }: {
   asset: PhotoAssetListItem
   isSelected: boolean
@@ -108,7 +113,9 @@ function PhotoGridItem({
   onOpenAsset: (asset: PhotoAssetListItem) => void
   onDeleteAsset: (asset: PhotoAssetListItem, options?: DeleteAssetOptions) => Promise<void> | void
   onEditTags: (asset: PhotoAssetListItem) => void
+  onRetryAi: (asset: PhotoAssetListItem) => void
   isDeleting?: boolean
+  isRetryingAi?: boolean
 }) {
   const { t, i18n } = useTranslation()
   const locale = i18n.language ?? i18n.resolvedLanguage ?? 'en'
@@ -123,6 +130,13 @@ function PhotoGridItem({
         ? `${(manifest.size / (1024 * 1024)).toLocaleString(locale, { maximumFractionDigits: 2 })} MB`
         : t(photoLibraryGridKeys.card.sizeUnknown)
   const assetLabel = manifest?.title ?? manifest?.id ?? asset.photoId
+  const aiStatus = asset.aiStatus
+  const aiStatusLabel =
+    aiStatus === 'failed' || aiStatus === 'skipped'
+      ? t('photos.library.card.ai-failed')
+      : aiStatus === 'pending' || aiStatus === 'processing'
+        ? t('photos.library.card.ai-pending')
+        : null
 
   const handleDelete = () => {
     let deleteFromStorage = false
@@ -197,7 +211,21 @@ function PhotoGridItem({
         className="bg-background/5 absolute inset-0 flex flex-col justify-between opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100"
       >
         <div className="flex items-start justify-between p-3 text-xs text-white">
-          <div className="max-w-[70%] truncate font-medium">{manifest?.title ?? manifest?.id ?? asset.photoId}</div>
+          <div className="flex min-w-0 max-w-[70%] items-center gap-1.5">
+            <div className="truncate font-medium">{manifest?.title ?? manifest?.id ?? asset.photoId}</div>
+            {aiStatusLabel && (
+              <span
+                className={clsxm(
+                  'shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium',
+                  aiStatus === 'failed' || aiStatus === 'skipped'
+                    ? 'bg-red/80 text-white'
+                    : 'bg-black/40 text-white/80',
+                )}
+              >
+                {aiStatusLabel}
+              </span>
+            )}
+          </div>
           <div
             className={clsxm(
               'inline-flex items-center rounded-full border border-white/30 bg-black/40 px-2 py-1 text-[10px] uppercase tracking-wide text-white transition-colors',
@@ -252,6 +280,15 @@ function PhotoGridItem({
                 <DropdownMenuItem icon={<Info className="size-4" />} disabled={!manifest} onSelect={handleViewExif}>
                   {t('photos.library.card.view-exif')}
                 </DropdownMenuItem>
+                {(aiStatus === 'failed' || aiStatus === 'skipped') && (
+                  <DropdownMenuItem
+                    icon={<Sparkles className="size-4" />}
+                    disabled={isRetryingAi}
+                    onSelect={() => onRetryAi(asset)}
+                  >
+                    {t('photos.library.card.ai-retry')}
+                  </DropdownMenuItem>
+                )}
                 <div className="h-[0.5px] bg-border my-1" />
                 <DropdownMenuItem
                   icon={<Trash2 className="size-4" />}
@@ -277,20 +314,50 @@ export function PhotoLibraryGrid() {
   const [sortBy, setSortBy] = useState<PhotoLibrarySortBy>('uploadedAt')
   const [sortOrder, setSortOrder] = useState<PhotoLibrarySortOrder>('desc')
 
-  const { assets, isLoading, selectedIds, toggleSelect, openAsset, deleteAsset, availableTags, isDeleting } =
-    usePhotoLibraryStore(
-      useShallow((state) => ({
-        assets: state.assets,
-        isLoading: state.isLoading,
-        selectedIds: state.selectedIds,
-        toggleSelect: state.toggleSelect,
-        openAsset: state.openAsset,
-        deleteAsset: state.deleteAsset,
-        isDeleting: state.isDeleting,
-        availableTags: state.availableTags,
-      })),
-    )
+  const {
+    assets,
+    isLoading,
+    selectedIds,
+    toggleSelect,
+    openAsset,
+    deleteAsset,
+    availableTags,
+    isDeleting,
+    refetchAssets,
+  } = usePhotoLibraryStore(
+    useShallow((state) => ({
+      assets: state.assets,
+      isLoading: state.isLoading,
+      selectedIds: state.selectedIds,
+      toggleSelect: state.toggleSelect,
+      openAsset: state.openAsset,
+      deleteAsset: state.deleteAsset,
+      isDeleting: state.isDeleting,
+      availableTags: state.availableTags,
+      refetchAssets: state.refetchAssets,
+    })),
+  )
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const [retryingAiId, setRetryingAiId] = useState<string | null>(null)
+  const handleRetryAi = useCallback(
+    async (asset: PhotoAssetListItem) => {
+      setRetryingAiId(asset.id)
+      try {
+        const result = await reindexPhotoAi(asset.id)
+        if (result.status === 'ready' || result.status === 'busy') {
+          toast.success(t('photos.library.card.ai-retry-success'))
+        } else {
+          toast.error(t('photos.library.card.ai-retry-failed'))
+        }
+        refetchAssets()
+      } catch {
+        toast.error(t('photos.library.card.ai-retry-failed'))
+      } finally {
+        setRetryingAiId(null)
+      }
+    },
+    [refetchAssets, t],
+  )
   const handleEditTags = useCallback(
     (asset: PhotoAssetListItem) => {
       Modal.present(PhotoTagEditorModal, {
@@ -345,7 +412,9 @@ export function PhotoLibraryGrid() {
             onOpenAsset={openAsset}
             onDeleteAsset={deleteAsset}
             onEditTags={handleEditTags}
+            onRetryAi={handleRetryAi}
             isDeleting={isDeleting}
+            isRetryingAi={retryingAiId === data.id}
           />
         )}
       />

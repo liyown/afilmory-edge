@@ -37,6 +37,7 @@ export interface PhotoAssetListItem {
   publicUrl: string | null
   size: number | null
   syncStatus: string
+  aiStatus?: 'pending' | 'processing' | 'ready' | 'failed' | 'skipped'
 }
 
 export interface UploadIntentInput {
@@ -416,19 +417,36 @@ export class PersonalPhotoService {
     return { ...this.toListItem(finalRecord), change }
   }
 
-  async reindexAi(limit = 10): Promise<{ queued: number; indexed: number }> {
+  async reindexAi(limit = 10, force = false): Promise<{ queued: number; indexed: number }> {
     const db = this.dbAccessor.get()
     const assets = await db.select({ id: photoAssets.id }).from(photoAssets)
+    if (force) {
+      let indexed = 0
+      for (const asset of assets.slice(0, limit)) {
+        await this.aiIndexer.ensure(asset.id)
+        if ((await this.aiIndexer.index(asset.id, { force: true })) === 'ready') {
+          indexed += 1
+        }
+      }
+      return { queued: assets.length, indexed }
+    }
     for (const asset of assets) {
       await this.aiIndexer.ensure(asset.id)
     }
     return { queued: assets.length, indexed: await this.aiIndexer.backfill(limit) }
   }
 
+  async reindexAiAsset(id: string): Promise<{ status: string }> {
+    await this.aiIndexer.ensure(id)
+    return { status: await this.aiIndexer.index(id, { force: true }) }
+  }
+
   async listAssets(): Promise<PhotoAssetListItem[]> {
     const db = this.dbAccessor.get()
     const records = await db.select().from(photoAssets).orderBy(asc(photoAssets.createdAt))
-    return records.map((record) => this.toListItem(record))
+    const aiRows = await db.select({ photoId: photoAiIndex.photoId, status: photoAiIndex.status }).from(photoAiIndex)
+    const aiByPhoto = new Map(aiRows.map((row) => [row.photoId, row.status]))
+    return records.map((record) => this.toListItem(record, aiByPhoto.get(record.photoId)))
   }
 
   async getSummary(): Promise<PhotoAssetSummary> {
@@ -573,7 +591,10 @@ export class PersonalPhotoService {
     }
   }
 
-  private toListItem(record: typeof photoAssets.$inferSelect): PhotoAssetListItem {
+  private toListItem(
+    record: typeof photoAssets.$inferSelect,
+    aiStatus?: 'pending' | 'processing' | 'ready' | 'failed' | 'skipped',
+  ): PhotoAssetListItem {
     return {
       id: record.id,
       photoId: record.photoId,
@@ -586,6 +607,7 @@ export class PersonalPhotoService {
       publicUrl: record.storageProvider === 'database-only' ? null : this.storage.publicUrl(record.storageKey),
       size: record.size ?? null,
       syncStatus: record.syncStatus,
+      aiStatus,
     }
   }
 }
