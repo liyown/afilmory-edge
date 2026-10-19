@@ -15,25 +15,12 @@ This guide provisions a personal Afilmory gallery on Cloudflare. You need Git, p
 ```bash
 pnpm install
 cp config.example.json config.json
-cp builder.config.default.ts builder.config.ts
 cp apps/edge/.dev.vars.example apps/edge/.dev.vars
 ```
 
-Edit `config.json` with your gallery name, author, accent color, and map settings.
+Edit `config.json` with your gallery name, author, accent color, and map settings. Site settings saved later from the dashboard are stored in D1 and take precedence.
 
-## Step 2: Choose storage
-
-The Worker's runtime uploads use R2 through the `PHOTOS` binding. If you also want to run the bulk builder, configure its storage provider in `builder.config.ts`:
-
-- **S3** — recommended for large collections
-- **B2** — cost-effective object storage
-- **GitHub** — repository-backed storage
-- **Local** — development and testing
-- **Eagle** — import an Eagle library
-
-See [Storage Providers](/storage/providers) for credentials and options.
-
-## Step 3: Provision Cloudflare resources
+## Step 2: Provision Cloudflare resources
 
 ```bash
 cf d1 create afilmory-db
@@ -49,7 +36,7 @@ cf d1 migrations apply afilmory-db --remote
 
 Set the Worker secrets (`CONFIG_ENCRYPTION_KEY`, R2 credentials, and so on). See [Deployment](/deployment) for the full list.
 
-## Step 4: Build and deploy
+## Step 3: Build and deploy
 
 ```bash
 pnpm build
@@ -58,7 +45,7 @@ pnpm deploy:edge
 
 `pnpm build` builds the gallery SPA and dashboard, syncs them into `apps/edge/public`, and bundles the Worker.
 
-## Step 5: Create the owner account
+## Step 4: Create the owner account
 
 ```bash
 pnpm bootstrap:admin --email you@example.com \
@@ -67,19 +54,11 @@ pnpm bootstrap:admin --email you@example.com \
 
 Registration is disabled. Sign in at `/platform/` with the account you just created.
 
-## Optional: bulk photo import
+## Step 5: Upload photos
 
-To process a large existing collection with the builder:
-
-```bash
-pnpm build:manifest               # incremental
-pnpm build:manifest -- --force    # full rebuild
-```
-
-This writes thumbnails and `apps/web/src/data/photos-manifest.json`. Runtime uploads from the dashboard do not require the builder.
+Open the dashboard and drop photos into the upload area. The dashboard uploads originals to R2, renders a 600px thumbnail and ThumbHash in the browser, then asks the Worker to extract metadata and publish the manifest. HEIC/HEIF files and Live Photo pairs are supported directly.
 
 ## Next Steps
 
 - [Deployment](/deployment) — secrets, backups, and production checklist
 - [Architecture](/architecture) — Worker, D1, R2, and KV design
-- [Builder](/builder) — pipeline commands and storage configuration

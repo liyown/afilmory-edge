@@ -1,5 +1,5 @@
+import type { AfilmoryManifest } from '@afilmory/typing'
 import type { SiteConfig } from '@config'
-import type { AfilmoryManifest } from '@packages/builder/src/types/manifest'
 import type { FC, PropsWithChildren } from 'react'
 
 import type { InjectConfig } from './config/types'
@@ -47,8 +47,8 @@ declare global {
 
   export type ComponentType<P = object> = {
     className?: string
-  } & PropsWithChildren &
-    P
+  } & PropsWithChildren
+  & P
 }
 
 declare module 'react' {

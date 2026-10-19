@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 
-import type { PhotoRegion } from '@afilmory/builder'
+import type { PhotoRegion } from '@afilmory/typing'
 import { it } from 'vitest'
 
 import { getFloatingLabelPosition, getRenderablePhotoRegions } from './photo-region-bounds'

@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers'
 import { getCoreApp } from './core-app'
 import { getDatabaseHealthApp } from './core-database'
 import { homepageOgCacheKey, photoOgCacheKey, runScheduled } from './cron'
-import { loadManifest, serveAppShell, servePhotoShell } from './html'
+import { loadManifest, serveAppShell, servePhotoShell, serveWebManifest } from './html'
 import { renderHomepageOgImage, renderPhotoOgImage } from './og'
 import { loadOgSiteConfig } from './og-site'
 import type { OgPhoto } from './og-template'
@@ -66,6 +66,10 @@ async function handleRequest(request: Request): Promise<Response> {
     return await serveDashboardAsset(request)
   }
 
+  if (url.pathname === '/manifest.webmanifest' || url.pathname === '/site.webmanifest') {
+    return await serveWebManifest(env)
+  }
+
   if (url.pathname === '/api/health') {
     const app = await getDatabaseHealthApp()
     return app.getInstance().fetch(request)
@@ -96,8 +100,8 @@ async function handleRequest(request: Request): Promise<Response> {
     return app.getInstance().fetch(request)
   }
 
-  // HTML shell with injected manifest. Only paths listed in `runWorkerFirst`
-  // reach this code; everything else is served as a static asset.
+  // HTML shell with injected manifest. Asset paths keep their file extension;
+  // every other path is a client-side route that needs the injected shell.
   if (url.pathname === '/' || url.pathname === '/index.html') {
     return serveAppShell(request, env)
   }
@@ -148,7 +152,13 @@ async function handleRequest(request: Request): Promise<Response> {
       renderPhotoOgImage(env, photo, site, url.origin))
   }
 
-  return new Response('Not Found', { status: 404 })
+  if (ASSET_EXTENSION_PATTERN.test(url.pathname)) {
+    return await env.ASSETS.fetch(request)
+  }
+
+  // Any other extensionless path is a gallery client-side route (`/map`,
+  // `/manifest`, future pages), so it gets the same injected shell as `/`.
+  return await serveAppShell(request, env)
 }
 
 /**

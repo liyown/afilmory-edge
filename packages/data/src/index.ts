@@ -1,4 +1,4 @@
-import type { CameraInfo, LensInfo, PhotoManifestItem } from '@afilmory/builder'
+import type { CameraInfo, LensInfo, PhotoManifestItem } from '@afilmory/typing'
 
 class PhotoLoader {
   private photos: PhotoManifestItem[] = []
@@ -33,7 +33,7 @@ class PhotoLoader {
   getAllTags() {
     const tagSet = new Set<string>()
     this.photos.forEach((photo) => {
-      photo.tags.forEach((tag) => tagSet.add(tag))
+      photo.tags.forEach(tag => tagSet.add(tag))
     })
     return Array.from(tagSet).sort()
   }

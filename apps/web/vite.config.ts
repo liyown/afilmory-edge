@@ -21,10 +21,7 @@ import PKG from '../../package.json'
 import { siteConfig } from '../../site.config'
 import { astPlugin } from './plugins/vite/ast'
 import { createDependencyChunksPlugin } from './plugins/vite/deps'
-import { createFeedSitemapPlugin } from './plugins/vite/feed-sitemap'
 import { localesJsonPlugin } from './plugins/vite/locales-json'
-import { manifestInjectPlugin } from './plugins/vite/manifest-inject'
-import { ogImagePlugin } from './plugins/vite/og-image-plugin'
 import { photosStaticPlugin } from './plugins/vite/photos-static'
 import { siteConfigInjectPlugin } from './plugins/vite/site-config-inject'
 import { vibeloftTelemetryPlugin } from './plugins/vite/vibeloft-telemetry'
@@ -48,9 +45,7 @@ if (process.env.CI) {
 }
 const DEV_NEXT_JS = process.env.DEV_NEXT_JS === 'true'
 
-const ReactCompilerConfig = {
-  /* ... */
-}
+const ReactCompilerConfig = {/* ... */}
 
 const ROOT = fileURLToPath(new URL('./', import.meta.url))
 const routeGenPlugins: PluginOption[] = [
@@ -63,7 +58,6 @@ const routeGenPlugins: PluginOption[] = [
   }),
 ]
 const staticWebBuildPlugins: PluginOption[] = [
-  manifestInjectPlugin(),
   siteConfigInjectPlugin(),
   photosStaticPlugin(),
   VitePWA({
@@ -144,13 +138,6 @@ const staticWebBuildPlugins: PluginOption[] = [
     },
   }),
 
-  ogImagePlugin({
-    title: siteConfig.title,
-    description: siteConfig.description,
-    siteName: siteConfig.name,
-    siteUrl: siteConfig.url,
-  }),
-  createFeedSitemapPlugin(siteConfig),
   createHtmlPlugin({
     minify: {
       collapseWhitespace: true,

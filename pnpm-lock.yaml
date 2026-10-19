@@ -132,9 +132,6 @@ catalogs:
     '@iconify-json/mingcute':
       specifier: 1.2.8
       version: 1.2.8
-    '@t3-oss/env-core':
-      specifier: 0.13.11
-      version: 0.13.11
     '@tailwindcss/postcss':
       specifier: 4.3.3
       version: 4.3.3
@@ -150,9 +147,6 @@ catalogs:
     '@types/react-dom':
       specifier: 19.3.0
       version: 19.3.0
-    dotenv-expand:
-      specifier: 1000.0.0
-      version: 1000.0.0
     satori:
       specifier: 0.56.1
       version: 0.56.1
@@ -208,27 +202,9 @@ importers:
 
   .:
     dependencies:
-      '@afilmory/builder':
-        specifier: workspace:*
-        version: link:packages/builder
-      '@afilmory/hooks':
-        specifier: workspace:*
-        version: link:packages/hooks
-      '@afilmory/ui':
-        specifier: workspace:*
-        version: link:packages/ui
-      '@t3-oss/env-core':
-        specifier: 'catalog:'
-        version: 0.13.11(typescript@6.0.3)(valibot@1.5.0(typescript@6.0.3))(zod@4.6.7)
-      dotenv:
-        specifier: 18.0.7
-        version: 18.0.7
       es-toolkit:
         specifier: 1.52.0
         version: 1.52.0
-      zod:
-        specifier: 'catalog:'
-        version: 4.6.7
     devDependencies:
       '@innei/prettier':
         specifier: 1.0.0
@@ -239,9 +215,6 @@ importers:
       ast-kit:
         specifier: 3.0.0
         version: 3.0.0
-      dotenv-expand:
-        specifier: 'catalog:'
-        version: 1000.0.0
       eslint:
         specifier: 10.12.0
         version: 10.12.0(jiti@2.7.0)(supports-color@10.2.2)
@@ -590,9 +563,6 @@ importers:
       '@react-hook/window-size':
         specifier: 3.1.1
         version: 3.1.1(react@19.3.0)
-      '@t3-oss/env-core':
-        specifier: 'catalog:'
-        version: 0.13.11(typescript@6.0.3)(valibot@1.5.0(typescript@6.0.3))(zod@4.6.7)
       '@tanstack/react-query':
         specifier: 5.104.2
         version: 5.104.2(react@19.3.0)
@@ -614,9 +584,6 @@ importers:
       consola:
         specifier: 3.4.2
         version: 3.4.2
-      dotenv:
-        specifier: 18.0.7
-        version: 18.0.7
       es-toolkit:
         specifier: 1.52.0
         version: 1.52.0
@@ -932,6 +899,9 @@ importers:
       '@afilmory/hooks':
         specifier: workspace:*
         version: link:../../../packages/hooks
+      '@afilmory/typing':
+        specifier: workspace:*
+        version: link:../../../packages/typing
       '@afilmory/ui':
         specifier: workspace:*
         version: link:../../../packages/ui
@@ -1004,6 +974,9 @@ importers:
       foxact:
         specifier: 0.3.12
         version: 0.3.12(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      heic-to:
+        specifier: 1.6.6
+        version: 1.6.6
       i18next:
         specifier: 26.4.4
         version: 26.4.4(typescript@6.0.3)
@@ -1233,72 +1206,11 @@ importers:
         specifier: ^26.6.5
         version: 26.6.5
 
-  packages/builder:
+  packages/data:
     dependencies:
-      '@afilmory/og-renderer':
-        specifier: workspace:*
-        version: link:../renderer
       '@afilmory/typing':
         specifier: workspace:*
         version: link:../typing
-      '@resvg/resvg-js':
-        specifier: 2.6.2
-        version: 2.6.2
-      '@vingle/bmp-js':
-        specifier: ^0.2.5
-        version: 0.2.5
-      blurhash:
-        specifier: 2.0.5
-        version: 2.0.5
-      c12:
-        specifier: 4.0.0-rc.2
-        version: 4.0.0-rc.2(dotenv@18.0.7)(giget@3.3.1)(jiti@2.7.0)(magicast@0.5.5)
-      consola:
-        specifier: 3.4.2
-        version: 3.4.2
-      dotenv-expand:
-        specifier: 'catalog:'
-        version: 1000.0.0
-      execa:
-        specifier: 10.1.1
-        version: 10.1.1
-      exiftool-vendored:
-        specifier: 39.0.1
-        version: 39.0.1
-      fast-xml-parser:
-        specifier: 5.11.2
-        version: 5.11.2
-      heic-convert:
-        specifier: 2.1.0
-        version: 2.1.0
-      heic-to:
-        specifier: 1.6.6
-        version: 1.6.6
-      nunjucks:
-        specifier: 3.2.4
-        version: 3.2.4(chokidar@3.6.0)
-      satori:
-        specifier: 'catalog:'
-        version: 0.56.1
-      sharp:
-        specifier: 0.35.5
-        version: 0.35.5(@types/node@26.6.5)
-      thumbhash:
-        specifier: 0.1.1
-        version: 0.1.1
-    devDependencies:
-      '@afilmory/utils':
-        specifier: workspace:*
-        version: link:../utils
-      tsdown:
-        specifier: 0.23.1
-        version: 0.23.1(@volar/typescript@2.4.28(typescript@6.0.3))(oxc-resolver@11.24.2)(tsx@4.23.15)(typescript@6.0.3)
-
-  packages/data:
-    dependencies:
-      '@afilmory/builder':
-        specifier: workspace:*
-        version: link:../builder
 
   packages/hooks:
     dependencies:
@@ -5887,23 +5799,6 @@ packages:
   '@swc/types@0.1.28':
     resolution: {integrity: sha512-V6Mnml8v09QALx6K0elJ7o9K/MkVDtW3t6L+7Ou/JcWtb3xwId2AH4FeOceySd2JaO87IMw4+6vSZxLm34LPbw==}
 
-  '@t3-oss/env-core@0.13.11':
-    resolution: {integrity: sha512-sM7GYY+KL7H/Hl0BE0inWfk3nRHZOLhmVn7sHGxaZt9FAR6KqREXAE+6TqKfiavfXmpRxO/OZ2QgKRd+oiBYRQ==}
-    peerDependencies:
-      arktype: ^2.1.0
-      typescript: '>=5.0.0'
-      valibot: ^1.4.2
-      zod: ^3.24.0 || ^4.0.0
-    peerDependenciesMeta:
-      arktype:
-        optional: true
-      typescript:
-        optional: true
-      valibot:
-        optional: true
-      zod:
-        optional: true
-
   '@tailwindcss/container-queries@0.1.1':
     resolution: {integrity: sha512-p18dswChx6WnTSaJCSGx6lTmrGzNNvm2FtXmiO6AuA1V4U5REyoqwmT6kgAsIMdjo07QdAfYXHJ4hnMtfHzWgA==}
     peerDependencies:
@@ -6152,9 +6047,6 @@ packages:
   '@types/node@26.6.5':
     resolution: {integrity: sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg==}
 
-  '@types/node@8.10.66':
-    resolution: {integrity: sha512-tktOkFUA4kXx2hhhrB8bIFb5TbwzS4uOhKEmwiD+NoiL0qtP2OQ9mFldbgD4dV1djrlBYP6eBuQZiWjuHUpqFw==}
-
   '@types/normalize-package-data@2.4.4':
     resolution: {integrity: sha512-37i+OaWTh9qeK4LSHPsyRC7NahnGotNuZvjLSgcPzblpHB3rrCJxAOgI5gCdKm7coonsaX1Of0ILiTcnZjbfxA==}
 
@@ -6391,9 +6283,6 @@ packages:
     peerDependencies:
       valibot: ^1.5.0
 
-  '@vingle/bmp-js@0.2.5':
-    resolution: {integrity: sha512-tiY69wMrXgIVcdpkjQybXTyQw+P2rKzUfA6b+biM6BD1utr5QeeEj9fzs0fFHVf+3siTsYwzI6zltV9+i6ehEA==}
-
   '@vis.gl/react-mapbox@8.1.3':
     resolution: {integrity: sha512-96sCSl8BKoTLn2xMWlkjlR9GA5URM2t5Ln386t8pNVsoINsUXxweyuJ+gJlDe0GgAIOttXreU/1fK9AfrD28NA==}
     peerDependencies:
@@ -6629,9 +6518,6 @@ packages:
   '@yuku-toolchain/types@0.19.0':
     resolution: {integrity: sha512-tFkNbsP4WXX9UMUC5syJGdK9dPMLK0PPaIuXCcCYH75sZ8MrebfBZ2XvCILRTw8AgLivSSCfDa4R67iYBDa4Kg==}
 
-  a-sync-waterfall@1.0.1:
-    resolution: {integrity: sha512-RYTOHHdWipFUliRFMCS4X2Yn2X8M87V/OpSqWzKKOGhzqyUxzyVmhHDH9sAvG+ZuQf/TAOFsLCpMw09I1ufUnA==}
-
   acorn-import-phases@1.0.4:
     resolution: {integrity: sha512-wKmbr/DDiIXzEOiWrTTUcDm24kQ2vGfZQvM2fwg2vXqR5uW6aapr7ObPtj1th32b9u90/Pf4AItvdTh42fBmVQ==}
     engines: {node: '>=10.13.0'}
@@ -6737,9 +6623,6 @@ packages:
   arraybuffer.prototype.slice@1.0.4:
     resolution: {integrity: sha512-BNoCY6SXXPQ7gF2opIP4GBE+Xw7U+pHMYKuzjgCN3GwiaIR09UUeKfheyIry77QtrCBlC0KK0q5/TER/tYh3PQ==}
     engines: {node: '>= 0.4'}
-
-  asap@2.0.6:
-    resolution: {integrity: sha512-BSHWgDSAiKs50o2Re8ppvp3seVHXSRM44cdSsT9FfNEUUZLOGWVCsiWaRPWM1Znn+mqZ1OfVZ3z3DWEzSp7hRA==}
 
   assertion-error@2.0.1:
     resolution: {integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==}
@@ -7021,23 +6904,6 @@ packages:
       magicast:
         optional: true
 
-  c12@4.0.0-rc.2:
-    resolution: {integrity: sha512-Qfc/XXsG5yyQZRm2asHeemRRbK5zmo3D+enxiNrJZs6i6zbl9CMj7Wr0lvYGq84txPNAsUKJfe3ea2Rva8h/eA==}
-    peerDependencies:
-      dotenv: '*'
-      giget: '>=3.1.0'
-      jiti: '*'
-      magicast: '*'
-    peerDependenciesMeta:
-      dotenv:
-        optional: true
-      giget:
-        optional: true
-      jiti:
-        optional: true
-      magicast:
-        optional: true
-
   cac@7.1.0:
     resolution: {integrity: sha512-LMDU/U2yA4IPIY8KT0NsNPWEYZvAMkbgyspxJ6btJaYV+WMDOHAZCmB0lsTObiHaRS1V/ztKAl7+TSkTqXyeoA==}
     engines: {node: '>=20.19.0'}
@@ -7192,10 +7058,6 @@ packages:
 
   commander@4.1.1:
     resolution: {integrity: sha512-NOKm8xhkzAjzFx8B2v5OAHT+u5pRQc2UCa2Vq9jYL/31o2wi9mxBA7LIFs3sV5VSC49z6pEhfbMULvShKj26WA==}
-    engines: {node: '>= 6'}
-
-  commander@5.1.0:
-    resolution: {integrity: sha512-P0CysNDQ7rtVw4QIQtm+MRxV66vKFSvlsQvGYXZWR3qFU0jlMKHZZZgw8e+8DSah4UDKMqnknRDQz+xuQXQ/Zg==}
     engines: {node: '>= 6'}
 
   commander@8.3.0:
@@ -7560,10 +7422,6 @@ packages:
     resolution: {integrity: sha512-QM8q3zDe58hqUqjraQOmzZ1LIH9SWQJTlEKCH4kJ2oQvLZk7RbQXvtDM2XEq3fwkV9CCvvH4LA0AV+ogFsBM2Q==}
     engines: {node: '>=8'}
 
-  dotenv-expand@1000.0.0:
-    resolution: {integrity: sha512-3T4TtUjXm5iGKFEirqKjcDJ0EheFJbv9peb5xytC+HNu3l5Ygnu4dYE8yeqkppHMsh1If9C/A//EJu7IPtNu+A==}
-    engines: {node: '>=16'}
-
   dotenv-expand@8.0.3:
     resolution: {integrity: sha512-SErOMvge0ZUyWd5B0NXMQlDkN+8r+HhVUsxgOO7IoPDOdDRD2JjExpN6y3KnFR66jsJMwSn1pqIivhU5rcJiNg==}
     engines: {node: '>=12'}
@@ -7579,11 +7437,6 @@ packages:
   dotenv@17.4.2:
     resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
     engines: {node: '>=12'}
-
-  dotenv@18.0.7:
-    resolution: {integrity: sha512-QEvMEF8ca3GNZJJnAbOgxpj5ULhBvnMcURp+XKrtvqFNPgjBvYoswQ0Jl2cO7JzCjxZjJhr9ZuIEhlrRxMft/Q==}
-    engines: {node: '>=12'}
-    hasBin: true
 
   drizzle-kit@0.31.11:
     resolution: {integrity: sha512-YCYqxTLIB2OCqf6w9/Vef13baBVbwQIPcbT4Y56AfO6B9ajZhDhD8Jkveg/hJvT/iuMloKD/IYYkyMMNhr7Kqg==}
@@ -8568,14 +8421,6 @@ packages:
     resolution: {integrity: sha512-F/1DnUGPopORZi0ni+CvrCgHQ5FyEAHRLSApuYWMmrbSwoN2Mn/7k+Gl38gJnR7yyDZk6WLXwiGod1JOWNDKGw==}
     hasBin: true
 
-  heic-convert@2.1.0:
-    resolution: {integrity: sha512-1qDuRvEHifTVAj3pFIgkqGgJIr0M3X7cxEPjEp0oG4mo8GFjq99DpCo8Eg3kg17Cy0MTjxpFdoBHOatj7ZVKtg==}
-    engines: {node: '>=12.0.0'}
-
-  heic-decode@2.1.0:
-    resolution: {integrity: sha512-0fB3O3WMk38+PScbHLVp66jcNhsZ/ErtQ6u2lMYu/YxXgbBtl+oKOhGQHa4RpvE68k8IzbWkABzHnyAIjR758A==}
-    engines: {node: '>=8.0.0'}
-
   heic-to@1.6.6:
     resolution: {integrity: sha512-PYpOtPFEzgPxIoGF4LQ+oBD8o/tMvcFDNynrNzK1fLXfE6mTe2W+AHOvBKc5MwnVak4/Pnb51g9CJAtWL5YGWA==}
 
@@ -8955,9 +8800,6 @@ packages:
       react:
         optional: true
 
-  jpeg-js@0.4.4:
-    resolution: {integrity: sha512-WZzeDOEtTOBK4Mdsar0IqEU5sMr3vSV2RqkAIzUEV2BHnUfKGyswWFPFwK5EeDo93K3FohSHbLAjj0s1Wzd+dg==}
-
   js-tokens@10.0.0:
     resolution: {integrity: sha512-lM/UBzQmfJRo9ABXbPWemivdCW8V2G8FHaHdypQaIy523snUjog0W71ayWXTjiR+ixeMyVHN2XcpnTd/liPg/Q==}
 
@@ -9066,10 +8908,6 @@ packages:
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
     engines: {node: '>= 0.8.0'}
-
-  libheif-js@1.23.5:
-    resolution: {integrity: sha512-umXZPthnWZtF3iG/5mQG+AZ2V6i0UeYpo3z2CkggTEgL8dKmIIwJT6TDuAMuabXa1yTW8uJ1ZAgR+CxNTklYYw==}
-    engines: {node: '>=8.0.0'}
 
   libpq@1.11.0:
     resolution: {integrity: sha512-mHoPlvMwYDMJV36bS2w3eSdFD4eDSm7P9FsvruUldQxzE23/W6qitT9VU/yD1+g2vpgpDktnk2iEYJyhy1RR5g==}
@@ -9721,16 +9559,6 @@ packages:
     resolution: {integrity: sha512-GX0gsdbGVCgnRgbeGaubfjpBXyYRWOOCVeYh08bSQvDZqxz5ndXs1OTfAt/h36G1xvI94YIspsI0sVFqAV9+RQ==}
     engines: {node: '>=20.19.0'}
 
-  nunjucks@3.2.4:
-    resolution: {integrity: sha512-26XRV6BhkgK0VOxfbU5cQI+ICFUtMLixv1noZn1tGU38kQH5A5nmmbk/O45xdyBhD1esk47nKrY0mvQpZIhRjQ==}
-    engines: {node: '>= 6.9.0'}
-    hasBin: true
-    peerDependencies:
-      chokidar: ^3.3.0
-    peerDependenciesMeta:
-      chokidar:
-        optional: true
-
   object-assign@4.1.1:
     resolution: {integrity: sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==}
     engines: {node: '>=0.10.0'}
@@ -10005,10 +9833,6 @@ packages:
   pluralize@8.0.0:
     resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
     engines: {node: '>=4'}
-
-  pngjs@6.0.0:
-    resolution: {integrity: sha512-TRzzuFRRmEoSW/p1KVAmiOgPco2Irlah+bGFCeNfJXxxYGwSw7YwAOAcd7X28K/m5bjBWKsC29KyoMfHbypayg==}
-    engines: {node: '>=12.13.0'}
 
   pnpm-workspace-yaml@1.9.1:
     resolution: {integrity: sha512-Xj/T2X6DNAWbtk/9UQ0/TJRswltiHZevmcMjqoL7WrpJi67lu3qaslU4+I+zJ8wtwqmuvAE0KkB8rbv2ZdogBg==}
@@ -16493,12 +16317,6 @@ snapshots:
     dependencies:
       '@swc/counter': 0.1.3
 
-  '@t3-oss/env-core@0.13.11(typescript@6.0.3)(valibot@1.5.0(typescript@6.0.3))(zod@4.6.7)':
-    optionalDependencies:
-      typescript: 6.0.3
-      valibot: 1.5.0(typescript@6.0.3)
-      zod: 4.6.7
-
   '@tailwindcss/container-queries@0.1.1(tailwindcss@4.3.3)':
     dependencies:
       tailwindcss: 4.3.3
@@ -16734,8 +16552,6 @@ snapshots:
     dependencies:
       undici-types: 8.9.0
 
-  '@types/node@8.10.66': {}
-
   '@types/normalize-package-data@2.4.4': {}
 
   '@types/parse-author@2.0.3': {}
@@ -16938,10 +16754,6 @@ snapshots:
   '@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@6.0.3))':
     dependencies:
       valibot: 1.5.0(typescript@6.0.3)
-
-  '@vingle/bmp-js@0.2.5':
-    dependencies:
-      '@types/node': 8.10.66
 
   '@vis.gl/react-mapbox@8.1.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
@@ -17173,8 +16985,6 @@ snapshots:
 
   '@yuku-toolchain/types@0.19.0': {}
 
-  a-sync-waterfall@1.0.1: {}
-
   acorn-import-phases@1.0.4(acorn@8.19.0):
     dependencies:
       acorn: 8.19.0
@@ -17345,8 +17155,6 @@ snapshots:
       es-errors: 1.3.0
       get-intrinsic: 1.3.0
       is-array-buffer: 3.0.5
-
-  asap@2.0.6: {}
 
   assertion-error@2.0.1: {}
 
@@ -17621,20 +17429,6 @@ snapshots:
     optionalDependencies:
       magicast: 0.5.5
 
-  c12@4.0.0-rc.2(dotenv@18.0.7)(giget@3.3.1)(jiti@2.7.0)(magicast@0.5.5):
-    dependencies:
-      confbox: 0.3.1
-      defu: 6.1.7
-      exsolve: 1.1.3
-      pathe: 2.0.3
-      pkg-types: 2.3.3
-      rc9: 3.1.0
-    optionalDependencies:
-      dotenv: 18.0.7
-      giget: 3.3.1
-      jiti: 2.7.0
-      magicast: 0.5.5
-
   cac@7.1.0: {}
 
   cacheable@2.5.0:
@@ -17803,8 +17597,6 @@ snapshots:
   commander@2.20.3: {}
 
   commander@4.1.1: {}
-
-  commander@5.1.0: {}
 
   commander@8.3.0: {}
 
@@ -18170,8 +17962,6 @@ snapshots:
     dependencies:
       is-obj: 2.0.0
 
-  dotenv-expand@1000.0.0: {}
-
   dotenv-expand@8.0.3: {}
 
   dotenv@16.6.1: {}
@@ -18179,8 +17969,6 @@ snapshots:
   dotenv@17.3.1: {}
 
   dotenv@17.4.2: {}
-
-  dotenv@18.0.7: {}
 
   drizzle-kit@0.31.11:
     dependencies:
@@ -19454,16 +19242,6 @@ snapshots:
 
   he@1.2.0: {}
 
-  heic-convert@2.1.0:
-    dependencies:
-      heic-decode: 2.1.0
-      jpeg-js: 0.4.4
-      pngjs: 6.0.0
-
-  heic-decode@2.1.0:
-    dependencies:
-      libheif-js: 1.23.5
-
   heic-to@1.6.6: {}
 
   hermes-estree@0.25.1: {}
@@ -19793,8 +19571,6 @@ snapshots:
       '@types/react': 19.3.0
       react: 19.3.0
 
-  jpeg-js@0.4.4: {}
-
   js-tokens@10.0.0:
     optional: true
 
@@ -19881,8 +19657,6 @@ snapshots:
     dependencies:
       prelude-ls: 1.2.1
       type-check: 0.4.0
-
-  libheif-js@1.23.5: {}
 
   libpq@1.11.0:
     dependencies:
@@ -20846,14 +20620,6 @@ snapshots:
     dependencies:
       boolbase: 2.0.0
 
-  nunjucks@3.2.4(chokidar@3.6.0):
-    dependencies:
-      a-sync-waterfall: 1.0.1
-      asap: 2.0.6
-      commander: 5.1.0
-    optionalDependencies:
-      chokidar: 3.6.0
-
   object-assign@4.1.1: {}
 
   object-deep-merge@2.0.1: {}
@@ -21218,8 +20984,6 @@ snapshots:
       playwright-core: 1.64.0
 
   pluralize@8.0.0: {}
-
-  pngjs@6.0.0: {}
 
   pnpm-workspace-yaml@1.9.1:
     dependencies:

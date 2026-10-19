@@ -1,6 +1,6 @@
 ---
 title: Architecture
-description: How the Worker, D1, R2, KV, and builder fit together.
+description: How the Worker, D1, R2, and KV fit together.
 createdAt: 2025-11-14T22:25:00+08:00
 lastModified: 2026-10-19T15:10:06+08:00
 order: 3
@@ -18,7 +18,8 @@ The Worker owns:
 
 - static assets for the gallery and dashboard
 - the API graph from `be/apps/core` (`@tsuki-hono` modules, controllers, and DI)
-- per-request manifest injection into `index.html`
+- the photo upload pipeline: upload intents, R2 writes, EXIF/XMP extraction, Live/Motion Photo detection
+- per-request manifest and site-config injection into `index.html`
 - dynamic OG images, SEO metadata, sitemap, feed, and well-known routes
 - scheduled backup and cleanup jobs
 
@@ -32,17 +33,11 @@ There is a single baseline migration. The project targets a fresh database and d
 
 ### R2
 
-R2 stores uploaded photos, video companions for Live Photos, generated manifests, cached OG images, and D1 backups. Uploads can use presigned URLs when R2 S3 credentials are configured; otherwise the Worker proxies the bytes.
+R2 stores uploaded photos, generated 600px thumbnails (`<key>-thumb.jpg`), video companions for Live Photos, `manifest.json`, cached OG images, and D1 backups. Uploads can use presigned URLs when R2 S3 credentials are configured; otherwise the Worker proxies the bytes.
 
 ### KV
 
-KV caches the serialized manifest and revision metadata so reads avoid rebuilding the manifest on every request. It is an accelerator, not the source of truth.
-
-### Builder (`packages/builder`)
-
-The builder is a Node CLI for bulk photo processing: it syncs from storage providers, normalizes formats, extracts EXIF, generates thumbnails and ThumbHash placeholders, and writes `photos-manifest.json` for standalone builds and demo data.
-
-The Worker does not run the builder. Runtime uploads are handled by the Worker upload path, which stores objects in R2 and extracts metadata from range reads.
+KV caches the serialized manifest so shell requests avoid reading R2 on every page view. It is an accelerator, not the source of truth.
 
 ## Request Flow
 
@@ -54,19 +49,20 @@ Cloudflare Worker (apps/edge)
      ├── ASSETS      → gallery SPA, dashboard SPA
      ├── core API    → auth, photos, comments, settings, feed
      ├── D1          → relational state
-     ├── R2          → photo objects, backups, OG cache
+     ├── R2          → photo objects, manifest, backups, OG cache
      └── KV          → manifest cache
 ```
 
-The Worker reads published photo records from D1, builds the manifest on demand, and injects it into the SPA shell as `window.__MANIFEST__`. Manifest revisions let clients and caches invalidate deterministically after an upload or edit.
+The Worker reads published photo records from D1, builds the manifest, and injects it into the SPA shell as `window.__MANIFEST__`. Uploads and edits clear the KV cache immediately.
 
 ## Upload Flow
 
 1. The dashboard requests an upload intent from the Worker.
 2. The Worker returns a presigned R2 URL (or accepts a proxied upload).
-3. On completion, the Worker verifies the object, extracts metadata, and writes the photo asset to D1.
-4. A manifest revision is allocated and the manifest cache is invalidated.
-5. The gallery picks up the change on the next manifest fetch.
+3. The dashboard renders a thumbnail, ThumbHash, and tone analysis in the browser.
+4. On completion, the Worker verifies the object, extracts EXIF/XMP with range reads, detects Live/Motion Photos, and writes the photo asset to D1.
+5. `ManifestPublisher` rebuilds `manifest.json` in R2 and clears the KV cache.
+6. The gallery picks up the change on the next shell request.
 
 ## Authentication
 
@@ -74,4 +70,4 @@ Better Auth runs inside the Worker with the Drizzle D1 adapter. Registration is 
 
 ## What Is Not Here
 
-There is no tenant resolution, subdomain routing, billing, per-user storage configuration, Redis, or task queue. The deployment is intentionally single-owner.
+There is no tenant resolution, subdomain routing, billing, per-user storage configuration, Redis, or task queue. There is also no separate build-time photo pipeline: every upload goes through the Worker.

@@ -16,7 +16,7 @@ const TELEMETRY_SCRIPT = `<script
 /**
  * VibeLoft 遥测 opt-out 插件。
  *
- * 与 manifest-inject 一样用字符串替换处理 index.html:
+ * 与 site-config-inject 一样用字符串替换处理 index.html:
  * - enabled(默认):把 `<!-- vibeloft-telemetry -->` 占位注释替换为遥测脚本
  * - disabled(config.json 设置 telemetry.vibeloft: false):占位注释替换为空,产物完全不含遥测
  * 静态与 server-serve 构建都会执行(SaaS 默认按仓库 config.json 保留脚本)。

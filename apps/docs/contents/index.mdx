@@ -12,13 +12,13 @@ Afilmory is a personal, single-tenant photo gallery. One owner account manages o
 
 ## What is Afilmory?
 
-Afilmory turns a photo collection into a fast, modern gallery. Photos live in R2 (or another storage provider via the builder), metadata lives in D1, and the Worker serves the gallery SPA, the admin dashboard, and the API from the same origin.
+Afilmory turns a photo collection into a fast, modern gallery. Photos live in R2, metadata lives in D1, and the Worker serves the gallery SPA, the admin dashboard, and the API from the same origin.
 
 ## Key Features
 
 - **WebGPU viewer** — GPU-accelerated zoom, pan, and navigation with a WebGL fallback
 - **Masonry grid** — Responsive layout with ThumbHash placeholders
-- **Rich metadata** — EXIF, Live Photos, HDR gain maps, Fujifilm recipes
+- **Rich metadata** — EXIF, GPS, Live Photos, Motion Photos, and XMP regions
 - **Map view** — Geotagged photos on an interactive map
 - **Live uploads** — Dashboard uploads land in R2 and update the D1-backed manifest immediately
 - **SEO and social** — Dynamic OG images and per-photo metadata rendered by the Worker
@@ -33,15 +33,15 @@ Afilmory turns a photo collection into a fast, modern gallery. Photos live in R2
 
 ## Quick Start
 
-1. **Configure** — copy `config.example.json` and `builder.config.default.ts`, then fill in `.dev.vars`
+1. **Configure** — copy `config.example.json` and `apps/edge/.dev.vars.example`, then fill in your values
 2. **Provision** — create D1, R2, and KV resources and apply the D1 migration
 3. **Deploy** — run `pnpm build` and `pnpm deploy:edge`
 4. **Bootstrap** — create the owner account with `pnpm bootstrap:admin`
+5. **Upload** — sign in at `/platform/` and upload photos from the dashboard
 
 See the [Quick Start Guide](/getting-started/quick-start) and [Deployment](/deployment) for the full walkthrough.
 
 ## Next Steps
 
-- **Choose storage**: [Storage Providers](/storage/providers)
 - **Understand the system**: [Architecture](/architecture)
-- **Photo pipeline**: [Builder](/builder)
+- **Deploy to production**: [Deployment](/deployment)

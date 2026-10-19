@@ -10,10 +10,10 @@
       "~/*": ["./src/*"],
       "@pkg": ["./package.json"],
       "@config": ["../../site.config.ts"],
-      "@env": ["../../env.ts"],
       "@locales/*": ["../../locales/*"]
     },
     "resolveJsonModule": true,
+    "types": ["node", "vite/client"],
     "allowJs": false,
     "strict": true,
     "noImplicitAny": false,

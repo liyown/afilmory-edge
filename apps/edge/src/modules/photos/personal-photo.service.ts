@@ -1,5 +1,6 @@
 import type { PhotoAssetManifest } from '@afilmory/db'
 import { CURRENT_PHOTO_MANIFEST_VERSION, generateId, photoAssets } from '@afilmory/db'
+import type { ToneAnalysis, ToneType, VideoSource } from '@afilmory/typing'
 import { DbAccessor } from '@core/database/database.provider'
 import { asc, eq, inArray } from '@core/database/sql-operators'
 import { BizException, ErrorCode } from '@core/errors'
@@ -42,6 +43,8 @@ export interface UploadIntentInput {
   size: number
   contentType?: string | null
   directory?: string | null
+  photoId?: string | null
+  variant?: 'original' | 'thumbnail'
 }
 
 export interface UploadCompleteInput {
@@ -52,6 +55,7 @@ export interface UploadCompleteInput {
   height?: number | null
   takenAt?: string | null
   thumbHash?: string | null
+  toneAnalysis?: ToneAnalysis | null
   uploadId?: string | null
   parts?: MultipartPart[] | null
   videoKey?: string | null
@@ -115,6 +119,47 @@ function asNumber(value: unknown, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+const MP4_SIGNATURE = [0x66, 0x74, 0x79, 0x70] // 'ftyp'
+
+function hasMp4Signature(bytes: Uint8Array): boolean {
+  for (let index = 0; index <= bytes.length - MP4_SIGNATURE.length; index += 1) {
+    if (MP4_SIGNATURE.every((byte, offset) => bytes[index + offset] === byte)) {
+      return true
+    }
+  }
+  return false
+}
+
+const TONE_TYPES = new Set<ToneType>(['low-key', 'high-key', 'high-contrast', 'normal'])
+
+function normalizeToneAnalysis(value: unknown): ToneAnalysis | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  const input = value as Record<string, unknown>
+  const toneType = input.toneType
+  if (typeof toneType !== 'string' || !TONE_TYPES.has(toneType as ToneType)) {
+    return null
+  }
+
+  const brightness = asNumber(input.brightness, Number.NaN)
+  const contrast = asNumber(input.contrast, Number.NaN)
+  const shadowRatio = asNumber(input.shadowRatio, Number.NaN)
+  const highlightRatio = asNumber(input.highlightRatio, Number.NaN)
+  if (![brightness, contrast, shadowRatio, highlightRatio].every(Number.isFinite)) {
+    return null
+  }
+
+  return {
+    toneType: toneType as ToneType,
+    brightness: Math.min(100, Math.max(0, Math.round(brightness))),
+    contrast: Math.min(100, Math.max(0, Math.round(contrast))),
+    shadowRatio: Math.min(1, Math.max(0, Math.round(shadowRatio * 100) / 100)),
+    highlightRatio: Math.min(1, Math.max(0, Math.round(highlightRatio * 100) / 100)),
+  }
+}
+
 @injectable()
 export class PersonalPhotoService {
   constructor(
@@ -138,8 +183,16 @@ export class PersonalPhotoService {
       })
     }
 
-    const photoId = generateId()
-    const key = this.buildStorageKey(input.filename, input.directory, photoId)
+    const requestedPhotoId
+      = typeof input.photoId === 'string' && /^\d{6,32}$/.test(input.photoId) ? input.photoId : null
+    if (input.variant === 'thumbnail' && !requestedPhotoId) {
+      throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: 'photoId is required for thumbnails' })
+    }
+    const photoId = requestedPhotoId ?? generateId()
+    const key
+      = input.variant === 'thumbnail'
+        ? this.buildThumbnailKey(input.filename, input.directory, photoId)
+        : this.buildStorageKey(input.filename, input.directory, photoId)
 
     const intent = await this.r2.createUploadIntent({
       key,
@@ -179,10 +232,10 @@ export class PersonalPhotoService {
     const filename = input.filename || input.key.split('/').pop() || photoId
     const lastModified = object.uploaded?.toISOString() ?? new Date().toISOString()
     const { base, extension } = splitFilename(filename)
-    const metadata = await this.exif.extract(input.key, extension)
+    const metadata = await this.exif.extract(input.key, extension, object.size)
     const width = Math.max(0, Math.trunc(asNumber(input.width ?? metadata.width, 0)))
     const height = Math.max(0, Math.trunc(asNumber(input.height ?? metadata.height, 0)))
-    let video: { type: 'live-photo', videoUrl: string, s3Key: string } | null = null
+    let video: VideoSource | null = null
     if (input.videoKey) {
       this.assertStorageKey(input.videoKey)
       const videoObject = await this.r2.head(input.videoKey)
@@ -198,8 +251,35 @@ export class PersonalPhotoService {
         s3Key: input.videoKey,
       }
     }
+    else if (metadata.motionPhoto) {
+      // Android Motion Photos embed the MP4 at the end of the original file;
+      // the gallery extracts it client-side using this offset and size.
+      const candidates = [
+        { offset: metadata.motionPhoto.offset, size: metadata.motionPhoto.size },
+        ...(metadata.motionPhoto.alternateOffset !== undefined
+          ? [{ offset: metadata.motionPhoto.alternateOffset, size: object.size - metadata.motionPhoto.alternateOffset }]
+          : []),
+      ]
+      for (const candidate of candidates) {
+        const probe = await this.r2.readRange(input.key, candidate.offset, Math.min(32, candidate.size))
+        if (!probe || !hasMp4Signature(probe)) {
+          continue
+        }
+        video = {
+          type: 'motion-photo',
+          offset: candidate.offset,
+          size: candidate.size,
+          ...(metadata.motionPhoto.presentationTimestamp !== undefined
+            ? { presentationTimestamp: metadata.motionPhoto.presentationTimestamp }
+            : {}),
+        }
+        break
+      }
+    }
 
     const originalUrl = this.r2.publicUrl(input.key)
+    const thumbnailKey = this.thumbnailKeyFor(input.key)
+    const thumbnailObject = await this.r2.head(thumbnailKey)
 
     const manifest = {
       version: CURRENT_PHOTO_MANIFEST_VERSION,
@@ -210,7 +290,7 @@ export class PersonalPhotoService {
         dateTaken: input.takenAt || metadata.dateTaken || lastModified,
         tags: [],
         originalUrl,
-        thumbnailUrl: this.r2.thumbnailUrl(input.key),
+        thumbnailUrl: thumbnailObject ? this.r2.publicUrl(thumbnailKey) : this.r2.thumbnailUrl(input.key),
         thumbHash: input.thumbHash ?? null,
         width,
         height,
@@ -220,8 +300,8 @@ export class PersonalPhotoService {
         size: object.size,
         exif: metadata.exif,
         keywords: metadata.keywords,
-        regions: [],
-        toneAnalysis: null,
+        regions: metadata.regions,
+        toneAnalysis: normalizeToneAnalysis(input.toneAnalysis),
         location: null,
         format: extension.toUpperCase(),
         ...(video ? { video } : {}),
@@ -346,6 +426,7 @@ export class PersonalPhotoService {
     if (deleteFromStorage) {
       const keys = new Set(targets.map(target => target.storageKey))
       for (const target of targets) {
+        keys.add(this.thumbnailKeyFor(target.storageKey))
         const video = target.manifest?.data?.video
         if (video?.type === 'live-photo') {
           keys.add(video.s3Key)
@@ -376,6 +457,19 @@ export class PersonalPhotoService {
     this.assertStorageKey(key)
     this.assertUploadSize(body.byteLength)
     await this.r2.put(key, body, contentType)
+  }
+
+  private buildThumbnailKey(filename: string, directory: string | null | undefined, photoId: string): string {
+    const { base } = splitFilename(filename)
+    return [KEY_PREFIX, sanitizeDirectory(directory), `${sanitizeSegment(base, 'photo')}-${photoId}-thumb.jpg`]
+      .filter(Boolean)
+      .join('/')
+  }
+
+  private thumbnailKeyFor(storageKey: string): string {
+    const dotIndex = storageKey.lastIndexOf('.')
+    const base = dotIndex > 0 ? storageKey.slice(0, dotIndex) : storageKey
+    return `${base}-thumb.jpg`
   }
 
   private buildStorageKey(filename: string, directory?: string | null, photoId?: string | null): string {

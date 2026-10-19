@@ -1,4 +1,4 @@
-import type { PhotoRegion } from '@afilmory/builder'
+import type { PhotoRegion } from '@afilmory/typing'
 
 export function getPhotoRegionId(region: PhotoRegion, index: number) {
   return `${region.name}-${region.type ?? 'region'}-${index}`

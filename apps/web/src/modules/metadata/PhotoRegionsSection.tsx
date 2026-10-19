@@ -1,4 +1,4 @@
-import type { PhotoRegion } from '@afilmory/builder'
+import type { PhotoRegion } from '@afilmory/typing'
 import { clsxm, focusRing } from '@afilmory/utils'
 import { useTranslation } from 'react-i18next'
 

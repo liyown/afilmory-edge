@@ -1,4 +1,5 @@
 import { compressUint8Array } from '@afilmory/utils'
+import { heicTo } from 'heic-to'
 import { rgbaToThumbHash } from 'thumbhash'
 
 import { coreApi } from '~/lib/api-client'
@@ -11,6 +12,7 @@ const MAX_UPLOAD_FILE_BYTES = 1024 * 1024 * 1024
 const MAX_UPLOAD_BATCH_FILES = 128
 const MAX_UPLOAD_BATCH_BYTES = 5 * 1024 * 1024 * 1024
 const THUMBHASH_MAX_DIMENSION = 100
+const THUMBNAIL_WIDTH = 600
 
 function normalizeServerMessage(payload: unknown): string | null {
   const message = getRequestErrorMessage(payload, '')
@@ -260,21 +262,114 @@ function validateUploadBatch(files: File[]): void {
   }
 }
 
+type ToneType = 'low-key' | 'high-key' | 'high-contrast' | 'normal'
+
+type ToneAnalysis = {
+  toneType: ToneType
+  brightness: number
+  contrast: number
+  shadowRatio: number
+  highlightRatio: number
+}
+
 type ImageInspection = {
   width: number
   height: number
   thumbHash: string | null
+  toneAnalysis: ToneAnalysis | null
+  thumbnail: Blob | null
+}
+
+/** Derives tone analysis from a 100px thumbnail histogram. */
+function analyzeTone(data: Uint8ClampedArray): ToneAnalysis | null {
+  const pixelCount = data.length / 4
+  if (pixelCount === 0) {
+    return null
+  }
+
+  const luminance = Array.from<number>({ length: 256 }).fill(0)
+  for (let index = 0; index < data.length; index += 4) {
+    const value = Math.round(0.2126 * data[index] + 0.7152 * data[index + 1] + 0.0722 * data[index + 2])
+    luminance[value]++
+  }
+
+  let totalLuminance = 0
+  for (let value = 0; value < luminance.length; value++) {
+    totalLuminance += value * luminance[value]
+  }
+  const mean = totalLuminance / pixelCount
+  const brightness = Math.round(mean * (100 / 255))
+
+  let shadowRatio = 0
+  let highlightRatio = 0
+  for (let value = 0; value < 86; value++) {
+    shadowRatio += luminance[value]
+  }
+  for (let value = 170; value < 256; value++) {
+    highlightRatio += luminance[value]
+  }
+  shadowRatio /= pixelCount
+  highlightRatio /= pixelCount
+
+  let variance = 0
+  for (let value = 0; value < luminance.length; value++) {
+    variance += luminance[value] * (value - mean) ** 2
+  }
+  variance /= pixelCount
+  const contrast = Math.min(100, Math.round((Math.sqrt(variance) / 127.5) * 100))
+
+  let toneType: ToneType
+  if (brightness < 30 && shadowRatio > 0.6) {
+    toneType = 'low-key'
+  }
+  else if (brightness > 70 && highlightRatio > 0.6) {
+    toneType = 'high-key'
+  }
+  else if (contrast > 60 && shadowRatio > 0.3 && highlightRatio > 0.3) {
+    toneType = 'high-contrast'
+  }
+  else {
+    toneType = 'normal'
+  }
+
+  return {
+    toneType,
+    brightness,
+    contrast,
+    shadowRatio: Math.round(shadowRatio * 100) / 100,
+    highlightRatio: Math.round(highlightRatio * 100) / 100,
+  }
+}
+
+const HEIC_EXTENSIONS = new Set(['heic', 'heif', 'hif'])
+
+async function decodeImage(file: File): Promise<ImageBitmap | null> {
+  try {
+    return await createImageBitmap(file)
+  }
+  catch {
+    if (!HEIC_EXTENSIONS.has(fileExtension(file.name))) {
+      return null
+    }
+  }
+
+  // Chrome cannot decode HEIC natively; convert it the same way the public
+  // gallery does so dimensions, ThumbHash and tone analysis stay available.
+  try {
+    const jpeg = await heicTo({ blob: file, type: 'image/jpeg', quality: 0.9 })
+    return await createImageBitmap(jpeg)
+  }
+  catch {
+    return null
+  }
 }
 
 async function inspectImage(file: File): Promise<ImageInspection | null> {
-  if (!file.type.startsWith('image/')) {
+  if (file.type && !file.type.startsWith('image/') && !HEIC_EXTENSIONS.has(fileExtension(file.name))) {
     return null
   }
-  let bitmap: ImageBitmap
-  try {
-    bitmap = await createImageBitmap(file)
-  }
-  catch {
+  const bitmap = await decodeImage(file)
+  if (!bitmap) {
     return null
   }
 
@@ -287,18 +382,41 @@ async function inspectImage(file: File): Promise<ImageInspection | null> {
     const canvas = new OffscreenCanvas(width, height)
     const context = canvas.getContext('2d')
     if (!context) {
-      return { ...dimensions, thumbHash: null }
+      return { ...dimensions, thumbHash: null, toneAnalysis: null, thumbnail: null }
     }
 
     context.drawImage(bitmap, 0, 0, width, height)
     const { data } = context.getImageData(0, 0, width, height)
-    return { ...dimensions, thumbHash: compressUint8Array(rgbaToThumbHash(width, height, data)) }
+    return {
+      ...dimensions,
+      thumbHash: compressUint8Array(rgbaToThumbHash(width, height, data)),
+      toneAnalysis: analyzeTone(data),
+      thumbnail: await renderThumbnail(bitmap),
+    }
   }
   catch {
-    return { width: bitmap.width, height: bitmap.height, thumbHash: null }
+    return { width: bitmap.width, height: bitmap.height, thumbHash: null, toneAnalysis: null, thumbnail: null }
   }
   finally {
     bitmap.close()
+  }
+}
+
+async function renderThumbnail(bitmap: ImageBitmap): Promise<Blob | null> {
+  try {
+    const scale = Math.min(1, THUMBNAIL_WIDTH / Math.max(bitmap.width, bitmap.height))
+    const width = Math.max(1, Math.round(bitmap.width * scale))
+    const height = Math.max(1, Math.round(bitmap.height * scale))
+    const canvas = new OffscreenCanvas(width, height)
+    const context = canvas.getContext('2d')
+    if (!context) {
+      return null
+    }
+    context.drawImage(bitmap, 0, 0, width, height)
+    return await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 })
+  }
+  catch {
+    return null
   }
 }
 
@@ -479,6 +597,35 @@ export async function uploadPhotoAssets(
     return { intent, parts }
   }
 
+  // Separate 600px JPEG keeps the gallery from loading full-size originals on
+  // deployments without an image-resizing endpoint (workers.dev, local dev).
+  const uploadThumbnail = async (photoId: string, file: File, thumbnail: Blob): Promise<void> => {
+    try {
+      const thumbnailFile = new File([thumbnail], file.name, { type: 'image/jpeg' })
+      const intent = await coreApi<UploadIntent>('/photos/upload-intent', {
+        method: 'POST',
+        body: {
+          filename: file.name,
+          size: thumbnailFile.size,
+          contentType: 'image/jpeg',
+          directory: options?.directory ?? null,
+          photoId,
+          variant: 'thumbnail',
+        },
+      })
+      await uploadSingleFile({
+        file: thumbnailFile,
+        intent,
+        signal: options?.signal,
+        timeoutMs: options?.timeoutMs,
+        onProgress: () => {},
+      })
+    }
+    catch (error) {
+      console.warn('Thumbnail upload failed; falling back to the original image', error)
+    }
+  }
+
   const uploads: PhotoAssetListItem[] = []
   for (const [index, file] of files.entries()) {
     options?.signal?.throwIfAborted()
@@ -502,8 +649,11 @@ export async function uploadPhotoAssets(
       videoKey = videoUpload.intent.key
     }
 
-    const { intent, parts } = await uploadObject(file, index)
     const inspection = await inspectImage(file)
+    const { intent, parts } = await uploadObject(file, index)
+    if (inspection?.thumbnail) {
+      await uploadThumbnail(intent.photoId, file, inspection.thumbnail)
+    }
     const asset = await coreApi<PhotoAssetListItem>('/photos/upload-complete', {
       method: 'POST',
       body: {
@@ -513,6 +663,7 @@ export async function uploadPhotoAssets(
         width: inspection?.width ?? null,
         height: inspection?.height ?? null,
         thumbHash: inspection?.thumbHash ?? null,
+        toneAnalysis: inspection?.toneAnalysis ?? null,
         takenAt: Number.isFinite(file.lastModified) ? new Date(file.lastModified).toISOString() : null,
         uploadId: intent.mode === 'multipart' ? intent.uploadId : null,
         parts: parts.length > 0 ? parts : null,

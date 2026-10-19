@@ -1,5 +1,4 @@
-import type { PhotoRegion } from '@afilmory/builder'
-import type { ExiftoolXmpRegion, ExiftoolXmpRegionInfo } from '@afilmory/typing'
+import type { ExiftoolXmpRegion, ExiftoolXmpRegionInfo, PhotoRegion } from '@afilmory/typing'
 
 export interface PhotoRegionBounds {
   left: number

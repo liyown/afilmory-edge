@@ -8,6 +8,7 @@ import recursiveSort from './plugins/eslint/eslint-recursive-sort.js'
 // In flat config, some large generated folders slipped through. To be extra safe,
 // put ignores in a top-level config object first, then append the rest.
 const rootIgnores = globalIgnores([
+  'apps/edge/public/**',
   'apps/web/public/**',
   'packages/docs/public/**',
   'scripts/webgpu-hdr-spike/**',

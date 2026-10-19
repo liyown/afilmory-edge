@@ -1,12 +1,5 @@
-export type UiFieldComponentType =
-  | 'color'
-  | 'multiSelect'
-  | 'secret'
-  | 'select'
-  | 'slot'
-  | 'switch'
-  | 'text'
-  | 'textarea'
+export type UiFieldComponentType
+  = 'color' | 'multiSelect' | 'secret' | 'select' | 'slot' | 'switch' | 'text' | 'textarea'
 
 interface UiFieldComponentBase<Type extends UiFieldComponentType> {
   readonly type: Type
@@ -54,19 +47,19 @@ export interface UiSwitchComponent extends UiFieldComponentBase<'switch'> {
 
 export interface UiSlotComponent<Key extends string = string> extends UiFieldComponentBase<'slot'> {
   readonly name: string
-  readonly fields?: ReadonlyArray<{ key: Key; label?: string; required?: boolean }>
+  readonly fields?: ReadonlyArray<{ key: Key, label?: string, required?: boolean }>
   readonly props?: Readonly<Record<string, unknown>>
 }
 
-export type UiFieldComponentDefinition<Key extends string = string> =
-  | UiColorComponent
-  | UiMultiSelectComponent
-  | UiTextInputComponent
-  | UiSecretInputComponent
-  | UiTextareaComponent
-  | UiSelectComponent
-  | UiSwitchComponent
-  | UiSlotComponent<Key>
+export type UiFieldComponentDefinition<Key extends string = string>
+  = | UiColorComponent
+    | UiMultiSelectComponent
+    | UiTextInputComponent
+    | UiSecretInputComponent
+    | UiTextareaComponent
+    | UiSelectComponent
+    | UiSwitchComponent
+    | UiSlotComponent<Key>
 
 interface BaseUiNode {
   readonly id: string

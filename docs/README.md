@@ -1,10 +1,10 @@
 # Documentation
 
-Afilmory runs as a single-tenant photo gallery on Cloudflare: a React SPA, a Worker-hosted API and dashboard, and a builder that turns photo storage into a manifest plus thumbnails.
+Afilmory runs as a personal, single-tenant photo gallery on Cloudflare: one Worker serves the React SPA, the admin dashboard, and the API, backed by D1, R2, and KV.
+Photos are uploaded from the dashboard; the Worker extracts metadata, stores thumbnails, and publishes the manifest.
 
 - Architecture overview: `architecture.md`
-- Configuration guide (site + builder + env): `configuration.md`
+- Configuration guide (site settings + Worker secrets): `configuration.md`
 - Deployment and hosting: `deployment.md`
-- Builder pipeline and commands: `builder.md`
 
 For day-to-day development commands, see the root `README.md`.

@@ -1,4 +1,4 @@
-import type { PickedExif } from '@afilmory/typing'
+import type { PhotoRegion, PickedExif } from '@afilmory/typing'
 import { env as workerEnv } from 'cloudflare:workers'
 import exifr from 'exifr'
 import { injectable } from 'tsyringe'
@@ -44,14 +44,41 @@ const EXIF_KEYS = [
   'OffsetTime',
   'OffsetTimeOriginal',
   'OffsetTimeDigitized',
+  'tz',
+  'tzSource',
+  'WBShiftAB',
+  'WBShiftGM',
+  'WhiteBalanceBias',
+  'FlashMeteringMode',
+  'SensingMethod',
+  'FocalPlaneXResolution',
+  'FocalPlaneYResolution',
+  'Aperture',
+  'ScaleFactor35efl',
+  'ShutterSpeed',
+  'LightValue',
+  'GPSCoordinates',
+  'MPImageType',
+  'UniformResourceName',
 ] as const
 
 const NON_IMAGE_EXTENSIONS = new Set(['mov', 'mp4', 'm4v', 'avi', 'webm', 'hevc'])
+
+export interface MotionPhotoInfo {
+  offset: number
+  size: number
+  presentationTimestamp?: number
+  // Legacy MicroVideoOffset has been seen with both from-start and from-end
+  // semantics, so the caller probes the alternate interpretation on mismatch.
+  alternateOffset?: number
+}
 
 export interface ExtractedMetadata {
   exif: PickedExif | null
   dateTaken: string | null
   keywords: string[]
+  regions: PhotoRegion[]
+  motionPhoto: MotionPhotoInfo | null
   width: number | null
   height: number | null
 }
@@ -60,8 +87,130 @@ const EMPTY_METADATA: ExtractedMetadata = {
   exif: null,
   dateTaken: null,
   keywords: [],
+  regions: [],
+  motionPhoto: null,
   width: null,
   height: null,
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+}
+
+function asArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) {
+    return value
+  }
+  return value === undefined || value === null ? [] : [value]
+}
+
+// exiftool emits `W/H/Unit` while exifr keeps the raw XMP `w/h/unit`.
+function readNumber(record: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const parsed = typeof record[key] === 'number' ? record[key] : Number.parseFloat(String(record[key] ?? ''))
+    if (typeof parsed === 'number' && Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+  return null
+}
+
+function normalizeRegionType(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+  const normalized = value.trim()
+  const groupedType = normalized.match(/\(([^)]+)\)\s*$/)?.[1]?.trim()
+  return groupedType || normalized || undefined
+}
+
+export function parseRegions(tags: Record<string, unknown>): PhotoRegion[] {
+  const source = asRecord(tags.RegionInfo) ?? asRecord(tags.Regions) ?? tags
+  if (!source.RegionList) {
+    return []
+  }
+
+  const dimensions = asRecord(source.AppliedToDimensions)
+  const width = dimensions ? readNumber(dimensions, ['W', 'w']) : null
+  const height = dimensions ? readNumber(dimensions, ['H', 'h']) : null
+  const unit = dimensions && typeof dimensions.Unit === 'string' ? dimensions.Unit : dimensions?.unit
+  const appliedToDimensions
+    = width !== null && height !== null && typeof unit === 'string' ? { width, height, unit } : null
+
+  return asArray(source.RegionList)
+    .map((region) => {
+      const record = asRecord(region)
+      if (!record) {
+        return null
+      }
+      const name = typeof record.Name === 'string' ? record.Name.trim() : ''
+      const type = normalizeRegionType(record.Type)
+      const areaRecord = asRecord(record.Area)
+      const x = areaRecord ? readNumber(areaRecord, ['X', 'x']) : null
+      const y = areaRecord ? readNumber(areaRecord, ['Y', 'y']) : null
+      const areaWidth = areaRecord ? readNumber(areaRecord, ['W', 'w']) : null
+      const areaHeight = areaRecord ? readNumber(areaRecord, ['H', 'h']) : null
+      const area
+        = x !== null && y !== null && areaWidth !== null && areaHeight !== null
+          ? {
+              x,
+              y,
+              width: areaWidth,
+              height: areaHeight,
+              unit:
+                typeof areaRecord?.Unit === 'string'
+                  ? areaRecord.Unit
+                  : ((areaRecord?.unit as string | undefined) ?? 'normalized'),
+            }
+          : null
+
+      if (!name && !type && !area) {
+        return null
+      }
+
+      return {
+        name,
+        ...(type ? { type } : {}),
+        area,
+        appliedToDimensions,
+      } satisfies PhotoRegion
+    })
+    .filter((region): region is PhotoRegion => region !== null)
+}
+
+export function parseMotionPhoto(tags: Record<string, unknown>, fileSize: number): MotionPhotoInfo | null {
+  const timestamp = readNumber(tags, ['MotionPhotoPresentationTimestampUs', 'MicroVideoPresentationTimestampUs'])
+
+  const directory = asRecord(tags.Directory) ?? asRecord(tags.ContainerDirectory)
+  const rawItems = Array.isArray(tags.ContainerDirectory) ? tags.ContainerDirectory : directory?.Item
+  for (const entry of asArray(rawItems)) {
+    const item = asRecord(asRecord(entry)?.Item ?? entry)
+    if (!item || item.Semantic !== 'MotionPhoto') {
+      continue
+    }
+    const length = readNumber(item, ['Length'])
+    if (length !== null && length > 0 && length < fileSize) {
+      return {
+        offset: fileSize - length,
+        size: length,
+        ...(timestamp !== null ? { presentationTimestamp: timestamp } : {}),
+      }
+    }
+  }
+
+  // Legacy Android MicroVideo format records the distance from the end of the
+  // file to the start of the appended MP4.
+  const legacyOffset = readNumber(tags, ['MicroVideoOffset'])
+  if (legacyOffset !== null && legacyOffset > 0 && legacyOffset < fileSize) {
+    return {
+      offset: fileSize - legacyOffset,
+      size: legacyOffset,
+      ...(timestamp !== null ? { presentationTimestamp: timestamp } : {}),
+      alternateOffset: legacyOffset,
+    }
+  }
+
+  return null
 }
 
 function positiveDimension(value: unknown): number | null {
@@ -132,13 +281,18 @@ function mapExif(tags: Record<string, unknown>): PickedExif {
   if (dateTimeDigitized) {
     exif.DateTimeDigitized = dateTimeDigitized
   }
+  // exiftool derives an IANA zone; exifr can only expose the raw offset.
+  if (!exif.tz && typeof tags.OffsetTimeOriginal === 'string') {
+    exif.tz = tags.OffsetTimeOriginal
+    exif.tzSource = 'OffsetTimeOriginal'
+  }
 
   return exif as unknown as PickedExif
 }
 
 @injectable()
 export class ExifMetadataService {
-  async extract(key: string, extension: string): Promise<ExtractedMetadata> {
+  async extract(key: string, extension: string, fileSize: number): Promise<ExtractedMetadata> {
     if (NON_IMAGE_EXTENSIONS.has(extension.toLowerCase())) {
       return EMPTY_METADATA
     }
@@ -172,6 +326,8 @@ export class ExifMetadataService {
         exif: mapExif(tags),
         dateTaken,
         keywords: collectKeywords(tags),
+        regions: parseRegions(tags),
+        motionPhoto: parseMotionPhoto(tags, fileSize),
         width: positiveDimension(tags.ExifImageWidth ?? tags.ImageWidth),
         height: positiveDimension(tags.ExifImageHeight ?? tags.ImageHeight),
       }

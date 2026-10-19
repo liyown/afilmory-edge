@@ -6,7 +6,7 @@
     "build": "pnpm build:spas && pnpm sync-assets && cf build",
     "build:dashboard": "pnpm -C ../../be/apps/dashboard build",
     "build:spas": "pnpm build:web && pnpm build:dashboard",
-    "build:web": "pnpm -C ../../apps/web exec vite build",
+    "build:web": "AFILMORY_EMBED_SITE_CONFIG=false pnpm -C ../../apps/web exec vite build",
     "deploy": "cf deploy",
     "dev": "cf dev",
     "sync-assets": "bash scripts/sync-assets.sh",

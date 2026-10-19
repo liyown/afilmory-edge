@@ -1,4 +1,4 @@
-import type { PhotoManifestItem } from '@afilmory/builder'
+import type { PhotoManifestItem } from '@afilmory/typing'
 
 export * from './provider'
 

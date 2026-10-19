@@ -1,4 +1,4 @@
-import type { PhotoRegion } from '@afilmory/builder'
+import type { PhotoRegion } from '@afilmory/typing'
 import { clsxm } from '@afilmory/utils'
 import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'

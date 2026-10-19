@@ -222,6 +222,11 @@ export class R2UploadService {
     })
   }
 
+  async readRange(key: string, offset: number, length: number): Promise<Uint8Array | null> {
+    const object = await workerEnv.PHOTOS.get(key, { range: { offset, length } })
+    return object ? new Uint8Array(await object.arrayBuffer()) : null
+  }
+
   async delete(keys: string[]): Promise<void> {
     if (keys.length === 0) {
       return

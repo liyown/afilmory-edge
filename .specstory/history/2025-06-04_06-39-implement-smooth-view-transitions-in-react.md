@@ -2,26 +2,28 @@
 
 # Implement smooth view transitions in react (2025-06-04 14:39:37)
 
-_**User**_
+**_User_**
 
-根据 @https://react.dev/blog/2025/04/23/react-labs-view-transitions-activity-and-more 
-我已经安装 experimental 的 react。使用 View Transitions 包装。
+根据 @<https://react.dev/blog/2025/04/23/react-labs-view-transitions-activity-and-more>
+我已经安装 experimental 的 react。
+使用 View Transitions 包装。
 
 PhotoMasonaryItem 的 img 元素和 ProgressiveImage 的thumbnail img，做一个平滑过度
 
 ---
 
-_**Assistant**_
+**_Assistant_**
 
-我将帮助你在 PhotoMasonryItem 和 ProgressiveImage 之间实现平滑的 View Transitions。首先让我查看相关文件结构，了解 ProgressiveImage 组件的实现。
+我将帮助你在 PhotoMasonryItem 和 ProgressiveImage 之间实现平滑的 View Transitions。
+首先让我查看相关文件结构，了解 ProgressiveImage 组件的实现。
 
 ---
 
 <details>
             <summary>Searched codebase "ProgressiveImage" • **1** results</summary>
-        
-| File |
-|------|
+
+| File        |
+| ----------- |
 | `undefined` |
 
 </details>
@@ -42,34 +44,34 @@ Read file: apps/web/src/components/ui/photo-viewer/ProgressiveImage.tsx
 
 <details>
             <summary>Searched codebase "PhotoMasonryItem onPhotoClick" • **25** results</summary>
-        
-| File | Lines |
-|------|-------|
-| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx` | L1-30 |
-| `apps/web/src/modules/gallery/MasonryRoot.tsx` | L23-74 |
-| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx` | L30-61 |
-| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx` | L323-368 |
-| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx` | L232-295 |
-| `apps/web/src/modules/gallery/MasonryRoot.tsx` | L1-21 |
-| `apps/web/src/modules/gallery/MasonryRoot.tsx` | L74-155 |
-| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx` | L61-110 |
-| `apps/web/src/modules/gallery/MasonryRoot.tsx` | L21-23 |
-| `apps/web/src/hooks/usePhotoViewer.ts` | L1-49 |
-| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx` | L295-323 |
-| `apps/web/src/modules/gallery/MasonryHeaderMasonryItem.tsx` | L1-62 |
-| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx` | L368-405 |
-| `apps/web/src/pages/(main)/layout.tsx` | L1-48 |
-| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx` | L174-232 |
-| `apps/web/src/components/ui/photo-viewer/PhotoViewer.tsx` | L334-372 |
-| `apps/web/src/core/types/photo.ts` | L15-37 |
-| `apps/web/src/components/ui/photo-viewer/PhotoViewer.tsx` | L1-29 |
-| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx` | L110-174 |
-| `apps/web/src/modules/gallery/Masonic.tsx` | L97-131 |
-| `apps/web/src/pages/(main)/[photoId]/index.tsx` | L1-23 |
-| `apps/web/src/modules/gallery/Masonic.tsx` | L131-169 |
-| `apps/web/src/components/ui/photo-viewer/PhotoViewer.tsx` | L251-286 |
-| `apps/web/src/modules/gallery/Masonic.tsx` | L33-97 |
-| `apps/web/src/components/ui/photo-viewer/PhotoViewer.tsx` | L181-251 |
+
+| File                                                        | Lines    |
+| ----------------------------------------------------------- | -------- |
+| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx`         | L1-30    |
+| `apps/web/src/modules/gallery/MasonryRoot.tsx`              | L23-74   |
+| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx`         | L30-61   |
+| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx`         | L323-368 |
+| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx`         | L232-295 |
+| `apps/web/src/modules/gallery/MasonryRoot.tsx`              | L1-21    |
+| `apps/web/src/modules/gallery/MasonryRoot.tsx`              | L74-155  |
+| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx`         | L61-110  |
+| `apps/web/src/modules/gallery/MasonryRoot.tsx`              | L21-23   |
+| `apps/web/src/hooks/usePhotoViewer.ts`                      | L1-49    |
+| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx`         | L295-323 |
+| `apps/web/src/modules/gallery/MasonryHeaderMasonryItem.tsx` | L1-62    |
+| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx`         | L368-405 |
+| `apps/web/src/pages/(main)/layout.tsx`                      | L1-48    |
+| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx`         | L174-232 |
+| `apps/web/src/components/ui/photo-viewer/PhotoViewer.tsx`   | L334-372 |
+| `apps/web/src/core/types/photo.ts`                          | L15-37   |
+| `apps/web/src/components/ui/photo-viewer/PhotoViewer.tsx`   | L1-29    |
+| `apps/web/src/modules/gallery/PhotoMasonryItem.tsx`         | L110-174 |
+| `apps/web/src/modules/gallery/Masonic.tsx`                  | L97-131  |
+| `apps/web/src/pages/(main)/[photoId]/index.tsx`             | L1-23    |
+| `apps/web/src/modules/gallery/Masonic.tsx`                  | L131-169 |
+| `apps/web/src/components/ui/photo-viewer/PhotoViewer.tsx`   | L251-286 |
+| `apps/web/src/modules/gallery/Masonic.tsx`                  | L33-97   |
+| `apps/web/src/components/ui/photo-viewer/PhotoViewer.tsx`   | L181-251 |
 
 </details>
 
@@ -81,9 +83,9 @@ Read file: apps/web/src/components/ui/photo-viewer/ProgressiveImage.tsx
 
 <details>
             <summary>Grep search for "react.*experimental" • **3** files</summary>
-        
+
 | File | Line | Match |
-|------|------|-------|
+| ------ | ------ | ------- |
 | `file:///Users/innei/git/vibe-coding/photo-gallery-site/apps/web/src/vite-env.d.ts` | L1 | `/// <reference types="react/experimental" />` |
 | `file:///Users/innei/git/vibe-coding/photo-gallery-site/apps/web/package.json` | L51 | `"react": "experimental",` |
 | `file:///Users/innei/git/vibe-coding/photo-gallery-site/apps/web/package.json` | L53 | `"react-dom": "experimental",` |
@@ -189,7 +191,8 @@ Read file: apps/web/src/components/ui/photo-viewer/ProgressiveImage.tsx
 
 ---
 
-现在我开始实现 View Transitions。根据分析，我需要：
+现在我开始实现 View Transitions。
+根据分析，我需要：
 
 1. 在 PhotoMasonryItem 的 img 元素上添加 `<ViewTransition>` 包装
 2. 在 ProgressiveImage 的 thumbnail img 上添加相同的 `<ViewTransition>` 包装
@@ -205,11 +208,11 @@ Read file: apps/web/src/components/ui/photo-viewer/ProgressiveImage.tsx
   import { useCallback, useEffect, useRef, useState } from 'react'
 + import { unstable_ViewTransition as ViewTransition } from 'react'
   import { Blurhash } from 'react-blurhash'
-  
+
 ```
 
 ```diff
-  
+
         {!imageError && (
 -         <img
 -           ref={imageRef}
@@ -234,7 +237,7 @@ Read file: apps/web/src/components/ui/photo-viewer/ProgressiveImage.tsx
 +           />
 +         </ViewTransition>
         )}
-  
+
 ```
 
 ---
@@ -268,7 +271,7 @@ Read file: apps/web/src/components/ui/photo-viewer/ProgressiveImage.tsx
 - import { useCallback, useEffect, useRef, useState } from 'react'
 + import { useCallback, useEffect, useRef, useState, unstable_ViewTransition as ViewTransition } from 'react'
   import { toast } from 'sonner'
-  
+
 ```
 
 ```diff
@@ -301,12 +304,13 @@ Read file: apps/web/src/components/ui/photo-viewer/ProgressiveImage.tsx
 +           />
 +         </ViewTransition>
         )}
-  
+
 ```
 
 ---
 
-我意识到这里有一个问题：ProgressiveImage 组件需要知道照片的 ID 才能使用正确的 ViewTransition name。让我检查 ProgressiveImage 的 props 并添加必要的属性：
+我意识到这里有一个问题：ProgressiveImage 组件需要知道照片的 ID 才能使用正确的 ViewTransition name。
+让我检查 ProgressiveImage 的 props 并添加必要的属性：
 
 ---
 
@@ -314,24 +318,25 @@ Read file: apps/web/src/components/ui/photo-viewer/PhotoViewer.tsx
 
 ---
 
-我需要向 ProgressiveImage 组件添加一个 photoId 属性。让我修改 ProgressiveImage 的接口和实现：
+我需要向 ProgressiveImage 组件添加一个 photoId 属性。
+让我修改 ProgressiveImage 的接口和实现：
 
 ---
 
 ```diff
     isLivePhoto?: boolean
     livePhotoVideoUrl?: string
-+   
++
 +   // View Transition 相关 props
 +   photoId?: string
   }
-  
+
 ```
 
 ```diff
     isLivePhoto = false,
     livePhotoVideoUrl,
-+   
++
 +   // View Transition props
 +   photoId,
   }: ProgressiveImageProps) => {
@@ -365,7 +370,8 @@ Read file: apps/web/src/components/ui/photo-viewer/PhotoViewer.tsx
 
 ---
 
-现在我需要确保导航过渡是在 `startTransition` 中触发的。让我检查 usePhotoViewer hook 中的 openViewer 方法：
+现在我需要确保导航过渡是在 `startTransition` 中触发的。
+让我检查 usePhotoViewer hook 中的 openViewer 方法：
 
 ---
 
@@ -373,7 +379,8 @@ Read file: apps/web/src/hooks/usePhotoViewer.ts
 
 ---
 
-我需要在 openViewer 函数中使用 `startTransition` 来触发 View Transition。让我更新这个 hook：
+我需要在 openViewer 函数中使用 `startTransition` 来触发 View Transition。
+让我更新这个 hook：
 
 ---
 
@@ -382,7 +389,7 @@ Read file: apps/web/src/hooks/usePhotoViewer.ts
 - import { useCallback, useEffect, useMemo } from 'react'
 + import { useCallback, useEffect, useMemo, startTransition } from 'react'
   import { useLocation, useNavigate } from 'react-router'
-  
+
 ```
 
 ```diff
@@ -406,44 +413,46 @@ Read file: apps/web/src/hooks/usePhotoViewer.ts
 
 ---
 
-现在让我为 View Transitions 添加一些 CSS 样式来自定义动画效果。根据 React Labs 博客文章，我需要添加 view transition 的 CSS：
+现在让我为 View Transitions 添加一些 CSS 样式来自定义动画效果。
+根据 React Labs 博客文章，我需要添加 view transition 的 CSS：
 
 ---
 
 <details>
             <summary>Searched codebase "globals.css" • **0** results</summary>
-        
+
 No results found
+
 </details>
 
 ---
 
 <details>
             <summary>Listed directory apps/web/src • **21** results</summary>
-        
-| Name |
-|-------|
-| 📄 `vite-env.d.ts` |
-| 📁 `components` |
-| 📁 `lib` |
-| 📁 `providers` |
-| 📄 `router.tsx` |
-| 📁 `store` |
-| 📁 `styles` |
-| 📁 `types` |
-| 📁 `pages` |
-| 📄 `main.tsx` |
-| 📁 `modules` |
-| 📁 `hooks` |
-| 📁 `icons` |
-| 📁 `data` |
+
+| Name                        |
+| --------------------------- |
+| 📄 `vite-env.d.ts`          |
+| 📁 `components`             |
+| 📁 `lib`                    |
+| 📁 `providers`              |
+| 📄 `router.tsx`             |
+| 📁 `store`                  |
+| 📁 `styles`                 |
+| 📁 `types`                  |
+| 📁 `pages`                  |
+| 📄 `main.tsx`               |
+| 📁 `modules`                |
+| 📁 `hooks`                  |
+| 📁 `icons`                  |
+| 📁 `data`                   |
 | 📄 `framer-lazy-feature.ts` |
-| 📄 `global.d.ts` |
-| 📁 `core` |
-| 📄 `App.tsx` |
-| 📁 `assets` |
-| 📁 `atoms` |
-| 📄 `.DS_Store` |
+| 📄 `global.d.ts`            |
+| 📁 `core`                   |
+| 📄 `App.tsx`                |
+| 📁 `assets`                 |
+| 📁 `atoms`                  |
+| 📄 `.DS_Store`              |
 
 </details>
 
@@ -451,10 +460,10 @@ No results found
 
 <details>
             <summary>Listed directory apps/web/src/styles • **2** results</summary>
-        
-| Name |
-|-------|
-| 📄 `index.css` |
+
+| Name              |
+| ----------------- |
+| 📄 `index.css`    |
 | 📄 `tailwind.css` |
 
 </details>
@@ -467,40 +476,40 @@ Read file: apps/web/src/styles/index.css
 
 ```diff
   @import './tailwind.css';
-+ 
++
 + /* View Transitions 样式 */
 + ::view-transition-old(photo-*) {
 +   animation: 400ms ease-out both fade-out, 400ms ease-out both scale-down;
 + }
-+ 
++
 + ::view-transition-new(photo-*) {
 +   animation: 400ms ease-in both fade-in, 400ms ease-in both scale-up;
 + }
-+ 
++
 + /* 动画关键帧 */
 + @keyframes fade-out {
 +   to { opacity: 0; }
 + }
-+ 
++
 + @keyframes fade-in {
 +   from { opacity: 0; }
 + }
-+ 
++
 + @keyframes scale-down {
 +   to { transform: scale(0.95); }
 + }
-+ 
++
 + @keyframes scale-up {
 +   from { transform: scale(0.95); }
 + }
-+ 
++
 + /* 更平滑的共享元素过渡 */
 + ::view-transition-old(photo-*),
 + ::view-transition-new(photo-*) {
 +   animation-duration: 500ms;
 +   animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 + }
-  
+
 ```
 
 ---
@@ -510,7 +519,7 @@ Read file: apps/web/src/styles/index.css
 ---
 
 ```diff
-  
+
     const closeViewer = useCallback(() => {
 +     startTransition(() => {
         setIsOpen(false)
@@ -519,12 +528,13 @@ Read file: apps/web/src/styles/index.css
         document.body.style.overflow = ''
 +     })
     }, [setIsOpen, setTriggerElement])
-  
+
 ```
 
 ---
 
-现在让我测试一下实现。让我运行应用程序来看看 View Transitions 是否正常工作：
+现在让我测试一下实现。
+让我运行应用程序来看看 View Transitions 是否正常工作：
 
 ---
 
@@ -534,12 +544,13 @@ cd /Users/innei/git/vibe-coding/photo-gallery-site && npm run dev
 
 ---
 
-我还需要确保 CSS 选择器语法正确。让我修正 CSS 样式：
+我还需要确保 CSS 选择器语法正确。
+让我修正 CSS 样式：
 
 ---
 
 ```diff
-  
+
   /* View Transitions 样式 */
 - ::view-transition-old(photo-*) {
 -   animation:
@@ -548,16 +559,16 @@ cd /Users/innei/git/vibe-coding/photo-gallery-site && npm run dev
 + ::view-transition-old(*) {
 +   animation: 500ms cubic-bezier(0.16, 1, 0.3, 1) both fade-out;
 + }
-+ 
++
 + ::view-transition-new(*) {
 +   animation: 500ms cubic-bezier(0.16, 1, 0.3, 1) both fade-in;
 + }
-+ 
++
 + /* 针对特定的照片过渡 */
 + ::view-transition-old(.photo-transition) {
 +   animation: 500ms cubic-bezier(0.16, 1, 0.3, 1) both fade-out, 500ms cubic-bezier(0.16, 1, 0.3, 1) both scale-down;
   }
-  
+
 - ::view-transition-new(photo-*) {
 -   animation:
 -     400ms ease-in both fade-in,
@@ -565,7 +576,7 @@ cd /Users/innei/git/vibe-coding/photo-gallery-site && npm run dev
 + ::view-transition-new(.photo-transition) {
 +   animation: 500ms cubic-bezier(0.16, 1, 0.3, 1) both fade-in, 500ms cubic-bezier(0.16, 1, 0.3, 1) both scale-up;
   }
-  
+
   /* 动画关键帧 */
   @keyframes fade-out {
 -   to {
@@ -573,38 +584,40 @@ cd /Users/innei/git/vibe-coding/photo-gallery-site && npm run dev
 -   }
 +   to { opacity: 0; }
   }
-  
+
   @keyframes fade-in {
 -   from {
 -     opacity: 0;
 -   }
 +   from { opacity: 0; }
   }
-  
+
   @keyframes scale-down {
 -   to {
 -     transform: scale(0.95);
 -   }
 +   to { transform: scale(0.98); }
   }
-  
+
   @keyframes scale-up {
 -   from {
 -     transform: scale(0.95);
 -   }
 +   from { transform: scale(0.98); }
   }
-  
+
 ```
 
 ---
 
-让我检查 React experimental 版本中 ViewTransition 的正确用法。根据 React Labs 文章，我需要确保正确配置 ViewTransition 组件。让我修正 ViewTransition 的使用：
+让我检查 React experimental 版本中 ViewTransition 的正确用法。
+根据 React Labs 文章，我需要确保正确配置 ViewTransition 组件。
+让我修正 ViewTransition 的使用：
 
 ---
 
 ```diff
-  
+
         {!imageError && (
 -         <ViewTransition name={`photo-${data.id}`}>
 +         <ViewTransition name={`photo-${data.id}`} default="photo-transition">
@@ -625,19 +638,20 @@ cd /Users/innei/git/vibe-coding/photo-gallery-site && npm run dev
 
 ---
 
-现在让我创建一个小测试来验证 View Transitions 是否可用。让我检查浏览器是否支持 View Transitions API：
+现在让我创建一个小测试来验证 View Transitions 是否可用。
+让我检查浏览器是否支持 View Transitions API：
 
 ---
 
 ```diff
-- 
+-
 + /**
 +  * 检查浏览器是否支持 View Transitions API
 +  */
 + export const supportsViewTransitions = () => {
 +   return typeof document !== 'undefined' && 'startViewTransition' in document
 + }
-+ 
++
 + /**
 +  * 安全地执行 View Transition
 +  */
@@ -647,7 +661,7 @@ cd /Users/innei/git/vibe-coding/photo-gallery-site && npm run dev
 +   } else {
 +     updateCallback()
 +   }
-+ } 
++ }
 ```
 
 ---
@@ -683,9 +697,8 @@ cd /Users/innei/git/vibe-coding/photo-gallery-site && npm run dev
 
 ---
 
-
-
-现在让我更新 CSS 中的 view transition 选择器以匹配正确的语法。根据 React Labs 文章，选择器应该匹配具体的 view transition name：
+现在让我更新 CSS 中的 view transition 选择器以匹配正确的语法。
+根据 React Labs 文章，选择器应该匹配具体的 view transition name：
 
 ---
 
@@ -697,14 +710,14 @@ cd /Users/innei/git/vibe-coding/photo-gallery-site && npm run dev
 -     500ms cubic-bezier(0.16, 1, 0.3, 1) both scale-down;
 +   animation: 500ms cubic-bezier(0.16, 1, 0.3, 1) both fade-out, 500ms cubic-bezier(0.16, 1, 0.3, 1) both scale-down;
   }
-  
+
   ::view-transition-new(.photo-transition) {
 -   animation:
 -     500ms cubic-bezier(0.16, 1, 0.3, 1) both fade-in,
 -     500ms cubic-bezier(0.16, 1, 0.3, 1) both scale-up;
 +   animation: 500ms cubic-bezier(0.16, 1, 0.3, 1) both fade-in, 500ms cubic-bezier(0.16, 1, 0.3, 1) both scale-up;
   }
-  
+
   /* 动画关键帧 */
   @keyframes fade-out {
 -   to {
@@ -712,28 +725,28 @@ cd /Users/innei/git/vibe-coding/photo-gallery-site && npm run dev
 -   }
 +   to { opacity: 0; }
   }
-  
+
   @keyframes fade-in {
 -   from {
 -     opacity: 0;
 -   }
 +   from { opacity: 0; }
   }
-  
+
   @keyframes scale-down {
 -   to {
 -     transform: scale(0.98);
 -   }
 +   to { transform: scale(0.98); }
   }
-  
+
   @keyframes scale-up {
 -   from {
 -     transform: scale(0.98);
 -   }
 +   from { transform: scale(0.98); }
   }
-  
+
 ```
 
 ---
@@ -791,48 +804,58 @@ q^C
 
 ---
 
-太好了！开发服务器已经成功启动，没有编译错误。现在我已经完成了 View Transitions 的实现。让我总结一下我所做的改动：
+太好了！
+开发服务器已经成功启动，没有编译错误。
+现在我已经完成了 View Transitions 的实现。
+让我总结一下我所做的改动：
 
 ## View Transitions 实现总结
 
-我已经成功在你的照片画廊应用中实现了 React experimental 的 View Transitions 功能。以下是主要的修改内容：
+我已经成功在你的照片画廊应用中实现了 React experimental 的 View Transitions 功能。
+以下是主要的修改内容：
 
 ### 1. PhotoMasonryItem 组件修改
+
 - 导入了 `unstable_ViewTransition as ViewTransition`
 - 在照片缩略图 `<img>` 元素外包装了 `<ViewTransition>` 组件
 - 使用 `name={photo-${data.id}}` 和 `default="photo-transition"` 属性
 
-### 2. ProgressiveImage 组件修改  
+### 2. ProgressiveImage 组件修改
+
 - 添加了 `photoId` 可选属性到 props 接口
 - 在缩略图 `<m.img>` 元素外包装了相同的 `<ViewTransition>` 组件
 - 使用相同的命名模式确保两个组件之间的平滑过渡
 
 ### 3. PhotoViewer 组件更新
+
 - 向 `ProgressiveImage` 传递 `photoId={photo.id}` 属性
 
 ### 4. usePhotoViewer Hook 优化
+
 - 导入并使用 `startTransition` 包装状态更新
 - 在 `openViewer` 和 `closeViewer` 函数中都使用了 `startTransition`
 
 ### 5. CSS 样式添加
+
 - 在 `apps/web/src/styles/index.css` 中添加了 View Transitions 的自定义动画
 - 包括淡入淡出和缩放效果
 - 使用了平滑的 cubic-bezier 缓动函数
 
 ### 6. 工具函数
+
 - 创建了 `lib/view-transitions.ts` 文件，包含检测和安全执行 View Transitions 的工具函数
 
 ## 主要特性
 
-✅ **平滑过渡**：从照片网格点击到详情页面时，照片会平滑地从原位置过渡到新位置  
-✅ **共享元素动画**：使用相同的 `name` 属性确保正确的元素匹配  
-✅ **兼容性处理**：使用 `startTransition` 确保过渡正确触发  
-✅ **自定义动画**：通过 CSS 定义了专门的淡入淡出和缩放效果  
-✅ **实验性特性**：正确使用了 React experimental 版本的 ViewTransition 组件  
+✅ **平滑过渡**：从照片网格点击到详情页面时，照片会平滑地从原位置过渡到新位置
+✅ **共享元素动画**：使用相同的 `name` 属性确保正确的元素匹配
+✅ **兼容性处理**：使用 `startTransition` 确保过渡正确触发
+✅ **自定义动画**：通过 CSS 定义了专门的淡入淡出和缩放效果
+✅ **实验性特性**：正确使用了 React experimental 版本的 ViewTransition 组件
 
-现在你可以在浏览器中测试这个功能了！点击任何照片缩略图，你应该能看到平滑的 View Transition 动画效果，照片会从网格位置平滑过渡到查看器中的位置。
+现在你可以在浏览器中测试这个功能了！
+点击任何照片缩略图，你应该能看到平滑的 View Transition 动画效果，照片会从网格位置平滑过渡到查看器中的位置。
 
 需要注意的是，View Transitions API 需要现代浏览器支持，在不支持的浏览器中会优雅降级为正常的页面切换。
 
 ---
-

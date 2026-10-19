@@ -1,4 +1,4 @@
-import type { PickedExif } from '@afilmory/builder'
+import type { PickedExif } from '@afilmory/typing'
 import { ActionButton, MobileTabGroup, MobileTabItem, SegmentGroup, SegmentItem } from '@afilmory/ui'
 import { Spring } from '@afilmory/utils'
 import { useQuery } from '@tanstack/react-query'

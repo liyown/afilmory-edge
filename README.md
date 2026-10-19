@@ -5,7 +5,7 @@
 # <p align="center">Afilmory</p>
 
 <p align="center">
-  <em>A modern, high-performance photo gallery platform for photographers</em>
+  <em>A modern, high-performance photo gallery for photographers</em>
 </p>
 
 <p align="center">
@@ -16,11 +16,11 @@
 
 ---
 
-**Afilmory** (/əˈfɪlməri/, "uh-FIL-muh-ree") is a comprehensive photo gallery solution that combines **Auto Focus (AF)**, **Aperture** (light control), **Film** (vintage medium), and **Memory** (captured moments). Built with React + TypeScript, it offers automatic photo synchronization from multiple storage sources, a GPU-accelerated image viewer (WebGPU first, WebGL fallback) with HDR gain-map support, and professional EXIF metadata display.
+**Afilmory** (/əˈfɪlməri/, "uh-FIL-muh-ree") is a personal, single-tenant photo gallery that deploys as one Cloudflare Worker.
+It combines **Auto Focus (AF)**, **Aperture** (light control), **Film** (vintage medium), and **Memory** (captured moments).
+The Worker serves the gallery SPA, the admin dashboard, and the API from the same origin, backed by D1, R2, and KV.
 
 ## 🚀 Quick Start
-
-Afilmory deploys as a single-tenant gallery on Cloudflare: one Worker serves the gallery SPA, the admin dashboard, and the API, backed by D1 + R2 + KV.
 
 ```bash
 # 1. Clone and install
@@ -30,10 +30,8 @@ pnpm install
 
 # 2. Configure
 cp config.example.json config.json
-cp builder.config.default.ts builder.config.ts
 cp apps/edge/.dev.vars.example apps/edge/.dev.vars
-# Edit config.json, builder.config.ts, and apps/edge/.dev.vars.
-# The bulk builder also reads S3 credentials from .env (see .env.template).
+# Edit config.json and apps/edge/.dev.vars.
 
 # 3. Create the Cloudflare resources and apply the baseline migration
 cf d1 create afilmory-db
@@ -50,6 +48,7 @@ pnpm bootstrap:admin --email you@example.com \
   --account-id <account-id> --database-id <database-id> --api-token <api-token>
 ```
 
+Sign in at `/platform/` and upload photos from the dashboard.
 See [Deployment](./docs/deployment.md) for binding setup, secrets, and backups.
 
 ## 📸 Live Galleries
@@ -69,28 +68,20 @@ See Afilmory in action:
 - 🧩 **Tiled Rendering** - Large photos are decoded off the main thread in a worker and streamed to the GPU as tiles
 - 📱 **Responsive Masonry Layout** - Powered by Masonic, adapts seamlessly to any screen size
 - 🎨 **Modern UI/UX** - Tailwind CSS 4 with the Apple UIKit color palette, glass materials, and spring motion
-- ⚡ **Incremental Sync** - Smart change detection processes only new or modified photos
 - 🌐 **Internationalization** - English, 简体中文, 繁體中文 (HK/TW), 日本語, and 한국어
-- 🔗 **Social Sharing** - Dynamic OpenGraph images and SEO metadata for rich previews
+- 🔗 **Social Sharing** - Dynamic OpenGraph images, per-photo metadata, sitemap, RSS feed, and embed script
 
-### Image Processing
+### Upload and Processing
 
-- 🔄 **Format Support** - Automatic conversion of HEIC/HEIF, TIFF, and BMP
-- 🖼️ **Smart Thumbnails** - Multi-size thumbnail generation for optimized loading
-- 📊 **Complete EXIF Display** - Camera, lens, focal length, aperture, ISO, GPS, and more (via ExifTool)
+- 🖼️ **Dashboard Uploads** - Drag and drop batches of photos; HEIC/HEIF files are converted in the browser for previews and thumbnails
+- 🧵 **Generated Thumbnails** - A 600px JPEG is rendered client-side and stored beside the original in R2
+- 📊 **Complete EXIF Display** - Camera, lens, focal length, aperture, ISO, GPS, timezone, white-balance shifts, and more (via `exifr` range reads)
 - 🌈 **ThumbHash Placeholders** - Compact placeholders for a smooth progressive loading experience
-- 📱 **Live Photos** - Detection and playback of iPhone Live Photos
+- 📱 **Live Photos** - Pair an iPhone `.MOV` companion with its image; the dashboard matches them by base name
+- 🎬 **Motion Photos** - Android motion photos are detected from EXIF and extracted with R2 range requests
 - ☀️ **HDR Gain Maps** - Renders JPEG gain-map HDR (including Apple HDR photos) on HDR-capable displays
-- 🎛️ **Fujifilm Recipes** - Display Fujifilm film simulation settings
-
-### Advanced Features
-
-- 🗂️ **Multi-Storage Support** - S3-compatible storage, Backblaze B2, GitHub, Eagle, and local file system
-- 🏷️ **File System Tags** - Auto-generated tags based on directory structure
-- ⚡ **Concurrent Processing** - Worker-thread and cluster modes for fast builds
-- 🔌 **Builder Plugins** - Lifecycle hooks for thumbnail storage, reverse geocoding, repo sync, and custom logic
 - 🗺️ **Interactive Map** - Geographic visualization with GPS coordinates using MapLibre
-- 💬 **Comments & Reactions** - Visitor engagement in backend-powered galleries
+- 💬 **Comments & Reactions** - Visitor engagement backed by D1
 - 📷 **Share & Embed** - Share images to social media or embed them via the SDK
 
 ## 🏗️ Architecture
@@ -114,11 +105,10 @@ afilmory/
 │       ├── env/          # Worker binding access
 │       └── utils/        # Shared backend utilities
 ├── packages/
-│   ├── builder/          # Photo processing pipeline CLI
+│   ├── data/             # PhotoLoader over the injected manifest
 │   ├── webgl-viewer/     # GPU image viewer (WebGPU + WebGL fallback)
 │   ├── viewer-motion/    # Framework-agnostic viewer motion primitives
 │   ├── renderer/         # OG image renderer (Satori + resvg)
-│   ├── data/             # PhotoLoader + bundled manifest
 │   ├── typing/           # Shared photo/manifest types
 │   ├── sdk/              # Public SDK + share embed script
 │   ├── ui/               # Shared UI components
@@ -164,24 +154,12 @@ afilmory/
 - **In-process events** - SSE progress for sync/upload jobs
 - **workers-og** - Dynamic OG image rendering
 
-### Build Pipeline
+### Upload Pipeline
 
-- **Node.js** - Server-side runtime
-- **Sharp** - High-performance image processing
-- **ExifTool** - Metadata extraction (via `exiftool-vendored`)
-- **ThumbHash** - Placeholder generation
-- **AWS SDK** - S3 storage operations
-- **Worker Threads / Cluster** - Parallel processing
-
-### Storage Adapters
-
-Designed with adapter pattern for flexibility:
-
-- **S3-Compatible** - AWS S3, MinIO, RustFS, Alibaba Cloud OSS, and more
-- **Backblaze B2** - Native B2 API provider
-- **GitHub** - Use GitHub repository as storage
-- **Eagle** - Import from Eagle app library
-- **Local File System** - For development and testing
+- **Dashboard** - Batches up to 128 files, renders thumbnails and ThumbHash placeholders in the browser
+- **R2** - Presigned uploads when S3 credentials are configured, otherwise a Worker proxy
+- **exifr** - Metadata extraction through bounded R2 range reads
+- **heic-to** - Browser-side HEIC/HEIF decoding for previews and thumbnails
 
 ## 🛠️ Development
 
@@ -189,28 +167,21 @@ Designed with adapter pattern for flexibility:
 
 - Node.js (current LTS)
 - pnpm 12+
+- The `cf` CLI
 
 ### Project Setup
 
 ```bash
-# Install dependencies
 pnpm install
-
-# Copy configuration files
 cp config.example.json config.json
-cp builder.config.default.ts builder.config.ts
-
-# Set up environment variables
-cp .env.template .env
-# Edit .env with your credentials
+cp apps/edge/.dev.vars.example apps/edge/.dev.vars
 ```
 
 ### Common Commands
 
 ```bash
 # Development
-pnpm dev                    # Start the Cloudflare Worker + web app
-pnpm --filter web dev       # Web app only
+pnpm dev                    # Cloudflare Worker + web app (cf dev)
 pnpm dev:edge               # Cloudflare Worker only
 pnpm --filter @afilmory/dashboard dev  # Admin dashboard
 
@@ -221,10 +192,6 @@ pnpm deploy:edge            # Deploy the Worker
 
 # Build
 pnpm build                  # Build web + dashboard + Cloudflare Worker
-pnpm build:manifest         # Generate photo manifest (incremental)
-pnpm build:manifest -- --force  # Full rebuild
-pnpm build:manifest -- --force-manifest    # Regenerate manifest only
-pnpm build:manifest -- --force-thumbnails  # Regenerate thumbnails only
 
 # Documentation
 pnpm docs:dev               # Start docs dev server
@@ -238,7 +205,8 @@ pnpm type-check             # Type checking
 
 ### Configuration Files
 
-**`config.json`** - Site presentation config:
+**`config.json`** - Build-time presentation defaults:
+
 ```json
 {
   "name": "My Gallery",
@@ -261,87 +229,22 @@ pnpm type-check             # Type checking
 }
 ```
 
-**`builder.config.ts`** - Photo processing config:
-```typescript
-import { defineBuilderConfig } from '@afilmory/builder'
+Site settings stored in D1 are authoritative at runtime: the Worker injects them into every page shell, and the owner edits them from the dashboard. `config.json` only supplies the defaults used when a setting has not been saved yet.
 
-export default defineBuilderConfig(() => ({
-  storage: {
-    provider: 's3',
-    bucket: 'my-photos',
-    region: 'us-east-1',
-    // ... other S3 settings
-  },
-  system: {
-    processing: {
-      defaultConcurrency: 10,
-      enableLivePhotoDetection: true,
-    },
-    observability: {
-      showProgress: true,
-      showDetailedStats: true,
-    },
-  },
-}))
-```
-
-## 🔌 Extending Afilmory
-
-### Custom Storage Provider
-
-Implement the `StorageProvider` interface:
-
-```typescript
-import type { StorageProvider, StorageObject } from '@afilmory/builder'
-
-class MyStorageProvider implements StorageProvider {
-  async getFile(key: string): Promise<Buffer | null> {
-    // Your implementation
-  }
-
-  async listImages(): Promise<StorageObject[]> {
-    // Your implementation
-  }
-
-  // ... other required methods
-}
-```
-
-### Custom Builder Plugin
-
-Create a plugin that hooks into the build lifecycle:
-
-```typescript
-import type { BuilderPlugin } from '@afilmory/builder'
-
-export default function myPlugin(): BuilderPlugin {
-  return {
-    name: 'my-plugin',
-    hooks: {
-      beforeBuild: async ({ logger }) => {
-        logger.main.info('Starting build')
-      },
-      afterSaveManifest: async ({ payload }) => {
-        // payload.manifest, payload.cameras, payload.lenses
-      },
-    },
-  }
-}
-```
-
-Register it in `builder.config.ts` under `plugins`.
+**`apps/edge/.dev.vars`** - Local Worker secrets (see `.dev.vars.example`).
+Production values are set with `cf secret put`.
 
 ## 📚 Documentation
 
 - **[Architecture](./docs/architecture.md)** - Worker, D1, R2, and KV design
 - **[Deployment](./docs/deployment.md)** - Provision Cloudflare resources and deploy
 - **[Configuration](./docs/configuration.md)** - Worker secrets and runtime settings
-- **[Builder](./docs/builder.md)** - Photo pipeline, storage providers, and plugins
 - **[Backend](./be/README.md)** - API graph, database access, and testing
 
 ## 🤝 Contributing
 
-We welcome contributions! See [AGENTS.md](./AGENTS.md) for architecture notes and [DESIGN.md](./DESIGN.md) for the web design system.
+We welcome contributions!
+See [AGENTS.md](./AGENTS.md) for architecture notes and [DESIGN.md](./DESIGN.md) for the web design system.
 
 ### Development Workflow
 
@@ -367,7 +270,8 @@ See [LICENSE](./LICENSE) for more details.
 
 ## 🙏 Acknowledgments
 
-Built with love by the Afilmory team and contributors. Special thanks to all photographers using Afilmory to share their work with the world.
+Built with love by the Afilmory team and contributors.
+Special thanks to all photographers using Afilmory to share their work with the world.
 
 ---
 

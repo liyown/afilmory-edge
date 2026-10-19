@@ -1,4 +1,4 @@
-import type { FujiRecipe, PickedExif } from '@afilmory/builder'
+import type { FujiRecipe, PickedExif } from '@afilmory/typing'
 import { EllipsisHorizontalTextWithTooltip } from '@afilmory/ui'
 import type { FC } from 'react'
 
@@ -7,7 +7,9 @@ import { jotaiStore } from '~/lib/jotai'
 
 // Helper function to clean up EXIF values by removing unnecessary characters
 const cleanExifValue = (value: string | null | undefined): string | null => {
-  if (!value) return null
+  if (!value) {
+    return null
+  }
 
   // Remove parenthetical descriptions like "(medium soft)" from "-1 (medium soft)"
   const cleaned = value.toString().replace(/\s*\([^)]*\)$/, '')
@@ -17,7 +19,9 @@ const cleanExifValue = (value: string | null | undefined): string | null => {
 
 // Helper function to get translation key for EXIF values
 const getTranslationKey = (category: string, value: string | number | null): string | null => {
-  if (value === null || value === undefined) return null
+  if (value === null || value === undefined) {
+    return null
+  }
 
   const normalizedValue = String(value)
     .toLowerCase()
@@ -35,12 +39,16 @@ const translateExifValue = (
   value: string | number | null,
   props?: Record<string, string | number>,
 ): string | null => {
-  if (!value) return null
+  if (!value) {
+    return null
+  }
 
   const i18n = jotaiStore.get(i18nAtom)
   const translationKey = getTranslationKey(category, value)
 
-  if (!translationKey) return cleanExifValue(String(value))
+  if (!translationKey) {
+    return cleanExifValue(String(value))
+  }
 
   // Try to get translation, fallback to cleaned original value
   const cleanedValue = cleanExifValue(String(value))
@@ -52,12 +60,14 @@ const translateExifValue = (
   return translated || cleanedValue
 }
 
-const createTranslator =
-  (category: string) =>
-  (value: string | number | null, props?: Record<string, string | number>): string | null => {
-    if (value === null || value === undefined) return null
-    return translateExifValue(category, value, props)
-  }
+const createTranslator
+  = (category: string) =>
+    (value: string | number | null, props?: Record<string, string | number>): string | null => {
+      if (value === null || value === undefined) {
+        return null
+      }
+      return translateExifValue(category, value, props)
+    }
 
 // Specific translation functions for different EXIF fields
 const translateExposureMode = createTranslator('exposure.mode')
@@ -82,7 +92,9 @@ const translateSceneCaptureType = createTranslator('scene.capture.type')
 
 // 翻译白平衡偏移字段中的 Red 和 Blue
 const translateWhiteBalanceFineTune = (value: string | null): string | null => {
-  if (!value) return null
+  if (!value) {
+    return null
+  }
 
   const i18n = jotaiStore.get(i18nAtom)
   const redTranslation = i18n.t('exif.white.balance.red')
@@ -99,7 +111,9 @@ const processFujiRecipeValue = (value: string | null | undefined): string | null
 
 // Process entire Fuji Recipe object
 const processFujiRecipe = (recipe: FujiRecipe): any => {
-  if (!recipe) return null
+  if (!recipe) {
+    return null
+  }
 
   const processed = { ...recipe } as any
 
@@ -139,7 +153,8 @@ const processFujiRecipe = (recipe: FujiRecipe): any => {
   if (recipe.DynamicRangeSetting) {
     if (recipe.DynamicRangeSetting === 'Manual') {
       processed.DynamicRange = `DR${recipe.DevelopmentDynamicRange}`
-    } else {
+    }
+    else {
       processed.DynamicRange = 'Auto'
     }
   }
@@ -152,7 +167,8 @@ const processFujiRecipe = (recipe: FujiRecipe): any => {
       processed.WhiteBalance = translateFujiWhiteBalance('Kelvin', {
         kelvin: recipe.ColorTemperature,
       })
-    } else {
+    }
+    else {
       processed.WhiteBalance = translateFujiWhiteBalance('Auto')
     }
   }
@@ -163,8 +179,11 @@ const processFujiRecipe = (recipe: FujiRecipe): any => {
   return processed
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const formatExifData = (exif: PickedExif | null) => {
-  if (!exif) return null
+  if (!exif) {
+    return null
+  }
 
   // 时区和时间相关
   const zone = exif.zone || exif.tz || null
@@ -193,8 +212,8 @@ export const formatExifData = (exif: PickedExif | null) => {
       return `${exposureTime}s`
     }
     if (exif.ShutterSpeedValue) {
-      const speed =
-        typeof exif.ShutterSpeedValue === 'number'
+      const speed
+        = typeof exif.ShutterSpeedValue === 'number'
           ? exif.ShutterSpeedValue
           : Number.parseFloat(String(exif.ShutterSpeedValue))
       if (speed >= 1) {
@@ -244,7 +263,9 @@ export const formatExifData = (exif: PickedExif | null) => {
 
   // 数字化时间
   const dateTimeDigitized: string | null = (() => {
-    if (!exif.DateTimeDigitized) return null
+    if (!exif.DateTimeDigitized) {
+      return null
+    }
     return formatDateTime(new Date(exif.DateTimeDigitized))
   })()
 
@@ -398,7 +419,9 @@ export const Row: FC<{
 }
 
 const formatDateTime = (date: Date | null | undefined) => {
-  if (!date || Number.isNaN(date.getTime())) return ''
+  if (!date || Number.isNaN(date.getTime())) {
+    return ''
+  }
   const i18n = jotaiStore.get(i18nAtom)
   const datetimeFormatter = new Intl.DateTimeFormat(i18n.language, {
     dateStyle: 'short',

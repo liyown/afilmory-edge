@@ -38,7 +38,6 @@ jobs:
         uses: pnpm/action-setup@v6
         with:
           run_install: true
-      - run: echo '{"version":"v2","data":[]}' > apps/web/src/data/photos-manifest.json
       - name: Build web (generates routes)
         run: pnpm exec vite build
         working-directory: ./apps/web

@@ -1,4 +1,4 @@
-import type { PickedExif } from '@afilmory/builder'
+import type { PickedExif } from '@afilmory/typing'
 import type { FC } from 'react'
 
 import { injectConfig } from '~/config'

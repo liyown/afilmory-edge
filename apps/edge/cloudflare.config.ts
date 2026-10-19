@@ -30,23 +30,13 @@ export default defineConfig({
     },
     assets: {
       htmlHandling: 'auto-trailing-slash',
-      notFoundHandling: 'single-page-application',
-      runWorkerFirst: [
-        '/',
-        '/health',
-        '/dashboard',
-        '/dashboard/*',
-        '/feed.xml',
-        '/sitemap.xml',
-        '/media/*',
-        '/api/*',
-        '/og',
-        '/og/*',
-        '/photos/*',
-        '/platform',
-        '/platform/*',
-        '/share/*',
-      ],
+      // SPA fallbacks are rendered by the Worker so every route receives the
+      // injected manifest/config; missing files should surface as real 404s.
+      notFoundHandling: 'none',
+      // The Worker renders the injected gallery shell for every extensionless
+      // route, so it must see all requests; static files are forwarded to the
+      // ASSETS binding in `src/index.ts`.
+      runWorkerFirst: true,
     },
     triggers: [triggers.scheduled({ schedule: HOURLY_CRON }), triggers.scheduled({ schedule: DAILY_BACKUP_CRON })],
     observability: {

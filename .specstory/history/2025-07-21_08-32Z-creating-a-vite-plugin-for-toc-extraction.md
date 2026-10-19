@@ -2,17 +2,20 @@
 
 # Creating a Vite plugin for TOC extraction (2025-07-21 08:32Z)
 
-_**User**_
+**_User_**
 
 写一个vite插件，通过正则的方式读取md和mdx文件并提取出toc，保存在一个ts文件中
 
 ---
 
-_**Assistant**_
+**_Assistant_**
 
-I'll help you create a Vite plugin that extracts table of contents (TOC) from MD and MDX files using regex and saves them to a TypeScript file. Let me first examine the current structure and then implement the plugin. Now let me examine the existing route generator plugin to understand the pattern and structure: Let me look at the full structure of the route generator plugin to understand the pattern: Now let me examine the TOC extractor mentioned in the vite config to understand the current structure: Now I have a good understanding of the project structure and requirements. Let me create a TOC extractor plugin for extracting table of contents from MD and MDX files using regex and saving them to a TypeScript file.
+I'll help you create a Vite plugin that extracts table of contents (TOC) from MD and MDX files using regex and saves them to a TypeScript file.
+Let me first examine the current structure and then implement the plugin.
+Now let me examine the existing route generator plugin to understand the pattern and structure: Let me look at the full structure of the route generator plugin to understand the pattern: Now let me examine the TOC extractor mentioned in the vite config to understand the current structure: Now I have a good understanding of the project structure and requirements.
+Let me create a TOC extractor plugin for extracting table of contents from MD and MDX files using regex and saving them to a TypeScript file.
 
-````typescript
+```typescript
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
@@ -79,7 +82,8 @@ export function tocExtractor(options: TocExtractorOptions = {}): Plugin {
         try {
           await generateTocData(opts)
           res.end('TOC data generated successfully')
-        } catch (error) {
+        }
+        catch (error) {
           res.statusCode = 500
           res.end(`Error generating TOC data: ${error}`)
         }
@@ -124,7 +128,8 @@ async function generateTocData(options: Required<TocExtractorOptions>) {
     console.info(
       `✓ Generated TOC data for ${allTocData.length} files to ${outputPath}`,
     )
-  } catch (error) {
+  }
+  catch (error) {
     console.error('Error generating TOC data:', error)
     throw error
   }
@@ -159,7 +164,8 @@ async function extractTocFromFile(
       title: frontmatterTitle || headings[0]?.text || path.basename(file, path.extname(file)),
       toc,
     }
-  } catch (error) {
+  }
+  catch (error) {
     console.warn(`Failed to process file ${file}:`, error)
     return null
   }
@@ -168,11 +174,11 @@ async function extractTocFromFile(
 function extractFrontmatterTitle(content: string): string | null {
   // 匹配 frontmatter 中的 title 字段
   const frontmatterMatch = content.match(/^---\n(.*?)\n---/s)
-  if (!frontmatterMatch) return null
+  if (!frontmatterMatch) { return null }
 
   const frontmatterContent = frontmatterMatch[1]
   const titleMatch = frontmatterContent.match(/^title:\s*(.+)$/m)
-  if (!titleMatch) return null
+  if (!titleMatch) { return null }
 
   // 移除引号
   return titleMatch[1].replace(/^['"]|['"]$/g, '').trim()
@@ -180,28 +186,28 @@ function extractFrontmatterTitle(content: string): string | null {
 
 function extractHeadings(content: string, maxDepth: number): TocItem[] {
   const headings: TocItem[] = []
-  
+
   // 正则表达式匹配 Markdown 标题 (## Title 格式)
   const headingRegex = /^(#{1,6})\s+(.+)$/gm
-  
+
   let match
   while ((match = headingRegex.exec(content)) !== null) {
     const level = match[1].length
-    
-    if (level > maxDepth) continue
-    
+
+    if (level > maxDepth) { continue }
+
     const text = match[2].trim()
-    
+
     // 生成 ID（转换为小写，替换空格和特殊字符）
     const id = generateHeadingId(text)
-    
+
     headings.push({
       id,
       level,
       text,
     })
   }
-  
+
   return headings
 }
 
@@ -223,16 +229,17 @@ function buildTocTree(headings: TocItem[]): TocItem[] {
     heading.children = []
 
     // 找到合适的父级
-    while (stack.length > 0 && stack[stack.length - 1].level >= heading.level) {
+    while (stack.length > 0 && stack.at(-1).level >= heading.level) {
       stack.pop()
     }
 
     if (stack.length === 0) {
       // 顶级标题
       result.push(heading)
-    } else {
+    }
+    else {
       // 作为子标题
-      const parent = stack[stack.length - 1]
+      const parent = stack.at(-1)
       if (!parent.children) {
         parent.children = []
       }
@@ -272,7 +279,7 @@ export function getTocByFile(filePath: string): FileToc | undefined {
 // Helper function to flatten TOC tree into a simple array
 export function flattenToc(toc: TocItem[]): TocItem[] {
   const result: TocItem[] = []
-  
+
   function traverse(items: TocItem[]) {
     for (const item of items) {
       result.push({
@@ -285,7 +292,7 @@ export function flattenToc(toc: TocItem[]): TocItem[] {
       }
     }
   }
-  
+
   traverse(toc)
   return result
 }
@@ -293,7 +300,7 @@ export function flattenToc(toc: TocItem[]): TocItem[] {
 // Helper function to get all headings at a specific level
 export function getHeadingsByLevel(toc: TocItem[], level: number): TocItem[] {
   const result: TocItem[] = []
-  
+
   function traverse(items: TocItem[]) {
     for (const item of items) {
       if (item.level === level) {
@@ -304,7 +311,7 @@ export function getHeadingsByLevel(toc: TocItem[], level: number): TocItem[] {
       }
     }
   }
-  
+
   traverse(toc)
   return result
 }
@@ -312,28 +319,32 @@ export function getHeadingsByLevel(toc: TocItem[], level: number): TocItem[] {
 }
 
 export default tocExtractor
-````
+```
 
 这个 TOC 提取器插件具有以下功能：
 
 ## 🌟 核心特性
 
 ### 1. **正则表达式解析**
+
 - 使用正则表达式 `/^(#{1,6})\s+(.+)$/gm` 匹配 Markdown 标题
 - 支持 1-6 级标题（# 到 ######）
 - 自动生成唯一的标题 ID
 
 ### 2. **文件类型支持**
+
 - 支持 `.md` 和 `.mdx` 文件
 - 自动提取 frontmatter 中的 `title` 字段
 - 递归扫描 `contents` 目录
 
 ### 3. **嵌套结构构建**
+
 - 根据标题级别构建嵌套的 TOC 树结构
 - 支持多级嵌套（子标题关系）
 - 保持标题的层级关系
 
 ### 4. **TypeScript 输出**
+
 - 生成完整的 TypeScript 类型定义
 - 导出所有 TOC 数据和辅助函数
 - 自动生成注释说明
@@ -342,10 +353,10 @@ export default tocExtractor
 
 ```typescript
 interface TocExtractorOptions {
-  contentsDir?: string    // 内容目录，默认 'contents'
-  outputDir?: string      // 输出目录，默认 'src'
-  outputFile?: string     // 输出文件名，默认 'toc-data.ts'
-  maxDepth?: number       // 最大标题深度，默认 6
+  contentsDir?: string // 内容目录，默认 'contents'
+  outputDir?: string // 输出目录，默认 'src'
+  outputFile?: string // 输出文件名，默认 'toc-data.ts'
+  maxDepth?: number // 最大标题深度，默认 6
 }
 ```
 
@@ -370,41 +381,44 @@ interface TocExtractorOptions {
 
 ---
 
-_**User**_
+**_User_**
 
 根据新的toc结构重新编写这里
 
 ---
 
-_**Assistant**_
+**_Assistant_**
 
-我看到当前的 `TableOfContents` 组件有一些问题需要修复，以适应新的 TOC 结构。让我分析一下问题并重新编写这个组件。 
+我看到当前的 `TableOfContents` 组件有一些问题需要修复，以适应新的 TOC 结构。
+让我分析一下问题并重新编写这个组件。
 
 ---
 
-_**User**_
+**_User_**
 
 @GitHubCopilot Try Again
 
 ---
 
-_**Assistant**_
-
-
+**_Assistant_**
 
 ---
 
-_**User**_
+**_User_**
 
 @GitHubCopilot Try Again
 
 ---
 
-_**Assistant**_
+**_Assistant_**
 
-我看到当前的 `TableOfContents` 组件需要根据新的 TOC 结构进行重新编写。让我分析问题并提供完整的解决方案。 现在让我检查当前生成的 TOC 数据结构： 现在让我检查当前路由系统来获取当前页面信息： 好，我找到了路由系统的结构。这个文档站点使用的是自定义的路由系统，当前路径通过 `currentPath` prop 传递到 `TableOfContents` 组件中。现在让我重新编写 `TableOfContents.tsx` 组件： 现在我来重新编写 `TableOfContents.tsx` 组件，使其支持新的嵌套 TOC 结构：
+我看到当前的 `TableOfContents` 组件需要根据新的 TOC 结构进行重新编写。
+让我分析问题并提供完整的解决方案。
+现在让我检查当前生成的 TOC 数据结构： 现在让我检查当前路由系统来获取当前页面信息： 好，我找到了路由系统的结构。
+这个文档站点使用的是自定义的路由系统，当前路径通过 `currentPath` prop 传递到 `TableOfContents` 组件中。
+现在让我重新编写 `TableOfContents.tsx` 组件： 现在我来重新编写 `TableOfContents.tsx` 组件，使其支持新的嵌套 TOC 结构：
 
-````typescript
+```typescript
 import { useEffect, useState } from 'react'
 import { tocData, getTocByFile, type TocItem } from '../toc-data'
 
@@ -421,15 +435,15 @@ interface TocItemProps {
 function TocItemComponent({ item, activeId, level }: TocItemProps) {
   const isActive = activeId === item.id
   const hasChildren = item.children && item.children.length > 0
-  
+
   return (
     <li className="relative">
       <a
         href={`#${item.id}`}
         className={`
           block py-1 text-sm transition-colors duration-200
-          ${isActive 
-            ? 'text-blue-600 font-medium border-l-2 border-blue-600 pl-3' 
+          ${isActive
+            ? 'text-blue-600 font-medium border-l-2 border-blue-600 pl-3'
             : 'text-gray-600 hover:text-gray-900 pl-3'
           }
           ${level > 1 ? `ml-${(level - 1) * 4}` : ''}
@@ -444,7 +458,7 @@ function TocItemComponent({ item, activeId, level }: TocItemProps) {
       >
         {item.text}
       </a>
-      
+
       {hasChildren && (
         <ul className="mt-1 space-y-1">
           {item.children!.map((child) => (
@@ -465,14 +479,14 @@ export function TableOfContents({
   currentPath,
 }: TableOfContentsProps) {
   const [activeId, setActiveId] = useState<string | null>(null)
-  
+
   // 获取当前页面的 TOC 数据
   const currentToc = getTocByFile(currentPath)
-  
+
   // 监听滚动，高亮当前标题
   useEffect(() => {
     if (!currentToc || currentToc.length === 0) return
-    
+
     const observer = new IntersectionObserver(
       (entries) => {
         // 找到可见的标题中最上面的一个
@@ -492,7 +506,7 @@ export function TableOfContents({
         threshold: 0.1,
       }
     )
-    
+
     // 获取所有标题ID（包括嵌套的）
     const getAllIds = (items: TocItem[]): string[] => {
       const ids: string[] = []
@@ -504,9 +518,9 @@ export function TableOfContents({
       }
       return ids
     }
-    
+
     const allIds = getAllIds(currentToc)
-    
+
     // 观察所有标题元素
     allIds.forEach((id) => {
       const element = document.getElementById(id)
@@ -514,24 +528,24 @@ export function TableOfContents({
         observer.observe(element)
       }
     })
-    
+
     return () => {
       observer.disconnect()
     }
   }, [currentToc])
-  
+
   // 如果当前页面没有TOC数据，不显示
   if (!currentToc || currentToc.length === 0) {
     return null
   }
-  
+
   return (
     <div className="sticky top-8 max-h-[calc(100vh-4rem)] overflow-auto">
       <div className="mb-4">
         <h4 className="text-sm font-semibold text-gray-900 mb-3">
           Table of Contents
         </h4>
-        
+
         <nav>
           <ul className="space-y-1">
             {currentToc.map((item) => (
@@ -548,7 +562,7 @@ export function TableOfContents({
     </div>
   )
 }
-````
+```
 
 这个重新编写的组件具有以下特性：
 
@@ -570,17 +584,20 @@ export function TableOfContents({
 
 ---
 
-_**User**_
+**_User_**
 
 参考path的生成 #file:route-generater.ts ，添加一个path参数以便对应上
 
 ---
 
-_**Assistant**_
+**_Assistant_**
 
-我看到你希望在 TOC 提取器中添加一个 `path` 参数，以便与路由生成器的路径生成逻辑保持一致。让我分析路由生成器的路径生成逻辑，然后在 TOC 提取器中添加相应的功能。 现在我理解了路由生成器的路径生成逻辑。让我修改 TOC 提取器，添加一个 `path` 参数，并使用与路由生成器相同的路径生成逻辑：
+我看到你希望在 TOC 提取器中添加一个 `path` 参数，以便与路由生成器的路径生成逻辑保持一致。
+让我分析路由生成器的路径生成逻辑，然后在 TOC 提取器中添加相应的功能。
+现在我理解了路由生成器的路径生成逻辑。
+让我修改 TOC 提取器，添加一个 `path` 参数，并使用与路由生成器相同的路径生成逻辑：
 
-````typescript
+```typescript
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
@@ -650,7 +667,8 @@ export function tocExtractor(options: TocExtractorOptions = {}): Plugin {
         try {
           await generateTocData(opts)
           res.end('TOC data generated successfully')
-        } catch (error) {
+        }
+        catch (error) {
           res.statusCode = 500
           res.end(`Error generating TOC data: ${error}`)
         }
@@ -695,7 +713,8 @@ async function generateTocData(options: Required<TocExtractorOptions>) {
     console.info(
       `✓ Generated TOC data for ${allTocData.length} files to ${outputPath}`,
     )
-  } catch (error) {
+  }
+  catch (error) {
     console.error('Error generating TOC data:', error)
     throw error
   }
@@ -733,12 +752,13 @@ async function extractTocFromFile(
       file: relativePath,
       path: routePath,
       title:
-        frontmatterTitle ||
-        headings[0]?.text ||
-        path.basename(file, path.extname(file)),
+        frontmatterTitle
+        || headings[0]?.text
+        || path.basename(file, path.extname(file)),
       toc,
     }
-  } catch (error) {
+  }
+  catch (error) {
     console.warn(`Failed to process file ${file}:`, error)
     return null
   }
@@ -753,10 +773,12 @@ function generateRoutePath(file: string, contentsDir: string, indexFile: string)
   // 处理 index 文件（与 route-generator 保持一致）
   if (routePath === indexFile) {
     routePath = '/'
-  } else if (routePath.endsWith(`/${indexFile}`)) {
+  }
+  else if (routePath.endsWith(`/${indexFile}`)) {
     const basePath = routePath.replace(`/${indexFile}`, '')
     routePath = basePath ? `/${basePath}` : '/'
-  } else {
+  }
+  else {
     routePath = `/${routePath}`
   }
 
@@ -766,11 +788,11 @@ function generateRoutePath(file: string, contentsDir: string, indexFile: string)
 function extractFrontmatterTitle(content: string): string | null {
   // 匹配 frontmatter 中的 title 字段
   const frontmatterMatch = content.match(/^---\n(.*?)\n---/s)
-  if (!frontmatterMatch) return null
+  if (!frontmatterMatch) { return null }
 
   const frontmatterContent = frontmatterMatch[1]
   const titleMatch = frontmatterContent.match(/^title:\s*(.+)$/m)
-  if (!titleMatch) return null
+  if (!titleMatch) { return null }
 
   // 移除引号
   return titleMatch[1].replace(/^['"]|['"]$/g, '').trim()
@@ -786,7 +808,7 @@ function extractHeadings(content: string, maxDepth: number): TocItem[] {
   while ((match = headingRegex.exec(content)) !== null) {
     const level = match[1].length
 
-    if (level > maxDepth) continue
+    if (level > maxDepth) { continue }
 
     const text = match[2].trim()
 
@@ -821,16 +843,17 @@ function buildTocTree(headings: TocItem[]): TocItem[] {
     heading.children = []
 
     // 找到合适的父级
-    while (stack.length > 0 && stack[stack.length - 1].level >= heading.level) {
+    while (stack.length > 0 && stack.at(-1).level >= heading.level) {
       stack.pop()
     }
 
     if (stack.length === 0) {
       // 顶级标题
       result.push(heading)
-    } else {
+    }
+    else {
       // 作为子标题
-      const parent = stack[stack.length - 1]
+      const parent = stack.at(-1)
       if (!parent.children) {
         parent.children = []
       }
@@ -878,7 +901,7 @@ export function getTocByPath(routePath: string): TocItem[] | undefined {
 // Helper function to flatten TOC tree into a simple array
 export function flattenToc(toc: TocItem[]): TocItem[] {
   const result: TocItem[] = []
-  
+
   function traverse(items: TocItem[]) {
     for (const item of items) {
       result.push({
@@ -891,7 +914,7 @@ export function flattenToc(toc: TocItem[]): TocItem[] {
       }
     }
   }
-  
+
   traverse(toc)
   return result
 }
@@ -899,7 +922,7 @@ export function flattenToc(toc: TocItem[]): TocItem[] {
 // Helper function to get all headings at a specific level
 export function getHeadingsByLevel(toc: TocItem[], level: number): TocItem[] {
   const result: TocItem[] = []
-  
+
   function traverse(items: TocItem[]) {
     for (const item of items) {
       if (item.level === level) {
@@ -910,7 +933,7 @@ export function getHeadingsByLevel(toc: TocItem[], level: number): TocItem[] {
       }
     }
   }
-  
+
   traverse(toc)
   return result
 }
@@ -918,7 +941,7 @@ export function getHeadingsByLevel(toc: TocItem[], level: number): TocItem[] {
 }
 
 export default tocExtractor
-````
+```
 
 主要修改内容：
 
@@ -938,31 +961,36 @@ export default tocExtractor
 
 5. **排序调整**：将排序改为按 `path` 而不是 `file`，与路由生成器保持一致
 
-现在 TOC 数据结构将包含 `path` 字段，可以与路由系统完美对应。在 `TableOfContents.tsx` 组件中，你可以使用 `getTocByPath(currentPath)` 来获取当前页面的 TOC 数据。
+现在 TOC 数据结构将包含 `path` 字段，可以与路由系统完美对应。
+在 `TableOfContents.tsx` 组件中，你可以使用 `getTocByPath(currentPath)` 来获取当前页面的 TOC 数据。
 
 ---
 
-_**User**_
+**_User_**
 
-根据新的toc组件，修改其手机版 #file:TableOfContents.tsx 
+根据新的toc组件，修改其手机版 #file:TableOfContents.tsx
 
 ---
 
-_**Assistant**_
+**_Assistant_**
 
-我看到 `MobileTableOfContents.tsx` 需要根据新的 `TableOfContents.tsx` 组件进行修改。主要问题是：
+我看到 `MobileTableOfContents.tsx` 需要根据新的 `TableOfContents.tsx` 组件进行修改。
+主要问题是：
 
 1. `TableOfContents` 组件现在需要 `currentPath` 参数
 2. `MobileTableOfContents` 传递了 `onItemClick` 回调，但新的 `TableOfContents` 组件不接受这个参数
 3. 需要获取当前路径并传递给 `TableOfContents`
 
-让我检查如何获取当前路径： 让我检查 `MobileTableOfContents` 是如何在父组件中使用的： 让我查看 `App.tsx` 来了解如何获取当前路径： 现在我了解了结构。`MobileTableOfContents` 需要接收 `currentPath` 参数并传递给 `TableOfContents` 组件。另外，我还需要修改 `TableOfContents` 组件以支持 `onItemClick` 回调。
+让我检查如何获取当前路径： 让我检查 `MobileTableOfContents` 是如何在父组件中使用的： 让我查看 `App.tsx` 来了解如何获取当前路径： 现在我了解了结构。`MobileTableOfContents` 需要接收 `currentPath` 参数并传递给 `TableOfContents` 组件。
+另外，我还需要修改 `TableOfContents` 组件以支持 `onItemClick` 回调。
 
 首先，让我修改 `TableOfContents.tsx` 以支持 `onItemClick` 回调：
 
-````tsx
+```tsx
 import { useEffect, useState } from 'react'
-import { getTocByPath, type TocItem } from '../toc-data'
+
+import type { TocItem } from '../toc-data'
+import { getTocByPath } from '../toc-data'
 
 interface TableOfContentsProps {
   currentPath: string
@@ -987,10 +1015,10 @@ function TocItemComponent({ item, activeId, level, onItemClick }: TocItemProps) 
         className={`
           block py-1 text-sm transition-colors duration-200
           ${
-            isActive
-              ? 'text-blue-600 font-medium border-l-2 border-blue-600 pl-3'
-              : 'text-gray-600 hover:text-gray-900 pl-3'
-          }
+    isActive
+      ? 'text-blue-600 font-medium border-l-2 border-blue-600 pl-3'
+      : 'text-gray-600 hover:text-gray-900 pl-3'
+    }
           ${level > 1 ? `ml-${(level - 1) * 4}` : ''}
         `}
         onClick={(e) => {
@@ -1007,7 +1035,7 @@ function TocItemComponent({ item, activeId, level, onItemClick }: TocItemProps) 
 
       {hasChildren && (
         <ul className="mt-1 space-y-1">
-          {item.children!.map((child) => (
+          {item.children!.map(child => (
             <TocItemComponent
               key={child.id}
               item={child}
@@ -1030,12 +1058,12 @@ export function TableOfContents({ currentPath, onItemClick }: TableOfContentsPro
 
   // 监听滚动，高亮当前标题
   useEffect(() => {
-    if (!currentToc || currentToc.length === 0) return
+    if (!currentToc || currentToc.length === 0) { return }
 
     const observer = new IntersectionObserver(
       (entries) => {
         // 找到可见的标题中最上面的一个
-        const visibleEntries = entries.filter((entry) => entry.isIntersecting)
+        const visibleEntries = entries.filter(entry => entry.isIntersecting)
         if (visibleEntries.length > 0) {
           // 按照在页面中的位置排序，选择最上面的
           visibleEntries.sort((a, b) => {
@@ -1093,7 +1121,7 @@ export function TableOfContents({ currentPath, onItemClick }: TableOfContentsPro
 
         <nav>
           <ul className="space-y-1">
-            {currentToc.map((item) => (
+            {currentToc.map(item => (
               <TocItemComponent
                 key={item.id}
                 item={item}
@@ -1108,12 +1136,13 @@ export function TableOfContents({ currentPath, onItemClick }: TableOfContentsPro
     </div>
   )
 }
-````
+```
 
 现在修改 `MobileTableOfContents.tsx`：
 
-````tsx
+```tsx
 import { useState } from 'react'
+
 import { TableOfContents } from './TableOfContents'
 
 interface MobileTableOfContentsProps {
@@ -1191,9 +1220,9 @@ export function MobileTableOfContents({ currentPath }: MobileTableOfContentsProp
               </button>
             </div>
             <div className="max-h-80 overflow-y-auto p-4">
-              <TableOfContents 
-                currentPath={currentPath} 
-                onItemClick={() => setIsOpen(false)} 
+              <TableOfContents
+                currentPath={currentPath}
+                onItemClick={() => setIsOpen(false)}
               />
             </div>
           </div>
@@ -1202,18 +1231,18 @@ export function MobileTableOfContents({ currentPath }: MobileTableOfContentsProp
     </>
   )
 }
-````
+```
 
 最后，需要在 `App.tsx` 中传递 `currentPath` 给 `MobileTableOfContents`：
 
-````tsx
+```tsx
 // 需要在 App.tsx 中修改这些行：
 // 将：
 <MobileTableOfContents />
 
 // 改为：
 <MobileTableOfContents currentPath={currentPath} />
-````
+```
 
 主要修改内容：
 
@@ -1233,19 +1262,22 @@ export function MobileTableOfContents({ currentPath }: MobileTableOfContentsProp
 
 ---
 
-_**User**_
+**_User_**
 
 写一个remark heading插件，在处理md和mdx的时候给每个标题上id，以匹配toc的这个id
 
 ---
 
-_**Assistant**_
+**_Assistant_**
 
-我来创建一个 remark 插件，为 Markdown 和 MDX 文件中的标题自动添加 ID，以匹配 TOC 提取器生成的 ID。 让我查看 `generateHeadingId` 函数的完整实现： 现在让我检查项目中是否已经安装了相关的 remark 依赖： 太好了！项目已经安装了所需的依赖，包括 `unist-util-visit` 和相关的类型定义。现在我来创建 remark 插件：
+我来创建一个 remark 插件，为 Markdown 和 MDX 文件中的标题自动添加 ID，以匹配 TOC 提取器生成的 ID。
+让我查看 `generateHeadingId` 函数的完整实现： 现在让我检查项目中是否已经安装了相关的 remark 依赖： 太好了！
+项目已经安装了所需的依赖，包括 `unist-util-visit` 和相关的类型定义。
+现在我来创建 remark 插件：
 
-````typescript
+```typescript
+import type { Heading, Root } from 'mdast'
 import type { Plugin } from 'unified'
-import type { Root, Heading } from 'mdast'
 import { visit } from 'unist-util-visit'
 
 /**
@@ -1268,27 +1300,27 @@ function extractTextFromNode(node: any): string {
   if (typeof node === 'string') {
     return node
   }
-  
+
   if (node.type === 'text') {
     return node.value || ''
   }
-  
+
   if (node.type === 'inlineCode') {
     return node.value || ''
   }
-  
+
   if (node.type === 'strong' || node.type === 'emphasis') {
     return node.children?.map(extractTextFromNode).join('') || ''
   }
-  
+
   if (node.type === 'link') {
     return node.children?.map(extractTextFromNode).join('') || ''
   }
-  
+
   if (node.children && Array.isArray(node.children)) {
     return node.children.map(extractTextFromNode).join('')
   }
-  
+
   return ''
 }
 
@@ -1298,13 +1330,13 @@ interface RemarkHeadingOptions {
    * @default false
    */
   overrideExisting?: boolean
-  
+
   /**
    * ID 前缀
    * @default ''
    */
   prefix?: string
-  
+
   /**
    * 自定义 ID 生成函数
    * @default generateHeadingId
@@ -1314,10 +1346,10 @@ interface RemarkHeadingOptions {
 
 /**
  * Remark 插件：为标题自动添加 ID
- * 
+ *
  * 此插件会遍历 Markdown/MDX 文档中的所有标题节点，
  * 为没有 ID 的标题自动生成 ID，确保与 TOC 提取器生成的 ID 一致
- * 
+ *
  * @param options 配置选项
  */
 const remarkHeading: Plugin<[RemarkHeadingOptions?], Root> = (options = {}) => {
@@ -1334,7 +1366,7 @@ const remarkHeading: Plugin<[RemarkHeadingOptions?], Root> = (options = {}) => {
     visit(tree, 'heading', (node: Heading) => {
       // 检查是否已经有 ID
       const existingId = node.data?.hProperties?.id as string | undefined
-      
+
       if (existingId && !overrideExisting) {
         usedIds.add(existingId)
         return
@@ -1342,22 +1374,22 @@ const remarkHeading: Plugin<[RemarkHeadingOptions?], Root> = (options = {}) => {
 
       // 提取标题文本
       const text = node.children.map(extractTextFromNode).join('')
-      
+
       if (!text.trim()) {
         return // 跳过空标题
       }
 
       // 生成基础 ID
-      let baseId = prefix + generateId(text.trim())
+      const baseId = prefix + generateId(text.trim())
       let finalId = baseId
-      
+
       // 处理 ID 冲突，添加数字后缀
       let counter = 1
       while (usedIds.has(finalId)) {
         finalId = `${baseId}-${counter}`
         counter++
       }
-      
+
       usedIds.add(finalId)
 
       // 设置 ID
@@ -1367,15 +1399,15 @@ const remarkHeading: Plugin<[RemarkHeadingOptions?], Root> = (options = {}) => {
       if (!node.data.hProperties) {
         node.data.hProperties = {}
       }
-      
+
       node.data.hProperties.id = finalId
     })
   }
 }
 
 export default remarkHeading
-export { remarkHeading, generateHeadingId }
-````
+export { generateHeadingId, remarkHeading }
+```
 
 这个 remark 插件具有以下特性：
 
@@ -1424,15 +1456,16 @@ export default {
 
 ---
 
-_**User**_
+**_User_**
 
 提取的时候不要提取代码块里面的
 
 ---
 
-_**Assistant**_
+**_Assistant_**
 
-好的，我需要修改 `extractHeadings` 函数，让它在提取标题时忽略代码块中的内容。代码块包括：
+好的，我需要修改 `extractHeadings` 函数，让它在提取标题时忽略代码块中的内容。
+代码块包括：
 
 1. **围栏代码块** (```...```)
 2. **缩进代码块** (4个空格或1个Tab缩进)
@@ -1510,7 +1543,8 @@ export function tocExtractor(options: TocExtractorOptions = {}): Plugin {
         try {
           await generateTocData(opts)
           res.end('TOC data generated successfully')
-        } catch (error) {
+        }
+        catch (error) {
           res.statusCode = 500
           res.end(`Error generating TOC data: ${error}`)
         }
@@ -1560,7 +1594,8 @@ async function generateTocData(options: Required<TocExtractorOptions>) {
     console.info(
       `✓ Generated TOC data for ${allTocData.length} files to ${outputPath}`,
     )
-  } catch (error) {
+  }
+  catch (error) {
     console.error('Error generating TOC data:', error)
     throw error
   }
@@ -1598,12 +1633,13 @@ async function extractTocFromFile(
       file: relativePath,
       path: routePath,
       title:
-        frontmatterTitle ||
-        headings[0]?.text ||
-        path.basename(file, path.extname(file)),
+        frontmatterTitle
+        || headings[0]?.text
+        || path.basename(file, path.extname(file)),
       toc,
     }
-  } catch (error) {
+  }
+  catch (error) {
     console.warn(`Failed to process file ${file}:`, error)
     return null
   }
@@ -1622,10 +1658,12 @@ function generateRoutePath(
   // 处理 index 文件（与 route-generator 保持一致）
   if (routePath === indexFile) {
     routePath = '/'
-  } else if (routePath.endsWith(`/${indexFile}`)) {
+  }
+  else if (routePath.endsWith(`/${indexFile}`)) {
     const basePath = routePath.replace(`/${indexFile}`, '')
     routePath = basePath ? `/${basePath}` : '/'
-  } else {
+  }
+  else {
     routePath = `/${routePath}`
   }
 
@@ -1635,11 +1673,11 @@ function generateRoutePath(
 function extractFrontmatterTitle(content: string): string | null {
   // 匹配 frontmatter 中的 title 字段
   const frontmatterMatch = content.match(/^---\n(.*?)\n---/s)
-  if (!frontmatterMatch) return null
+  if (!frontmatterMatch) { return null }
 
   const frontmatterContent = frontmatterMatch[1]
   const titleMatch = frontmatterContent.match(/^title:\s*(.+)$/m)
-  if (!titleMatch) return null
+  if (!titleMatch) { return null }
 
   // 移除引号
   return titleMatch[1].replace(/^['"]|['"]$/g, '').trim()
@@ -1653,45 +1691,46 @@ function removeCodeBlocks(content: string): string {
   // 1. 移除围栏代码块 (```...``` 或 ~~~...~~~)
   let result = content.replace(/^```[\s\S]*?^```$/gm, '')
   result = result.replace(/^~~~[\s\S]*?^~~~$/gm, '')
-  
+
   // 2. 移除缩进代码块 (连续的4空格或1Tab缩进的行)
   const lines = result.split('\n')
   const filteredLines: string[] = []
   let inCodeBlock = false
-  
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    const isCodeLine = /^(    |\t)/.test(line) && line.trim() !== ''
+    const isCodeLine = /^( {4}|\t)/.test(line) && line.trim() !== ''
     const isEmptyLine = line.trim() === ''
-    
+
     if (isCodeLine) {
       inCodeBlock = true
       continue // 跳过代码行
     }
-    
+
     if (inCodeBlock && isEmptyLine) {
       // 在代码块中的空行，检查下一行是否还是代码
       let nextNonEmptyIndex = i + 1
       while (nextNonEmptyIndex < lines.length && lines[nextNonEmptyIndex].trim() === '') {
         nextNonEmptyIndex++
       }
-      
-      if (nextNonEmptyIndex < lines.length && /^(    |\t)/.test(lines[nextNonEmptyIndex])) {
+
+      if (nextNonEmptyIndex < lines.length && /^( {4}|\t)/.test(lines[nextNonEmptyIndex])) {
         // 下一个非空行还是代码，跳过这个空行
         continue
-      } else {
+      }
+      else {
         // 代码块结束
         inCodeBlock = false
       }
     }
-    
+
     if (!isCodeLine) {
       inCodeBlock = false
     }
-    
+
     filteredLines.push(line)
   }
-  
+
   return filteredLines.join('\n')
 }
 
@@ -1708,7 +1747,7 @@ function extractHeadings(content: string, maxDepth: number): TocItem[] {
   while ((match = headingRegex.exec(contentWithoutCodeBlocks)) !== null) {
     const level = match[1].length
 
-    if (level > maxDepth) continue
+    if (level > maxDepth) { continue }
 
     const text = match[2].trim()
 
@@ -1743,16 +1782,17 @@ function buildTocTree(headings: TocItem[]): TocItem[] {
     heading.children = []
 
     // 找到合适的父级
-    while (stack.length > 0 && stack[stack.length - 1].level >= heading.level) {
+    while (stack.length > 0 && stack.at(-1).level >= heading.level) {
       stack.pop()
     }
 
     if (stack.length === 0) {
       // 顶级标题
       result.push(heading)
-    } else {
+    }
+    else {
       // 作为子标题
-      const parent = stack[stack.length - 1]
+      const parent = stack.at(-1)
       if (!parent.children) {
         parent.children = []
       }
@@ -1800,7 +1840,7 @@ export function getTocByPath(routePath: string): TocItem[] | undefined {
 // Helper function to flatten TOC tree into a simple array
 export function flattenToc(toc: TocItem[]): TocItem[] {
   const result: TocItem[] = []
-  
+
   function traverse(items: TocItem[]) {
     for (const item of items) {
       result.push({
@@ -1813,7 +1853,7 @@ export function flattenToc(toc: TocItem[]): TocItem[] {
       }
     }
   }
-  
+
   traverse(toc)
   return result
 }
@@ -1821,7 +1861,7 @@ export function flattenToc(toc: TocItem[]): TocItem[] {
 // Helper function to get all headings at a specific level
 export function getHeadingsByLevel(toc: TocItem[], level: number): TocItem[] {
   const result: TocItem[] = []
-  
+
   function traverse(items: TocItem[]) {
     for (const item of items) {
       if (item.level === level) {
@@ -1832,7 +1872,7 @@ export function getHeadingsByLevel(toc: TocItem[], level: number): TocItem[] {
       }
     }
   }
-  
+
   traverse(toc)
   return result
 }
@@ -1869,4 +1909,3 @@ export default tocExtractor
 这样修改后，TOC 提取器就不会从代码块中提取标题了，只会提取真正的文档结构标题。
 
 ---
-

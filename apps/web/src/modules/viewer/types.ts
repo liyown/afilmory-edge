@@ -1,4 +1,4 @@
-import type { PhotoRegion } from '@afilmory/builder'
+import type { PhotoRegion } from '@afilmory/typing'
 import type { AppleGainMapSource } from '@afilmory/webgl-viewer'
 
 import type { ImageLoaderManager } from '~/lib/image-loader-manager'

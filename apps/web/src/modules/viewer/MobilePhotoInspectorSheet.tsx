@@ -1,4 +1,4 @@
-import type { PickedExif } from '@afilmory/builder'
+import type { PickedExif } from '@afilmory/typing'
 import { MobileTabGroup, MobileTabItem } from '@afilmory/ui'
 import { createInspectorSheetPresentation, resolveInspectorSheetHeight } from '@afilmory/viewer-motion'
 import { useQuery } from '@tanstack/react-query'
