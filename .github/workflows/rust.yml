@@ -3,12 +3,12 @@ name: Rust CLI
 on:
   push:
     paths:
-      - 'apps/sync/**'
-      - '.github/workflows/rust.yml'
+      - apps/sync/**
+      - .github/workflows/rust.yml
   pull_request:
     paths:
-      - 'apps/sync/**'
-      - '.github/workflows/rust.yml'
+      - apps/sync/**
+      - .github/workflows/rust.yml
 
 jobs:
   test:
