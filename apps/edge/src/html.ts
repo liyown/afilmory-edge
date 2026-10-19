@@ -8,6 +8,14 @@ const MANIFEST_KEY = 'manifest.json'
 const MANIFEST_CACHE_KEY = 'manifest:cache'
 const MANIFEST_CACHE_TTL_SECONDS = 60
 
+// The social features (session, comments, reactions) are served by this same
+// Worker, so the gallery shell opts into them at runtime.
+const INJECT_CONFIG_SCRIPT = `window.__CONFIG__ = ${JSON.stringify({
+  useApi: false,
+  useNext: false,
+  useCloud: true,
+})}; window.__SITE_CONFIG__ = {};`
+
 type ManifestPayload = Record<string, unknown>
 
 const EMPTY_MANIFEST: ManifestPayload = {
@@ -44,6 +52,11 @@ export async function serveAppShell(request: Request, env: Env): Promise<Respons
   const manifest = await loadManifest(env)
 
   return new HTMLRewriter()
+    .on('script#config', {
+      element(element) {
+        element.setInnerContent(INJECT_CONFIG_SCRIPT)
+      },
+    })
     .on('script#manifest', {
       element(element) {
         element.setInnerContent(`window.__MANIFEST__ = ${JSON.stringify(manifest)};`)
@@ -114,6 +127,11 @@ export async function servePhotoShell(request: Request, env: Env, photoId: strin
 
   return (
     new HTMLRewriter()
+      .on('script#config', {
+        element(element) {
+          element.setInnerContent(INJECT_CONFIG_SCRIPT)
+        },
+      })
       .on('script#manifest', {
         element(element) {
           element.setInnerContent(`window.__MANIFEST__ = ${JSON.stringify(manifest)};`)

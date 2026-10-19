@@ -1,12 +1,4 @@
-import {
-  authUsers,
-  commentReactions,
-  comments,
-  photoAssets,
-  tenantDomains,
-  tenantMemberships,
-  tenants,
-} from '@afilmory/db'
+import { authUsers, commentReactions, comments, photoAssets, tenantMemberships, tenants } from '@afilmory/db'
 import { DEFAULT_BASE_DOMAIN } from '@afilmory/utils'
 import { getClientIp } from '@core/context/http-context.helper'
 import { DbAccessor } from '@core/database/database.provider'
@@ -199,20 +191,7 @@ export class CommentService {
       isNull(comments.deletedAt),
     ]
 
-    let statusCondition
-    if (isAdmin) {
-      statusCondition = inArray(comments.status, ['approved', 'pending'])
-    }
-    else if (viewerUserId) {
-      statusCondition = or(
-        eq(comments.status, 'approved'),
-        and(eq(comments.status, 'pending'), eq(comments.userId, viewerUserId)),
-      )
-    }
-    else {
-      statusCondition = eq(comments.status, 'approved')
-    }
-    filters.push(statusCondition)
+    const statusCondition = this.resolveVisibleStatusCondition(isAdmin, viewerUserId)
 
     let cursorCondition
     if (query.cursor) {
@@ -223,7 +202,7 @@ export class CommentService {
       )
     }
 
-    const baseWhere = cursorCondition ? and(...filters, cursorCondition) : and(...filters)
+    const baseWhere = and(...filters, statusCondition, cursorCondition)
 
     const rows = await db
       .select({
@@ -521,27 +500,24 @@ export class CommentService {
       isNull(comments.deletedAt),
     ]
 
-    let statusCondition
-    if (isAdmin) {
-      statusCondition = inArray(comments.status, ['approved', 'pending'])
-    }
-    else if (viewerUserId) {
-      statusCondition = or(
-        eq(comments.status, 'approved'),
-        and(eq(comments.status, 'pending'), eq(comments.userId, viewerUserId)),
-      )
-    }
-    else {
-      statusCondition = eq(comments.status, 'approved')
-    }
-    filters.push(statusCondition)
+    const statusCondition = this.resolveVisibleStatusCondition(isAdmin, viewerUserId)
 
     const [result] = await db
       .select({ count: sql<number>`count(*)` })
       .from(comments)
-      .where(and(...filters))
+      .where(and(...filters, statusCondition))
 
     return { count: Number(result?.count ?? 0) }
+  }
+
+  private resolveVisibleStatusCondition(isAdmin: boolean, viewerUserId: string | null) {
+    if (isAdmin) {
+      return inArray(comments.status, ['approved', 'pending'])
+    }
+    if (viewerUserId) {
+      return or(eq(comments.status, 'approved'), and(eq(comments.status, 'pending'), eq(comments.userId, viewerUserId)))
+    }
+    return eq(comments.status, 'approved')
   }
 
   private getAuthUser(): AuthUser | undefined {
@@ -746,11 +722,9 @@ export class CommentService {
       .select({
         userId: tenantMemberships.userId,
         slug: tenants.slug,
-        customDomain: tenantDomains.domain,
       })
       .from(tenantMemberships)
       .innerJoin(tenants, eq(tenantMemberships.tenantId, tenants.id))
-      .leftJoin(tenantDomains, and(eq(tenantDomains.tenantId, tenants.id), eq(tenantDomains.status, 'verified')))
       .where(
         and(
           inArray(tenantMemberships.userId, uniqueUserIds),
@@ -758,7 +732,7 @@ export class CommentService {
           eq(tenantMemberships.status, 'active'),
         ),
       )
-      .orderBy(asc(tenantMemberships.createdAt), asc(tenants.id), asc(tenantDomains.createdAt))
+      .orderBy(asc(tenantMemberships.createdAt), asc(tenants.id))
 
     if (ownedWorkspaces.length > 0) {
       const baseDomain = (await this.systemSettings.getSettings()).baseDomain || DEFAULT_BASE_DOMAIN
@@ -767,9 +741,7 @@ export class CommentService {
         if (!user || user.website) {
           continue
         }
-        user.website = workspace.customDomain
-          ? `https://${workspace.customDomain}`
-          : `https://${workspace.slug}.${baseDomain}`
+        user.website = `https://${workspace.slug}.${baseDomain}`
       }
     }
 

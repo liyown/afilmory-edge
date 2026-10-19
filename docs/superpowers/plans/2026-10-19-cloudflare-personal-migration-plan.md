@@ -37,6 +37,7 @@ Target reader: **执行这个计划的 agent**。本文件不按"人日"编排�
 | T4.4 缩略图 URL | ✅（含降级） | `R2UploadService.thumbnailUrl()`：`R2_PUBLIC_BASE_URL` 为绝对地址时生成 `/cdn-cgi/image/width=1024,format=auto,quality=80/...`；保持 `/media` 相对地址时回退原图，避免 workers.dev 无 Image Resizing 时裂图 |
 | T4.5 manifest 增量更新 | ✅ | `ManifestPublisher` 在完成上传/删除/改标签后全量重建 manifest（`data` + `cameras`/`lenses`）写入 R2 `manifest.json`，删除 KV `manifest:cache`，资产标记 `synced`。实测上传后同请求内 `/api/manifest` 出现新照片，画廊首页 `<img>` 指向 `/media/photos/1/...`，无控制台/HTTP 错误 |
 | T4.6 Live Photo | ✅ | dashboard 按文件名 base 配对 `HEIC/JPEG + MOV`：MOV 作为伴随对象上传但不单独建 asset；完整回调带 `videoKey`，manifest 写入 `{ type:'live-photo', videoUrl, s3Key }`；删除照片时连同配对视频一起删 R2 对象。UI 实测一次 complete 携带 `videoKey`，`/media` 视频 200，删除后照片与视频均 404。**未覆盖**：真实 Live Photo 播放（测试用 MOV 为合成字节） |
+| T5.1 评论 / 反应 | ✅ | Worker 模块图挂载 `CommentModule` + `ReactionModule`，评论/评论表情/照片反应全部读写 D1。`CommentService` 的作者网站回退去掉自定义域名 join（个人版无域名功能），保留 `https://<slug>.<baseDomain>`。Worker shell 注入 `useCloud: true`，画廊评论区默认显示。headless Chrome：发评论 → 刷新仍在；点赞 0→1 → 刷新仍为 1；`/api/reactions/add` count=3 → 查询返回 `{ applause: 3 }`；无 HTTP/页面错误 |
 | T0.4 裁剪 core | 🚧 模块图完成 | `personal.module.ts` 修正 import 路径、补齐全局 middleware/guard/interceptor；新增 `InProcessEventModule`（§2.6，去掉事件对 Redis 的依赖）。已删除 `activity`、`super-admin`、`featured-galleries`、`gallery-subscriptions`、`mobile`、`user-safety`、`account-deletion`、`static-web`、`mail`、`index.module.ts`；`app.factory` / `openapi` 已切到 `PersonalModule`；`tsc --noEmit` 通过。**仍待**：billing/managed-storage/push/data-sync 与 photo/system-setting 解耦（与 T4 上传重写重叠），以及 billing 本身删除 |
 
 **线上资源（`cf deploy --provision` 创建）**
@@ -633,6 +634,21 @@ T1.6 + T2.5 + T3.3 ────────────────────�
 ### Phase 5 — 保留的互动与输出
 
 **T5.1 评论 / 反应**：保留现有 controller/service，跑在 D1 上；验收：发评论 → 刷新可见；反应计数正确。
+- 实现（2026-10-19）：`EdgeCoreModule` 导入 `CommentModule` / `ReactionModule`，复用原有
+  controller/service（`/api/comments`、`/api/comments/count`、`/api/comments/:id/reactions`、
+  `/api/reactions/add|stats`）。数据落在 `comment`、`comment_reaction`、`reactions` 三张 D1 表；
+  评论列表/计数沿用 approved/pending 可见性规则，评论表情用唯一索引
+  `(tenant_id, comment_id, user_id, reaction)` 做 toggle。`CommentService.fetchUsersWithProfiles`
+  移除 `tenant_domain` join（个人部署不做自定义域名），作者网站固定回退到
+  `https://<slug>.<baseDomain>`。Worker 渲染的 gallery shell（`/` 与 `/photos/:id`）注入
+  `window.__CONFIG__ = { useApi:false, useNext:false, useCloud:true }`，使会话、评论区、反应按钮
+  在个人部署中默认可用；未启用 share/Next 相关分支。
+- 验证：`pnpm -C apps/edge typecheck` 通过。登录态 curl：创建评论 → 列表与计数一致；点赞 toggle
+  两次计数 1 → 0。匿名反应：`POST /api/reactions/add` count=3 → `GET /api/reactions` 返回
+  `{ applause: 3 }`。headless Chrome（1440×900，管理员 cookie）：首页进照片 → “评论” tab →
+  提交评论后立即出现，刷新后仍可见；点赞数 0→1，刷新后仍为 1；控制台与网络无错误。
+- 边界：评论审核钩子仍是 `AllowAllCommentModerationHook`（与原个人配置一致）；未覆盖多用户并发
+  评论/表情竞争（D1 唯一索引负责去重）。
 **T5.2 feed / sitemap / well-known**：现有路由原样挂载；验收：`/feed.xml`、`/sitemap.xml` 返回 200 且 XML 合法。
 **T5.3 分享页 / embed**：`/share/iframe`、`/share/embed.js` 用 Worker 渲染（React SSR 或模板字符串）；验收：iframe 可嵌入。
 

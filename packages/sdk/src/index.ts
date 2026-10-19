@@ -55,10 +55,11 @@ export class Client {
     })
   }
 
-  async analysis(data: AnalysisDto) {
+  async analysis(data: AnalysisDto): Promise<AnalysisResponse> {
     const query = new URLSearchParams(data).toString()
-    return (await fetch(this.buildUrl(`/api/reactions?${query}`), {
+    const response = await fetch(this.buildUrl(`/api/reactions?${query}`), {
       method: 'GET',
-    }).then(res => res.json())) as Promise<AnalysisResponse>
+    })
+    return (await response.json()) as AnalysisResponse
   }
 }

@@ -13,6 +13,8 @@ import { RequestContextMiddleware } from '@core/middlewares/request-context.midd
 import { AppStateModule } from '@core/modules/app/app-state/app-state.module'
 import { SettingModule } from '@core/modules/configuration/setting/setting.module'
 import { SystemSettingModule } from '@core/modules/configuration/system-setting/system-setting.module'
+import { CommentModule } from '@core/modules/content/comment/comment.module'
+import { ReactionModule } from '@core/modules/content/reaction/reaction.module'
 import { InProcessEventModule } from '@core/modules/infrastructure/event/in-process-event.module'
 import { AuthModule } from '@core/modules/platform/auth/auth.module'
 import { DashboardModule } from '@core/modules/platform/dashboard/dashboard.module'
@@ -24,9 +26,8 @@ import { createApplication } from '@tsuki-hono/core'
 import { PersonalPhotoModule } from './modules/photos/personal-photo.module'
 
 /**
- * T3.1: the first slice of the core graph that runs in the Worker. It covers
- * authentication only; settings/photo/feed modules still depend on Redis or
- * Node-only infrastructure and are mounted in later tasks.
+ * The core graph that runs in the Worker. Feed, share and well-known routes
+ * are still mounted in later tasks.
  */
 @Module({
   imports: [
@@ -39,6 +40,8 @@ import { PersonalPhotoModule } from './modules/photos/personal-photo.module'
     AuthModule,
     DashboardModule,
     PersonalPhotoModule,
+    CommentModule,
+    ReactionModule,
   ],
   providers: [
     { provide: APP_MIDDLEWARE, useClass: RequestContextMiddleware },
