@@ -32,11 +32,23 @@ This project is maintained independently from [Afilmory](https://github.com/Afil
 
 The button copies this repository into your GitHub account, builds the Worker, provisions **D1, KV, and R2** from `wrangler.jsonc`, applies the D1 migrations, and deploys. It prompts for three secrets:
 
-| Secret                  | Purpose                                                                 |
-| ----------------------- | ----------------------------------------------------------------------- |
+| Secret                  | Purpose                                                                     |
+| ----------------------- | --------------------------------------------------------------------------- |
 | `CONFIG_ENCRYPTION_KEY` | Encrypts settings stored in D1. Generate one with `openssl rand -base64 32` |
-| `BETTER_AUTH_SECRET`    | Signs auth sessions. Falls back to `CONFIG_ENCRYPTION_KEY` when omitted |
-| `SETUP_TOKEN`           | One-time token used to claim the owner account                          |
+| `BETTER_AUTH_SECRET`    | Signs auth sessions. Falls back to `CONFIG_ENCRYPTION_KEY` when omitted     |
+| `SETUP_TOKEN`           | One-time token used to claim the owner account                              |
+
+The deploy config includes Workers AI and Vectorize. Create the index before deploying, or the
+`VECTORIZE` binding cannot resolve:
+
+```bash
+cf vectorize create afilmory-photo-embeddings \
+  --index-config-dimensions 1024 \
+  --index-config-metric cosine
+```
+
+To deploy without AI, remove the `ai`/`vectorize` entries from `wrangler.jsonc` and set
+`AI_INDEX_ENABLED=false` before clicking the button.
 
 After the deployment finishes, open `https://<your-worker>.workers.dev/platform/login`. Because the database is empty, the login page asks for the setup token: enter the `SETUP_TOKEN` you chose, then your email and password. That creates the single owner account, and the dashboard takes over from there.
 
@@ -98,6 +110,22 @@ afi ls
 It uses browser OAuth, stores only a revocable long-lived token, and watches filesystem events
 without polling. See [apps/sync/README.md](./apps/sync/README.md) for details.
 
+### AI photo search
+
+Uploads are captioned and tagged asynchronously with Workers AI, then embedded into Vectorize.
+The gallery header supports fuzzy text matches and natural-language queries such as
+“sunset by the sea” or “黄昏 港口”.
+
+Before the first deploy, create the 1024-dimension cosine index:
+
+```bash
+sh scripts/ensure-vectorize-index.sh
+```
+
+If you do not want AI, set `AI_INDEX_ENABLED=false` and remove the `ai`/`vectorize` entries from
+`wrangler.jsonc`; uploads and browsing keep working. See [AI photo search](./docs/ai-photo-search.md)
+for models, cost, and indexing details.
+
 ## 📸 Live Gallery
 
 - [photos.liuyaowen.cn](https://photos.liuyaowen.cn) - This deployment
@@ -115,10 +143,10 @@ The gallery UI, WebGPU/WebGL viewer, masonry layout, EXIF display, maps, comment
 - 🗄️ **D1 + KV only** - D1 for relational data and runtime settings, KV for hot caches; no PostgreSQL or Redis.
 - ⚙️ **D1-backed site settings** - Name, title, author, avatar, social links, and map options are edited in the dashboard and injected into every page shell.
 - 🧾 **Built-in backups** - A daily cron exports D1 into the same private bucket (14 rotating copies) with a restore script.
-- 🧱 **Fresh baseline** - A single D1 baseline migration with no legacy history or compatibility shims.
+- 🧱 **Versioned D1 migrations** - Small, additive migrations with no legacy history or compatibility shims.
 - 🚀 **Single build and deploy** - `pnpm build` assembles both SPAs and the Worker; `pnpm deploy:edge` ships it.
-- **Local folder sync** - A Rust `afi` CLI watches camera/import folders and uploads through the same API, with browser OAuth and a revocable token.
-- **AI semantic search** - Uploads are captioned and tagged with Workers AI; Vectorize powers natural-language search in the gallery header. See [AI photo search](./docs/ai-photo-search.md).
+- **Local folder sync** - A Rust `afi` CLI watches camera/import folders and uploads through the same API, with browser OAuth, a built-in deployment URL, and prebuilt macOS/Linux/Windows binaries.
+- **AI semantic search** - Uploads are captioned and tagged with Workers AI; Vectorize powers natural-language search, with local fuzzy matching as a precise fallback. See [AI photo search](./docs/ai-photo-search.md).
 
 ## 🏗️ Architecture
 
@@ -130,6 +158,7 @@ afilmory-edge/
 │   ├── web/              # Gallery SPA (Vite + React 19 + React Router 7)
 │   ├── edge/             # Cloudflare Worker: SPA + dashboard, core API, OG/SEO, cron
 │   ├── docs/             # Documentation site (Vite + MDX)
+│   ├── sync/             # Rust `afi` folder-sync CLI (macOS/Linux/Windows)
 │   └── promo/            # Promo videos (Remotion)
 ├── be/                   # Backend services
 │   ├── apps/
@@ -140,6 +169,7 @@ afilmory-edge/
 │       ├── db/           # D1 schema & migrations (Drizzle ORM)
 │       ├── env/          # Worker binding access
 │       └── utils/        # Shared backend utilities
+├── locales/              # Gallery and dashboard i18n resources
 ├── packages/
 │   ├── data/             # PhotoLoader over the injected manifest
 │   ├── webgl-viewer/     # GPU image viewer (WebGPU + WebGL fallback)
@@ -177,6 +207,7 @@ afilmory-edge/
 
 - **Cloudflare Workers** - Serves the SPA, injects the manifest from object storage, renders dynamic OG images/SEO metadata, and runs scheduled backup/cleanup
 - **D1 + object storage + KV** - D1 for relational data, R2 or an S3-compatible bucket for photos/manifest/OG cache/backups, KV for hot caches
+- **Workers AI + Vectorize** - Captions/tags new uploads, stores 1024-d embeddings, and answers semantic search queries
 
 ### Backend Stack
 
@@ -188,6 +219,8 @@ afilmory-edge/
 - **R2 / Aliyun OSS** - Photo objects, manifest and backup storage through the native R2 binding or the S3 API
 - **Better Auth** - Authentication with the Drizzle SQLite adapter
 - **In-process events** - SSE progress for sync/upload jobs
+- **Workers AI** - Image captioning and keyword extraction
+- **Vectorize** - Photo embeddings for semantic search
 - **workers-og** - Dynamic OG image rendering
 
 ### Upload Pipeline
@@ -196,6 +229,7 @@ afilmory-edge/
 - **R2 / Aliyun OSS** - Worker-proxied uploads through the R2 binding, or direct presigned uploads over the S3 API
 - **exifr** - Metadata extraction through bounded range reads
 - **heic-to** - Browser-side HEIC/HEIF decoding for previews and thumbnails
+- **Workers AI** - Async caption/tag generation after upload, with hourly backfill for missed photos
 
 ## 🛠️ Development
 
@@ -203,6 +237,7 @@ afilmory-edge/
 
 - Node.js (current LTS)
 - pnpm 12+
+- Rust 1.98+ (only when building or releasing `apps/sync`)
 - The `cf` CLI
 
 ### Project Setup
@@ -230,6 +265,13 @@ pnpm deploy:edge            # Deploy the Worker through the cf CLI (OSS config)
 # Build
 pnpm build                  # Build web + dashboard + Cloudflare Worker
 
+# Tests
+pnpm --filter @afilmory/edge test
+cargo test --manifest-path apps/sync/Cargo.toml
+
+# AI search resources
+sh scripts/ensure-vectorize-index.sh
+
 # Documentation
 pnpm docs:dev               # Start docs dev server
 pnpm docs:build             # Build documentation
@@ -244,20 +286,22 @@ pnpm type-check             # Type checking
 
 Configuration lives in three layers:
 
-| Layer                 | Location                                                                  | Purpose                                                                 |
-| --------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Presentation defaults | `config.json`                                                             | Fallback site identity used before anything is saved from the dashboard |
-| Runtime site settings | D1 (`site.*`)                                                             | Authoritative site identity, edited at `/platform/settings`             |
-| Worker secrets        | `.dev.vars` (local) or `wrangler secret put` (production)                 | Encryption keys, setup token, and optional S3 credentials               |
+| Layer                 | Location                                                  | Purpose                                                                 |
+| --------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Presentation defaults | `config.json`                                             | Fallback site identity used before anything is saved from the dashboard |
+| Runtime site settings | D1 (`site.*`)                                             | Authoritative site identity, edited at `/platform/settings`             |
+| Worker secrets        | `.dev.vars` (local) or `wrangler secret put` (production) | Encryption keys, setup token, and optional S3 credentials               |
 
 The one-click path uses the bindings in the root `wrangler.jsonc`; the OSS path declares them in `apps/edge/cloudflare.config.ts`:
 
-| Binding  | Service            | Purpose                                             |
-| -------- | ------------------ | --------------------------------------------------- |
-| `DB`     | D1 (`afilmory-db`) | Users, photo assets, comments, settings, sync state |
-| `CACHE`  | KV                 | Manifest revisions and hot caches                   |
-| `ASSETS` | Workers Assets     | Built gallery and dashboard files                   |
-| `PHOTOS` | R2 (`afilmory-photos`) | Photos, manifest, OG cache, and backups (R2 only) |
+| Binding     | Service                                 | Purpose                                             |
+| ----------- | --------------------------------------- | --------------------------------------------------- |
+| `DB`        | D1 (`afilmory-db`)                      | Users, photo assets, comments, settings, sync state |
+| `CACHE`     | KV                                      | Manifest revisions and hot caches                   |
+| `ASSETS`    | Workers Assets                          | Built gallery and dashboard files                   |
+| `PHOTOS`    | R2 (`afilmory-photos`)                  | Photos, manifest, OG cache, and backups (R2 only)   |
+| `AI`        | Workers AI                              | Caption and keyword generation                      |
+| `VECTORIZE` | Vectorize (`afilmory-photo-embeddings`) | 1024-d photo embeddings for semantic search         |
 
 #### Presentation defaults (`config.json`)
 
@@ -285,18 +329,21 @@ The one-click path uses the bindings in the root `wrangler.jsonc`; the OSS path 
 
 `config.json` is baked into the build. Once you save site settings from the dashboard they are stored in D1 and injected into every shell response, overriding these defaults.
 
-#### Worker secrets
+#### Worker secrets and AI variables
 
-| Secret                  | Required          | Purpose                                                     |
-| ----------------------- | ----------------- | ----------------------------------------------------------- |
-| `CONFIG_ENCRYPTION_KEY` | Yes               | Encrypts sensitive settings stored in D1                    |
-| `BETTER_AUTH_SECRET`    | No                | Signs auth sessions; falls back to `CONFIG_ENCRYPTION_KEY`  |
-| `SETUP_TOKEN`           | For first-run setup | Gates creating the owner account from the login page      |
-| `STORAGE_DRIVER`        | No                | `r2` uses the `PHOTOS` binding; `s3` (default) uses the secrets below |
-| `S3_ENDPOINT`           | With `s3` driver  | Virtual-hosted bucket URL (bucket name is part of the host) |
-| `S3_REGION`             | With `s3` driver  | OSS region, e.g. `cn-shenzhen`                              |
-| `S3_ACCESS_KEY_ID`      | With `s3` driver  | Access key with read/write access to the bucket             |
-| `S3_SECRET_ACCESS_KEY`  | With `s3` driver  | Matching secret key                                         |
+| Secret                  | Required            | Purpose                                                               |
+| ----------------------- | ------------------- | --------------------------------------------------------------------- |
+| `CONFIG_ENCRYPTION_KEY` | Yes                 | Encrypts sensitive settings stored in D1                              |
+| `BETTER_AUTH_SECRET`    | No                  | Signs auth sessions; falls back to `CONFIG_ENCRYPTION_KEY`            |
+| `SETUP_TOKEN`           | For first-run setup | Gates creating the owner account from the login page                  |
+| `STORAGE_DRIVER`        | No                  | `r2` uses the `PHOTOS` binding; `s3` (default) uses the secrets below |
+| `S3_ENDPOINT`           | With `s3` driver    | Virtual-hosted bucket URL (bucket name is part of the host)           |
+| `S3_REGION`             | With `s3` driver    | OSS region, e.g. `cn-shenzhen`                                        |
+| `S3_ACCESS_KEY_ID`      | With `s3` driver    | Access key with read/write access to the bucket                       |
+| `S3_SECRET_ACCESS_KEY`  | With `s3` driver    | Matching secret key                                                   |
+| `AI_VISION_MODEL`       | No                  | Override the vision model (default Mistral Small 3.1)                 |
+| `AI_EMBEDDING_MODEL`    | No                  | Override the embedding model (default `bge-m3`)                       |
+| `AI_INDEX_ENABLED`      | No                  | Set `false` to disable AI indexing and semantic search                |
 
 The R2 driver is selected automatically when the `PHOTOS` binding exists; set `STORAGE_DRIVER=r2` only when you want to force it (for example, against a simulation).
 
@@ -333,6 +380,9 @@ For local development, copy `apps/edge/.dev.vars.example` to `apps/edge/.dev.var
 - **[Architecture](./docs/architecture.md)** - Worker, D1, OSS, and KV design
 - **[Deployment](./docs/deployment.md)** - Provision Cloudflare resources and deploy
 - **[Configuration](./docs/configuration.md)** - Worker secrets and runtime settings
+- **[AI photo search](./docs/ai-photo-search.md)** - Workers AI models, Vectorize, cost, and indexing
+- **[Netdisk sync research](./docs/netdisk-sync-research.md)** - WebDAV, rclone, and provider API tradeoffs
+- **[Folder sync CLI](./apps/sync/README.md)** - `afi` install, login, add/list/remove, and launchd/systemd notes
 - **[Backend](./be/README.md)** - API graph, database access, and testing
 
 ## 🤝 Contributing
