@@ -1,11 +1,12 @@
 import type { PhotoManifestItem } from '@afilmory/builder'
 import type { ManifestChangePayload } from '@afilmory/db'
 import { photoAssets, tenantManifestChanges, tenantManifestStates } from '@afilmory/db'
+import type { AtomicPlan } from '@core/database/atomic'
 import { DbAccessor } from '@core/database/database.provider'
 import type { DrizzleDb } from '@core/database/tokens'
 import { requireTenantContext } from '@core/modules/platform/tenant/tenant.context'
 import { EventEmitterService } from '@tsuki-hono/event-emitter'
-import { and, asc, eq, gt, inArray, lte } from 'drizzle-orm'
+import { and, asc, eq, gt, inArray, lte, sql } from 'drizzle-orm'
 import { injectable } from 'tsyringe'
 
 import type { PhotoChange } from './manifest-sync.types'
@@ -100,10 +101,7 @@ export class ManifestSyncService {
     if (drafts.length === 0) {
       return []
     }
-    const db = this.dbAccessor.get()
-    const changes = await db.transaction(async (tx) => {
-      return await this.recordDraftsOn(tx, tenantId, drafts)
-    })
+    const changes = await this.dbAccessor.runAtomically(tx => this.createDraftPlan(tx, tenantId, drafts))
     this.emitChanged(tenantId, changes)
     return changes
   }
@@ -171,58 +169,74 @@ export class ManifestSyncService {
     return await this.recordDrafts(tenantId, drafts)
   }
 
-  async recordDraftsOn(tx: DrizzleDb, tenantId: string, drafts: ManifestChangeDraft[]): Promise<PhotoChange[]> {
+  /**
+   * Builds the full atomic plan without reading the database: the revision is
+   * allocated by a single UPDATE, and each change row derives its revision from
+   * the already-updated state row inside the same transaction/batch.
+   */
+  createDraftPlan(tx: DrizzleDb, tenantId: string, drafts: ManifestChangeDraft[]): AtomicPlan<PhotoChange[]> {
     const now = new Date().toISOString()
-    let revision = await this.lockRevision(tx, tenantId)
-    if (revision == null) {
-      await tx
-        .insert(tenantManifestStates)
-        .values({
-          tenantId,
-          revision: 0,
+    const count = drafts.length
+    const payloads = drafts.map(draft => this.createPayload(draft))
+
+    const currentRevision = sql<number>`(
+      select ${tenantManifestStates.revision}
+      from ${tenantManifestStates}
+      where ${tenantManifestStates.tenantId} = ${tenantId}
+    )`
+
+    const statements: unknown[] = [
+      tx.insert(tenantManifestStates).values({ tenantId, revision: 0, updatedAt: now }).onConflictDoNothing(),
+      tx
+        .update(tenantManifestStates)
+        .set({
+          revision: sql`${tenantManifestStates.revision} + ${count}`,
           updatedAt: now,
         })
-        .onConflictDoNothing()
-      revision = (await this.lockRevision(tx, tenantId)) ?? 0
+        .where(eq(tenantManifestStates.tenantId, tenantId))
+        .returning({ revision: tenantManifestStates.revision }),
+    ]
+
+    for (const [index, payload] of payloads.entries()) {
+      statements.push(
+        tx.insert(tenantManifestChanges).values({
+          tenantId,
+          revision: sql`${currentRevision} - ${count - 1 - index}`,
+          operation: payload.operation,
+          photoId: payload.photoId,
+          payload,
+          createdAt: now,
+        }),
+      )
     }
 
-    const changes: PhotoChange[] = []
-    for (const draft of drafts) {
-      revision += 1
-      const payload = this.createPayload(draft)
-      await tx.insert(tenantManifestChanges).values({
-        tenantId,
-        revision,
-        operation: payload.operation,
-        photoId: payload.photoId,
-        payload,
-        createdAt: now,
-      })
-      changes.push(toPhotoChange({ tenantId, revision, payload }))
-    }
-
-    await tx
-      .update(tenantManifestStates)
-      .set({ revision, updatedAt: now })
-      .where(eq(tenantManifestStates.tenantId, tenantId))
-
-    const cutoff = revision - MANIFEST_CHANGE_RETENTION
-    if (cutoff > 0) {
-      await tx
+    statements.push(
+      tx
         .delete(tenantManifestChanges)
-        .where(and(eq(tenantManifestChanges.tenantId, tenantId), lte(tenantManifestChanges.revision, cutoff)))
+        .where(
+          and(
+            eq(tenantManifestChanges.tenantId, tenantId),
+            lte(tenantManifestChanges.revision, sql`${currentRevision} - ${MANIFEST_CHANGE_RETENTION}`),
+          ),
+        ),
+    )
+
+    return {
+      statements,
+      resolve: (results) => {
+        const [state] = (results[1] ?? []) as Array<{ revision: number }>
+        if (!state) {
+          throw new Error(`Failed to allocate manifest revision for tenant ${tenantId}`)
+        }
+
+        return payloads.map((payload, index) =>
+          toPhotoChange({
+            tenantId,
+            revision: state.revision - (count - 1 - index),
+            payload,
+          }))
+      },
     }
-
-    return changes
-  }
-
-  private async lockRevision(tx: DrizzleDb, tenantId: string): Promise<number | null> {
-    const [locked] = await tx
-      .select({ revision: tenantManifestStates.revision })
-      .from(tenantManifestStates)
-      .where(eq(tenantManifestStates.tenantId, tenantId))
-      .for('update')
-    return locked?.revision ?? null
   }
 
   private createPayload(draft: ManifestChangeDraft): ManifestChangePayload {

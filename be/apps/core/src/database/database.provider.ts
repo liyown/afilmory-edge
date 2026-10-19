@@ -8,6 +8,7 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 import { injectable } from 'tsyringe'
 
+import type { AtomicBuilder } from './atomic'
 import { DatabaseConfig } from './database.config'
 import type { DatabaseContextStore, DrizzleDb } from './tokens'
 
@@ -57,12 +58,13 @@ export async function applyTenantIsolationContext(options?: {
 
   const { client } = store.transaction
 
-  await client.query("SELECT set_config('afilmory.is_superadmin', $1, true)", [isSuperAdmin ? 'true' : 'false'])
+  await client.query('SELECT set_config(\'afilmory.is_superadmin\', $1, true)', [isSuperAdmin ? 'true' : 'false'])
 
   if (isSuperAdmin) {
     await client.query('RESET afilmory.tenant_id')
-  } else if (tenantId) {
-    await client.query("SELECT set_config('afilmory.tenant_id', $1, true)", [tenantId])
+  }
+  else if (tenantId) {
+    await client.query('SELECT set_config(\'afilmory.tenant_id\', $1, true)', [tenantId])
   }
 
   store.tenantIsolation = {
@@ -99,7 +101,8 @@ export class PgPoolProvider {
     try {
       await client.query('SELECT 1')
       logger.info('Database connection established successfully')
-    } finally {
+    }
+    finally {
       client.release()
     }
   }
@@ -132,5 +135,16 @@ export class DbAccessor {
       return store.db
     }
     return this.provider.getDb()
+  }
+
+  async runAtomically<TResult>(build: AtomicBuilder<DrizzleDb, TResult>): Promise<TResult> {
+    return await this.get().transaction(async (tx) => {
+      const plan = await build(tx as unknown as DrizzleDb)
+      const results: unknown[] = []
+      for (const statement of plan.statements) {
+        results.push(await statement)
+      }
+      return plan.resolve(results)
+    })
   }
 }

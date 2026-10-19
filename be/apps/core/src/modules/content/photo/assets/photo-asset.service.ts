@@ -272,9 +272,8 @@ export class PhotoAssetService {
       }
     }
 
-    const changes = await db.transaction(async (tx) => {
-      await tx.delete(photoAssets).where(and(eq(photoAssets.tenantId, tenant.tenant.id), inArray(photoAssets.id, ids)))
-      return await this.manifestSyncService.recordDraftsOn(
+    const changes = await this.dbAccessor.runAtomically((tx) => {
+      const draftPlan = this.manifestSyncService.createDraftPlan(
         tx,
         tenant.tenant.id,
         records.map(record => ({
@@ -283,6 +282,14 @@ export class PhotoAssetService {
           assetId: record.id,
         })),
       )
+
+      return {
+        statements: [
+          tx.delete(photoAssets).where(and(eq(photoAssets.tenantId, tenant.tenant.id), inArray(photoAssets.id, ids))),
+          ...draftPlan.statements,
+        ],
+        resolve: (results: readonly unknown[]) => draftPlan.resolve(results.slice(1)),
+      }
     })
     this.manifestSyncService.emitChanged(tenant.tenant.id, changes)
 
@@ -1157,55 +1164,49 @@ export class PhotoAssetService {
         storageProvider: storageConfig.provider,
       })
 
-      const { saved, change } = await db.transaction(async (tx) => {
-        const [record] = await tx
-          .insert(photoAssets)
-          .values(insertPayload)
-          .onConflictDoUpdate({
-            target: [photoAssets.tenantId, photoAssets.storageKey],
-            set: {
-              photoId: item.id,
-              storageProvider: storageConfig.provider,
-              size: snapshot.size ?? null,
-              etag: snapshot.etag ?? null,
-              lastModified: snapshot.lastModified ?? null,
-              metadataHash: snapshot.metadataHash,
-              manifestVersion: CURRENT_PHOTO_MANIFEST_VERSION,
-              manifest,
-              syncStatus: 'synced',
-              conflictReason: null,
-              conflictPayload: null,
-              syncedAt: now,
-              updatedAt: now,
-            },
-          })
-          .returning()
+      // D1 cannot read a statement result back inside a batch, so the asset
+      // upsert is one statement and the manifest change is recorded by an
+      // idempotent follow-up batch.
+      const [record] = await db
+        .insert(photoAssets)
+        .values(insertPayload)
+        .onConflictDoUpdate({
+          target: [photoAssets.tenantId, photoAssets.storageKey],
+          set: {
+            photoId: item.id,
+            storageProvider: storageConfig.provider,
+            size: snapshot.size ?? null,
+            etag: snapshot.etag ?? null,
+            lastModified: snapshot.lastModified ?? null,
+            metadataHash: snapshot.metadataHash,
+            manifestVersion: CURRENT_PHOTO_MANIFEST_VERSION,
+            manifest,
+            syncStatus: 'synced',
+            conflictReason: null,
+            conflictPayload: null,
+            syncedAt: now,
+            updatedAt: now,
+          },
+        })
+        .returning()
 
-        const saved
-          = record
-            ?? (
-              await tx
-                .select()
-                .from(photoAssets)
-                .where(and(eq(photoAssets.tenantId, tenantId), eq(photoAssets.storageKey, resolvedPhotoKey)))
-                .limit(1)
-            )[0]
+      const saved
+        = record
+          ?? (
+            await db
+              .select()
+              .from(photoAssets)
+              .where(and(eq(photoAssets.tenantId, tenantId), eq(photoAssets.storageKey, resolvedPhotoKey)))
+              .limit(1)
+          )[0]
 
-        if (!saved) {
-          return { saved: null, change: null }
-        }
-
-        const [change] = await this.manifestSyncService.recordDraftsOn(tx, tenantId, [
-          { operation: 'upsert', record: saved, publicUrl },
-        ])
-        return { saved, change }
-      })
       if (!saved) {
         throw new BizException(ErrorCode.COMMON_INTERNAL_SERVER_ERROR, { message: '保存上传照片失败，请稍后再试' })
       }
-      if (change) {
-        this.manifestSyncService.emitChanged(tenantId, [change])
-      }
+
+      const [change] = await this.manifestSyncService.recordDrafts(tenantId, [
+        { operation: 'upsert', record: saved, publicUrl },
+      ])
 
       await this.recordManagedStorageReferences(storageConfig, tenantId, [
         {
@@ -1354,42 +1355,35 @@ export class PhotoAssetService {
       storageProvider: record.storageProvider,
     })
 
-    const committed = await db.transaction(async (tx) => {
-      const [saved] = await tx
-        .update(photoAssets)
-        .set(updatePayload)
-        .where(and(eq(photoAssets.id, record.id), eq(photoAssets.tenantId, tenant.tenant.id)))
-        .returning()
+    const [saved] = await db
+      .update(photoAssets)
+      .set(updatePayload)
+      .where(and(eq(photoAssets.id, record.id), eq(photoAssets.tenantId, tenant.tenant.id)))
+      .returning()
 
-      if (!saved) {
-        return null
-      }
-
-      const [change] = await this.manifestSyncService.recordDraftsOn(tx, tenant.tenant.id, [
-        { operation: 'upsert', record: saved, publicUrl },
-      ])
-      return { saved, change }
-    })
-
-    if (!committed) {
+    if (!saved) {
       throw new BizException(ErrorCode.COMMON_INTERNAL_SERVER_ERROR, { message: '更新标签失败，请稍后再试' })
     }
 
-    this.manifestSyncService.emitChanged(tenant.tenant.id, [committed.change])
+    // Same two-phase shape as uploads: D1 batches cannot feed a returned row
+    // into another statement; the change recording is atomic and idempotent.
+    const [change] = await this.manifestSyncService.recordDrafts(tenant.tenant.id, [
+      { operation: 'upsert', record: saved, publicUrl },
+    ])
 
     return {
-      id: committed.saved.id,
-      photoId: committed.saved.photoId,
-      storageKey: committed.saved.storageKey,
-      storageProvider: committed.saved.storageProvider,
-      manifest: committed.saved.manifest,
-      syncedAt: committed.saved.syncedAt,
-      updatedAt: committed.saved.updatedAt,
-      createdAt: committed.saved.createdAt,
+      id: saved.id,
+      photoId: saved.photoId,
+      storageKey: saved.storageKey,
+      storageProvider: saved.storageProvider,
+      manifest: saved.manifest,
+      syncedAt: saved.syncedAt,
+      updatedAt: saved.updatedAt,
+      createdAt: saved.createdAt,
       publicUrl,
-      size: committed.saved.size ?? null,
-      syncStatus: committed.saved.syncStatus,
-      change: committed.change,
+      size: saved.size ?? null,
+      syncStatus: saved.syncStatus,
+      change,
     }
   }
 

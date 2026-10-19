@@ -25,6 +25,7 @@ Target reader: **执行这个计划的 agent**。本文件不按"人日"编排�
 | **T1.6 首次部署** | ✅ | `https://afilmory-edge.liuyaowen-smile.workers.dev`；startup 32 ms；`/health`、`/`、`/photos/:id`、`/og/:id`、`/api/manifest` 全部线上验证通过 |
 | T2.1 D1 schema | ✅ | 新增 `be/packages/db/src/schema.sqlite.ts`（15 表：含 `tenant_membership`/`system_setting`，因为保留代码仍在用）+ `drizzle.config.sqlite.ts` + `migrations-sqlite/0000_heavy_skin.sql`；`pnpm --filter @afilmory/db type-check` 通过。时间戳用 ISO 文本而非 epoch，避免改动现有 `.toISOString()` 调用点 |
 | T2.2 D1 provider | ✅ | 新增 `database.d1.provider.ts` / `database.d1.module.ts`；edge 构建把 `@core/database/database.{provider,module}` 与 `@afilmory/db` 别名到 D1/SQLite，业务代码零改动。`curl :5173/api/health` → `{"status":"ok",...,"tenant":{"id":"1","slug":"root","status":"active"}}`。`generateId` 改为 Worker 原生雪花（`nodejs-snowflake` 依赖 WASM+`__dirname`，workerd 不可用） |
+| T2.3 事务改写 | ✅ | 个人版路径上的 4 处交互式事务已清除：`ManifestSyncService` 改为「单条 `UPDATE ... RETURNING` 分配 revision + batch 内子查询写入 changes + 剪枝」，photo 删除合并为单个 plan，上传/更新改为「单条 upsert + 幂等 change batch」。`node:sqlite` 回归测试 5/5 通过（含双连接并发 revision 唯一性、重复删除不产生重复行） |
 | T0.4 裁剪 core | 🚧 模块图完成 | `personal.module.ts` 修正 import 路径、补齐全局 middleware/guard/interceptor；新增 `InProcessEventModule`（§2.6，去掉事件对 Redis 的依赖）。已删除 `activity`、`super-admin`、`featured-galleries`、`gallery-subscriptions`、`mobile`、`user-safety`、`account-deletion`、`static-web`、`mail`、`index.module.ts`；`app.factory` / `openapi` 已切到 `PersonalModule`；`tsc --noEmit` 通过。**仍待**：billing/managed-storage/push/data-sync 与 photo/system-setting 解耦（与 T4 上传重写重叠），以及 billing 本身删除 |
 
 **线上资源（`cf deploy --provision` 创建）**
@@ -320,14 +321,49 @@ T1.6 + T2.5 + T3.3 ────────────────────�
     `RedisProvider`，属于 T3.1 的工作；当前 `/api/health` 用最小 `EdgeDatabaseModule` 验证 DI + D1。
   - `dashboard.service.ts` 的 analytics 仍是 PG 方言（`generate_series`、`jsonb_array_elements_text`、
     `#>>`），需要在 dashboard 阶段改写为 SQLite 表达；`.rows` 接口已兼容。
-  - 事务仍是 no-op，写路径在 T2.3 完成前不具备原子性。
+  - ~~事务仍是 no-op，写路径在 T2.3 完成前不具备原子性。~~ → 已由 T2.3 解决。
 - 回退：Node 构建仍使用 `database.provider.ts`（PG），alias 只作用于 `apps/edge`。
 
 **T2.3 事务改写**
-- 动作：扫描仍在个人版路径上的 `.transaction(`（预计 3–5 处：photo 上传、comment、reaction），
-  改为 `batch()` 或「单条 upsert + 幂等键」。逐处补一条回归测试。
-- 验收：`pnpm --filter core exec vitest run <相关 spec>` 通过；并发重复提交不产生重复行。
-- 风险：高。若 batch 无法表达 → 用 Durable Object 串行化（记录在 §7）。
+- 状态：**已完成（2026-10-19）**。
+- 动作：扫描个人版路径上的 `.transaction(`，实际命中 4 处（计划里预估的 comment/reaction 已不再使用事务）：
+  `ManifestSyncService.recordDrafts`、`PhotoAssetService.deleteAssets`、
+  `PhotoAssetService.uploadAssets`、`PhotoAssetService.updateAssetTags`。
+- 实现：
+  - 新增 `be/apps/core/src/database/atomic.ts`：`AtomicPlan`（语句列表 + 结果映射）与
+    `AtomicBuilder`。`DbAccessor.runAtomically()` 在两个 provider 各自实现：
+    PG 在 `db.transaction` 内顺序执行；D1 直接 `db.batch(statements)`。
+    约束：计划只能在 `resolve()` 里读结果，不能在构造后续语句时依赖前一条语句的结果。
+  - `ManifestSyncService.createDraftPlan()` 不再 `select ... for update`：
+    1. `insert tenant_manifest_state ... on conflict do nothing`
+    2. `update tenant_manifest_state set revision = revision + N ... returning revision`
+    3. N 条 `insert tenant_manifest_change`，revision 用
+       `(select revision from tenant_manifest_state where tenant_id = ?) - 偏移`
+    4. `delete ... where revision <= 当前 revision - 10000`
+    以上语句在同一个 PG 事务或同一个 D1 batch 内执行；并发写入靠 `UPDATE` 行锁/串行化，
+    不再需要显式 `for update`。
+  - `PhotoAssetService.deleteAssets` 把 `delete photo_asset` 与 draft plan 合并成一个 atomic plan。
+  - 上传与标签更新需要读取 upsert/update 返回的行来生成 change payload，而 D1 的 batch 不能
+    中途读结果，因此拆成「单条 `INSERT ... ON CONFLICT DO UPDATE RETURNING` / `UPDATE RETURNING`」
+    + `recordDrafts()` 幂等批次。刻意接受两步之间极小窗口的最终一致（变更可重放/幂等），
+    没有引入 Durable Object。
+  - 回归测试：
+    - `manifest-sync.service.spec.ts`：连续调用 revision 连续（1,2 → 3）；两个数据库连接并发写入
+      revision 仍为 `[1,2]` 无重复；超过保留窗口的旧 change 被剪枝。
+    - `photo-asset.service.spec.ts`：删除资源与写 manifest change 原子完成；重复删除同一资源
+      返回 `[]` 且不新增 change 行。
+    - 测试用 `node:sqlite` + `drizzle-orm/sqlite-proxy` 的 batch 回调模拟 D1 的 batch 语义，
+      schema 直接执行 `migrations-sqlite/0000_heavy_skin.sql`。
+- 验证：
+  - `pnpm -C be/apps/core exec vitest run src/modules/content/manifest-sync/manifest-sync.service.spec.ts src/modules/content/photo/assets/photo-asset.service.spec.ts`
+    → 2 files / 5 tests passed
+  - `pnpm -C be/apps/core exec tsc --noEmit`、`pnpm -C apps/edge exec tsc --noEmit` → 通过
+  - `pnpm --filter @afilmory/edge build` → 284 modules，bundle 1.16 MB（gzip 328 KB）
+  - `cf dev` → `curl :5173/api/health` 仍返回 `status: ok`
+  - 全量 core vitest：84 tests passed；另有 6 个既有 spec 因仓库缺少 `be/.env`
+    （`be/apps/core/.env` 是断链符号链接）在 import 阶段报 `Invalid environment variables`，
+    与本次改动无关。
+- 回退：若某处 batch 语义不成立，可把该调用单独切回 `for update` + 串行化，不影响其他路径。
 
 **T2.4 数据迁移/初始化脚本**
 - 动作：`scripts/migrate-pg-to-d1.ts`：读 PG（Hyperdrive 或本地连接）→ 转换 → `batch()` 写 D1；

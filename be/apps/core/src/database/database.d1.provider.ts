@@ -8,6 +8,8 @@ import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import { drizzle } from 'drizzle-orm/d1'
 import { injectable } from 'tsyringe'
 
+import type { AtomicBuilder } from './atomic'
+
 const dbContext = new AsyncLocalStorage<DatabaseContextStore>()
 const logger = createLogger('DB')
 const SELECT_ONE_PATTERN = /^\s*select\s+1\b/i
@@ -114,5 +116,16 @@ export class DbAccessor {
 
   get(): DrizzleDb {
     return this.provider.getDb()
+  }
+
+  async runAtomically<TResult>(build: AtomicBuilder<DrizzleDb, TResult>): Promise<TResult> {
+    const db = this.get()
+    const plan = await build(db)
+    if (plan.statements.length === 0) {
+      return plan.resolve([])
+    }
+
+    const statements = plan.statements as Parameters<typeof db.batch>[0]
+    return plan.resolve(await db.batch(statements))
   }
 }
