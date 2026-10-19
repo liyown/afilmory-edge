@@ -35,6 +35,18 @@ pnpm deploy        # wrangler d1 migrations apply DB --remote && wrangler deploy
 
 `pnpm deploy` requires a Wrangler login (`wrangler login`) or `CLOUDFLARE_API_TOKEN`. `pnpm db:migrate:d1` runs only the migration step.
 
+### AI semantic search resources
+
+AI search is optional. Create the Vectorize index before the first deploy:
+
+```bash
+cf vectorize create afilmory-photo-embeddings \
+  --index-config-dimensions 1024 \
+  --index-config-metric cosine
+```
+
+Without the index the `VECTORIZE` binding cannot be resolved. To deploy without AI, set `AI_INDEX_ENABLED=false` in `wrangler.jsonc` and remove the `vectorize`/`ai` entries. See [AI photo search](./ai-photo-search.md) for model options and cost.
+
 ### Local R2 development
 
 ```bash
@@ -58,7 +70,15 @@ cf d1 create --name afilmory-db
 
 Create a private OSS bucket in the Aliyun console and note its region. Bindings are declared in `apps/edge/cloudflare.config.ts` (`DB`, `CACHE`, `ASSETS`). The KV namespace is provisioned automatically by the `bindings.kv({})` declaration on first deploy.
 
-### 2. Configure secrets
+### 2. Create the AI index (optional)
+
+```bash
+sh scripts/ensure-vectorize-index.sh
+```
+
+The script is idempotent. Skip it and set `AI_INDEX_ENABLED=false` in `apps/edge/.dev.vars` if AI search is not needed.
+
+### 3. Configure secrets
 
 Production secrets are set per Worker:
 
@@ -78,7 +98,7 @@ The CLI prompts for each value; pass `--text <value>` instead for non-interactiv
 
 For local development, copy `apps/edge/.dev.vars.example` to `apps/edge/.dev.vars`. Leave `STORAGE_DRIVER` unset (or set it to `s3`) to use the OSS driver.
 
-### 3. Apply the D1 schema
+### 4. Apply the D1 schema
 
 ```bash
 cf d1 migrations apply <database-id> --dir be/packages/db/migrations
@@ -92,7 +112,7 @@ Migrations are generated into `be/packages/db/migrations` from `be/packages/db/s
 pnpm -C be/packages/db db:generate
 ```
 
-### 4. Build and deploy
+### 5. Build and deploy
 
 ```bash
 pnpm build          # gallery SPA + dashboard + Worker
@@ -103,7 +123,7 @@ pnpm deploy:edge
 
 CI (`.github/workflows/build.yml`) runs lint, package tests, `pnpm build`, and `pnpm type-check` on every push and pull request.
 
-### 5. Create the owner account
+### 6. Create the owner account
 
 Either use the setup form at `/platform/login` after deploy (requires `SETUP_TOKEN`), or run the CLI:
 
@@ -114,7 +134,7 @@ pnpm bootstrap:admin --email you@example.com \
 
 Use `--local` to target the local D1 file created by `pnpm dev`. The script creates the superadmin user and credential account. It is idempotent; rerun it with `--password` to rotate the password.
 
-## 6. Post-deploy checklist
+## Post-deploy checklist
 
 - `GET /health` returns `{"ok":true}`, and `GET /api/health` reports D1, object storage, and KV as `ok`
 - `GET /media/backups/d1/<file>.json.gz` returns `404`
