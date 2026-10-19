@@ -27,6 +27,7 @@ Target reader: **执行这个计划的 agent**。本文件不按"人日"编排�
 | T2.2 D1 provider | ✅ | 新增 `database.d1.provider.ts` / `database.d1.module.ts`；edge 构建把 `@core/database/database.{provider,module}` 与 `@afilmory/db` 别名到 D1/SQLite，业务代码零改动。`curl :5173/api/health` → `{"status":"ok",...,"tenant":{"id":"1","slug":"root","status":"active"}}`。`generateId` 改为 Worker 原生雪花（`nodejs-snowflake` 依赖 WASM+`__dirname`，workerd 不可用） |
 | T2.3 事务改写 | ✅ | 个人版路径上的 4 处交互式事务已清除：`ManifestSyncService` 改为「单条 `UPDATE ... RETURNING` 分配 revision + batch 内子查询写入 changes + 剪枝」，photo 删除合并为单个 plan，上传/更新改为「单条 upsert + 幂等 change batch」。`node:sqlite` 回归测试 5/5 通过（含双连接并发 revision 唯一性、重复删除不产生重复行） |
 | T2.4 数据迁移/初始化 | ✅ | 新增 `be/apps/core/scripts/migrate-pg-to-d1.ts`：15 表类型转换 + 外键/自引用排序 + 分批 `INSERT ... ON CONFLICT DO UPDATE` + D1 REST batch + 本地 SQLite 传输 + 行数/抽样对账；无历史时幂等 seed tenant/superadmin/owner/manifest state。6/6 测试通过；真实 PG/D1 联调待凭据 |
+| T2.5 租户 shim | ✅ | `TenantContextResolver` 永远返回 root 行（去掉初始化门禁/host 解析），`OnModuleInit` 启动预热；`ensureRootTenant` 用 `ON CONFLICT DO NOTHING` 并发安全创建 **active** root，并自动激活历史 inactive 行。3 files / 10 tests 通过（任意 host/path、并发、重试、middleware 内 `requireTenantContext()`）；Worker 端到端挂载留待 T3.1 |
 | T0.4 裁剪 core | 🚧 模块图完成 | `personal.module.ts` 修正 import 路径、补齐全局 middleware/guard/interceptor；新增 `InProcessEventModule`（§2.6，去掉事件对 Redis 的依赖）。已删除 `activity`、`super-admin`、`featured-galleries`、`gallery-subscriptions`、`mobile`、`user-safety`、`account-deletion`、`static-web`、`mail`、`index.module.ts`；`app.factory` / `openapi` 已切到 `PersonalModule`；`tsc --noEmit` 通过。**仍待**：billing/managed-storage/push/data-sync 与 photo/system-setting 解耦（与 T4 上传重写重叠），以及 billing 本身删除 |
 
 **线上资源（`cf deploy --provision` 创建）**
@@ -405,8 +406,30 @@ T1.6 + T2.5 + T3.3 ────────────────────�
     对账会报告 count mismatch，需要人工清理。
 
 **T2.5 租户 shim**
-- 动作：`TenantResolverInterceptor` 个人版实现：永远返回固定 tenant；启动时确保该行存在。
-- 验收：`requireTenantContext()` 在任意请求内可用；访问不存在租户的路径不会发生。
+- 状态：**已完成（2026-10-19，模块级验证；Worker 挂载属于 T3.1）**。
+- 实现：
+  - `TenantContextResolver` 去掉 `AppStateService` 初始化门禁与租户域名/host 解析：
+    请求内已有 context 时直接复用，否则永远返回 `ROOT_TENANT_SLUG` 那一行；
+    返回类型收紧为 `TenantContext`（不再可能返回 `null`）。
+  - 增加 `OnModuleInit`：应用启动时即调用 `ensureRootTenant()`，而不是等首个请求写入；
+    首次解析结果按 resolver 单例缓存，失败时清空缓存以便下次重试。
+  - `TenantService.ensureRootTenant()` 使用 `INSERT ... ON CONFLICT (slug) DO NOTHING`
+    创建 **status=active** 的 root 行，创建冲突后回读既有行；若历史数据里 root 仍是
+    `inactive`（SQLite 默认值），启动时自动激活，避免 `PlaceholderTenantGuard` 拦截全部请求。
+  - `TenantModule` 移除不再使用的 `AppStateModule` 依赖。
+- 验证：
+  - `pnpm -C be/apps/core exec vitest run src/modules/platform/tenant/tenant.service.spec.ts src/modules/platform/tenant/tenant-context-resolver.service.spec.ts src/middlewares/request-context.middleware.spec.ts`
+    → 3 files / 10 tests passed（root 单行创建、8 路并发只落一行、inactive 自动激活、
+    任意 host/path 都解析 root、请求内复用、失败重试、模块启动预热、
+    `requireTenantContext()` 在 middleware 的 `next()` 内可用）。
+  - 全量 core vitest → 28 files / 100 tests passed；6 个既有 spec 仍因仓库缺少 `be/.env`
+    在 import 阶段失败，与本次改动无关。
+  - `pnpm exec eslint <changed files>`、`pnpm -C be/apps/core exec tsc --noEmit`、
+    `pnpm -C apps/edge exec tsc --noEmit` → 通过。
+  - `pnpm --filter @afilmory/edge build` → 284 modules，bundle 1.16 MB（gzip 328 KB）。
+- 已知缺口：`PersonalModule` 尚未挂载进 Worker，因此启动预热与请求内 context 目前由
+  模块级测试覆盖；`/api/health` 等现有 edge 路由仍是独立最小 app，待 T3.1 接入后做
+  `cf dev` 端到端验收。
 
 ### Phase 3 — 认证与后台
 

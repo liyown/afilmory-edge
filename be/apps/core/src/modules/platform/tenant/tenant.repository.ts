@@ -60,6 +60,47 @@ export class TenantRepository {
     })
   }
 
+  async createTenantIfAbsent(payload: {
+    name: string
+    slug: string
+    planId?: string
+    storagePlanId?: string | null
+    status?: TenantAggregate['tenant']['status']
+  }): Promise<TenantAggregate | null> {
+    const db = this.dbAccessor.get()
+    const [tenant] = await db
+      .insert(tenants)
+      .values({
+        id: generateId(),
+        name: payload.name,
+        slug: payload.slug,
+        planId: payload.planId ?? 'free',
+        storagePlanId: payload.storagePlanId ?? null,
+        status: payload.status ?? 'active',
+      })
+      .onConflictDoNothing({ target: tenants.slug })
+      .returning()
+
+    return tenant ? { tenant } : null
+  }
+
+  async activateTenant(id: string): Promise<TenantAggregate> {
+    const db = this.dbAccessor.get()
+    const [tenant] = await db
+      .update(tenants)
+      .set({ status: 'active', updatedAt: new Date().toISOString() })
+      .where(eq(tenants.id, id))
+      .returning()
+
+    if (!tenant) {
+      throw new BizException(ErrorCode.COMMON_INTERNAL_SERVER_ERROR, {
+        message: 'Failed to activate tenant',
+      })
+    }
+
+    return { tenant }
+  }
+
   async deleteById(id: string): Promise<void> {
     const db = this.dbAccessor.get()
     await db.delete(tenants).where(eq(tenants.id, id))

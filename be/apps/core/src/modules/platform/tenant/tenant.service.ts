@@ -39,13 +39,34 @@ export class TenantService {
   async ensureRootTenant(): Promise<TenantAggregate> {
     const existing = await this.repository.findBySlug(ROOT_TENANT_SLUG)
     if (existing) {
-      return existing
+      return await this.ensureRootTenantActive(existing)
     }
 
-    return await this.repository.createTenant({
+    const created = await this.repository.createTenantIfAbsent({
       name: ROOT_TENANT_NAME,
       slug: ROOT_TENANT_SLUG,
+      status: 'active',
     })
+    if (created) {
+      return created
+    }
+
+    // Another request created the row between our lookup and insert.
+    const concurrent = await this.repository.findBySlug(ROOT_TENANT_SLUG)
+    if (!concurrent) {
+      throw new BizException(ErrorCode.COMMON_INTERNAL_SERVER_ERROR, {
+        message: 'Failed to ensure root tenant',
+      })
+    }
+
+    return await this.ensureRootTenantActive(concurrent)
+  }
+
+  private async ensureRootTenantActive(aggregate: TenantAggregate): Promise<TenantAggregate> {
+    if (aggregate.tenant.status === 'active') {
+      return aggregate
+    }
+    return await this.repository.activateTenant(aggregate.tenant.id)
   }
 
   async resolve(

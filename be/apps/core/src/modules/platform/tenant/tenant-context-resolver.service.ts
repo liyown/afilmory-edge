@@ -1,5 +1,4 @@
-import { logger } from '@core/helpers/logger.helper'
-import { AppStateService } from '@core/modules/app/app-state/app-state.service'
+import type { OnModuleInit } from '@tsuki-hono/common'
 import { HttpContext } from '@tsuki-hono/common'
 import type { Context } from 'hono'
 import { injectable } from 'tsyringe'
@@ -17,27 +16,19 @@ export interface TenantResolutionOptions {
  * Photo/comment/reaction services keep their `tenantId` filters unchanged.
  */
 @injectable()
-export class TenantContextResolver {
-  private readonly log = logger.extend('TenantResolver')
+export class TenantContextResolver implements OnModuleInit {
   private rootTenantPromise: Promise<TenantContext> | null = null
 
-  constructor(
-    private readonly tenantService: TenantService,
-    private readonly appState: AppStateService,
-  ) {}
+  constructor(private readonly tenantService: TenantService) {}
 
-  async resolve(_context: Context, options: TenantResolutionOptions = {}): Promise<TenantContext | null> {
+  async onModuleInit(): Promise<void> {
+    await this.getRootTenant()
+  }
+
+  async resolve(_context: Context, _options: TenantResolutionOptions = {}): Promise<TenantContext> {
     const existing = this.getExistingContext()
     if (existing) {
       return existing
-    }
-
-    if (!options.skipInitializationCheck) {
-      const initialized = await this.appState.isInitialized()
-      if (!initialized) {
-        this.log.info('Application not initialized yet, skip tenant resolution')
-        return null
-      }
     }
 
     return await this.getRootTenant()
