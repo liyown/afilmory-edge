@@ -11,6 +11,7 @@ import type { PhotoAssetListItem, PhotoAssetSummary, PhotoSyncProgressEvent } fr
 const MAX_UPLOAD_FILE_BYTES = 1024 * 1024 * 1024
 const MAX_UPLOAD_BATCH_FILES = 128
 const MAX_UPLOAD_BATCH_BYTES = 5 * 1024 * 1024 * 1024
+const UPLOAD_CONCURRENCY = 3
 const THUMBHASH_MAX_DIMENSION = 100
 const THUMBNAIL_WIDTH = 600
 
@@ -502,6 +503,31 @@ function fileBaseName(name: string): string {
   return (dotIndex === -1 ? name : name.slice(0, dotIndex)).toLowerCase()
 }
 
+export type PhotoUploadFailure = {
+  index: number
+  /** The failed image plus its Live Photo video, when one was paired. */
+  indices: number[]
+  name: string
+  message: string
+}
+
+export class PhotoUploadBatchError extends Error {
+  readonly failures: PhotoUploadFailure[]
+  readonly succeeded: number
+
+  constructor(failures: PhotoUploadFailure[], succeeded: number) {
+    const details = failures
+      .slice(0, 3)
+      .map((failure) => (failure.message ? `${failure.name}（${failure.message}）` : failure.name))
+      .join('、')
+    const suffix = failures.length > 3 ? ` 等 ${failures.length} 个文件` : ''
+    super(`${failures.length} 个文件上传失败${succeeded > 0 ? `，${succeeded} 个已成功` : ''}：${details}${suffix}`)
+    this.name = 'PhotoUploadBatchError'
+    this.failures = failures
+    this.succeeded = succeeded
+  }
+}
+
 export async function uploadPhotoAssets(
   files: File[],
   options?: UploadPhotoAssetsOptions,
@@ -583,7 +609,13 @@ export async function uploadPhotoAssets(
             timeoutMs: options?.timeoutMs,
             onProgress,
           })
-        : await uploadSingleFile({ file, intent, signal: options?.signal, timeoutMs: options?.timeoutMs, onProgress })
+        : await uploadSingleFile({
+            file,
+            intent,
+            signal: options?.signal,
+            timeoutMs: options?.timeoutMs,
+            onProgress,
+          })
     return { intent, parts }
   }
 
@@ -615,21 +647,47 @@ export async function uploadPhotoAssets(
     }
   }
 
-  const uploads: PhotoAssetListItem[] = []
-  for (const [index, file] of files.entries()) {
-    options?.signal?.throwIfAborted()
-
+  const uploadTaskIndices: number[] = []
+  files.forEach((file, index) => {
     if (pairedVideoIndices.has(index)) {
       // Already uploaded as the companion of the preceding image.
-      continue
+      return
     }
-
     if (skippedVideoIndices.has(index)) {
       // A standalone MOV has no gallery representation in the manifest.
       uploadedByFile.set(index, file.size)
-      emitProgress()
-      continue
+      return
     }
+    uploadTaskIndices.push(index)
+  })
+  emitProgress()
+
+  const results: Array<{ index: number; asset: PhotoAssetListItem }> = []
+  const failures: PhotoUploadFailure[] = []
+  let nextTask = 0
+
+  // Each completion rewrites the full manifest. Upload bytes concurrently,
+  // but finalize one asset at a time so two completions cannot publish
+  // snapshots that overwrite each other.
+  let completionLock = Promise.resolve()
+  const withCompletionLock = async <T>(task: () => Promise<T>): Promise<T> => {
+    const previous = completionLock
+    let release = () => {}
+    completionLock = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    await previous
+    try {
+      options?.signal?.throwIfAborted()
+      return await task()
+    } finally {
+      release()
+    }
+  }
+
+  const runUploadTask = async (index: number): Promise<PhotoAssetListItem> => {
+    const file = files[index]
+    options?.signal?.throwIfAborted()
 
     let videoKey: string | null = null
     const videoIndex = videoIndexForImage.get(index)
@@ -643,24 +701,62 @@ export async function uploadPhotoAssets(
     if (inspection?.thumbnail) {
       await uploadThumbnail(intent.photoId, file, inspection.thumbnail)
     }
-    const asset = await coreApi<PhotoAssetListItem>('/photos/upload-complete', {
-      method: 'POST',
-      body: {
-        key: intent.key,
-        photoId: intent.photoId,
-        filename: file.name,
-        width: inspection?.width ?? null,
-        height: inspection?.height ?? null,
-        thumbHash: inspection?.thumbHash ?? null,
-        toneAnalysis: inspection?.toneAnalysis ?? null,
-        takenAt: Number.isFinite(file.lastModified) ? new Date(file.lastModified).toISOString() : null,
-        uploadId: intent.mode === 'multipart' ? intent.uploadId : null,
-        parts: parts.length > 0 ? parts : null,
-        videoKey,
-      },
-    })
-    uploads.push(asset)
+    return await withCompletionLock(() =>
+      coreApi<PhotoAssetListItem>('/photos/upload-complete', {
+        method: 'POST',
+        body: {
+          key: intent.key,
+          photoId: intent.photoId,
+          filename: file.name,
+          width: inspection?.width ?? null,
+          height: inspection?.height ?? null,
+          thumbHash: inspection?.thumbHash ?? null,
+          toneAnalysis: inspection?.toneAnalysis ?? null,
+          takenAt: Number.isFinite(file.lastModified) ? new Date(file.lastModified).toISOString() : null,
+          uploadId: intent.mode === 'multipart' ? intent.uploadId : null,
+          parts: parts.length > 0 ? parts : null,
+          videoKey,
+        },
+      }),
+    )
   }
+
+  const runUploadWorker = async (): Promise<void> => {
+    while (!options?.signal?.aborted) {
+      const taskPosition = nextTask++
+      if (taskPosition >= uploadTaskIndices.length) {
+        return
+      }
+      const index = uploadTaskIndices[taskPosition]
+      try {
+        const asset = await runUploadTask(index)
+        results.push({ index, asset })
+      } catch (error) {
+        if (options?.signal?.aborted) {
+          return
+        }
+        const videoIndex = videoIndexForImage.get(index)
+        failures.push({
+          index,
+          indices: videoIndex === undefined ? [index] : [index, videoIndex],
+          name: files[index].name,
+          message: error instanceof Error ? error.message : '上传失败',
+        })
+      }
+    }
+  }
+
+  const workerCount = Math.min(UPLOAD_CONCURRENCY, uploadTaskIndices.length)
+  await Promise.all(Array.from({ length: workerCount }, runUploadWorker))
+
+  options?.signal?.throwIfAborted()
+
+  if (failures.length > 0) {
+    failures.sort((left, right) => left.index - right.index)
+    throw new PhotoUploadBatchError(failures, results.length)
+  }
+
+  const uploads = results.sort((left, right) => left.index - right.index).map((result) => result.asset)
 
   uploadedByFile.forEach((_value, index) => uploadedByFile.set(index, files[index].size))
   emitProgress()

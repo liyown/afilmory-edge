@@ -34,7 +34,7 @@ export class PhotoLibraryActionImpl {
   toggleSelect = (id: string): void => {
     this.#set((state) => {
       const next = state.selectedIds.includes(id)
-        ? state.selectedIds.filter(item => item !== id)
+        ? state.selectedIds.filter((item) => item !== id)
         : [...state.selectedIds, id]
       return { selectedIds: next }
     })
@@ -49,7 +49,7 @@ export class PhotoLibraryActionImpl {
       if (!state.assets || state.assets.length === 0) {
         return {}
       }
-      return { selectedIds: state.assets.map(asset => asset.id) }
+      return { selectedIds: state.assets.map((asset) => asset.id) }
     })
   }
 
@@ -58,7 +58,7 @@ export class PhotoLibraryActionImpl {
       return this.#performDelete([asset.id], options)
     }
     const assetLabel = this.#getAssetLabel(asset)
-    return this.#presentDeletePrompt(assetLabel, promptOptions => this.#performDelete([asset.id], promptOptions))
+    return this.#presentDeletePrompt(assetLabel, (promptOptions) => this.#performDelete([asset.id], promptOptions))
   }
 
   deleteSelected = (): Promise<void> => {
@@ -68,11 +68,11 @@ export class PhotoLibraryActionImpl {
     }
 
     const assets = this.#get().assets ?? []
-    const selectedAssets = assets.filter(asset => ids.includes(asset.id))
-    const targetLabel
-      = selectedAssets.length === 1 ? this.#getAssetLabel(selectedAssets[0]) : `选中的 ${ids.length} 个资源`
+    const selectedAssets = assets.filter((asset) => ids.includes(asset.id))
+    const targetLabel =
+      selectedAssets.length === 1 ? this.#getAssetLabel(selectedAssets[0]) : `选中的 ${ids.length} 个资源`
 
-    return this.#presentDeletePrompt(targetLabel, promptOptions => this.#performDelete(ids, promptOptions))
+    return this.#presentDeletePrompt(targetLabel, (promptOptions) => this.#performDelete(ids, promptOptions))
   }
 
   uploadAssets = (files: FileList, options?: PhotoUploadRequestOptions): Promise<void> => {
@@ -131,16 +131,14 @@ export class PhotoLibraryActionImpl {
     try {
       await this.#deps.requestDeleteAssets(ids, options)
       toast.success(`已删除 ${ids.length} 个资源`)
-      this.#set(state => ({
-        selectedIds: state.selectedIds.filter(id => !ids.includes(id)),
+      this.#set((state) => ({
+        selectedIds: state.selectedIds.filter((id) => !ids.includes(id)),
       }))
       this.#deps.refetchAssets()
-    }
-    catch (error) {
+    } catch (error) {
       const message = getRequestErrorMessage(error, '删除失败，请稍后重试。')
       toast.error('删除失败', { description: message })
-    }
-    finally {
+    } finally {
       this.#set({ isDeleting: false })
     }
   }
@@ -154,13 +152,13 @@ export class PhotoLibraryActionImpl {
       await this.#deps.requestUploadAssets(files, options)
       toast.success(`成功上传 ${files.length} 张图片`)
       this.#deps.refetchAssets()
-    }
-    catch (error) {
+    } catch (error) {
       const message = getRequestErrorMessage(error, '上传失败，请稍后重试。')
       toast.error('上传失败', { description: message })
+      // A partially failed batch still persists the files that succeeded.
+      this.#deps.refetchAssets()
       throw error
-    }
-    finally {
+    } finally {
       this.#set({ isUploading: false })
     }
   }

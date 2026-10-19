@@ -1,5 +1,6 @@
 import type { StoreApi } from 'zustand'
 
+import { PhotoUploadBatchError } from '../../../api'
 import type { PhotoSyncProgressEvent } from '../../../types'
 import type { PhotoUploadRequestOptions } from '../upload.types'
 import type { PhotoUploadState } from './initialState'
@@ -73,7 +74,7 @@ export class PhotoUploadActionImpl {
 
     if (removedFile) {
       const fp = entryFingerprint(removedFile)
-      const stillUsed = nextFiles.some(file => entryFingerprint(file) === fp)
+      const stillUsed = nextFiles.some((file) => entryFingerprint(file) === fp)
       if (!stillUsed) {
         revokePreviewUrls(this.#previewCache, [fp])
       }
@@ -155,11 +156,12 @@ export class PhotoUploadActionImpl {
       processingLogs: [],
     })
 
-    this.#updateEntries(entries =>
-      entries.map(entry => ({
+    this.#updateEntries((entries) =>
+      entries.map((entry) => ({
         ...entry,
         status: 'uploading',
-      })))
+      })),
+    )
 
     const controller = new AbortController()
     this.#uploadAbortController = controller
@@ -176,28 +178,43 @@ export class PhotoUploadActionImpl {
         timeoutMs: UPLOAD_REQUEST_TIMEOUT_MS,
         onServerEvent: this.#handleProcessingEvent,
       })
-    }
-    catch (error) {
+    } catch (error) {
       const isAbort = (error as DOMException)?.name === 'AbortError'
       if (isAbort) {
         this.#set({ phase: 'review' })
         const currentFiles = this.#get().files
         this.#updateEntries(() => createFileEntries(currentFiles, this.#previewCache))
-      }
-      else {
+      } else {
         const message = getErrorMessage(error, '上传失败，请稍后再试。')
         this.#set({
           uploadError: message,
           phase: 'error',
         })
-        this.#updateEntries(entries =>
-          entries.map(entry => ({
-            ...entry,
-            status: entry.status === 'uploading' ? 'error' : entry.status,
-          })))
+
+        if (error instanceof PhotoUploadBatchError) {
+          // Successful files are already in the library; keep only the failed
+          // ones so "retry" does not upload everything again.
+          const failedIndices = new Set(error.failures.flatMap((failure) => failure.indices))
+          const remainingFiles = this.#get().files.filter((_file, index) => failedIndices.has(index))
+          const { unmatched, hasMov } = collectUnmatchedMovFiles(remainingFiles)
+          this.#set({
+            files: remainingFiles,
+            totalSize: calculateTotalSize(remainingFiles),
+            unmatchedMovFiles: unmatched,
+            hasMovFile: hasMov,
+            uploadEntries: createFileEntries(remainingFiles, this.#previewCache),
+            uploadedBytes: 0,
+          })
+        } else {
+          this.#updateEntries((entries) =>
+            entries.map((entry) => ({
+              ...entry,
+              status: entry.status === 'uploading' ? 'error' : entry.status,
+            })),
+          )
+        }
       }
-    }
-    finally {
+    } finally {
       this.#uploadAbortController = null
     }
   }
@@ -219,11 +236,12 @@ export class PhotoUploadActionImpl {
         processingError: '服务器处理已终止',
         phase: 'error',
       })
-      this.#updateEntries(entries =>
-        entries.map(entry => ({
+      this.#updateEntries((entries) =>
+        entries.map((entry) => ({
           ...entry,
           status: entry.status === 'processing' ? 'error' : entry.status,
-        })))
+        })),
+      )
     }
   }
 
@@ -285,11 +303,12 @@ export class PhotoUploadActionImpl {
 
   #handleProcessingEvent = (event: PhotoSyncProgressEvent): void => {
     if (event.type === 'start') {
-      this.#updateEntries(entries =>
-        entries.map(entry => ({
+      this.#updateEntries((entries) =>
+        entries.map((entry) => ({
           ...entry,
           status: entry.status === 'uploading' ? 'processing' : entry.status,
-        })))
+        })),
+      )
       const { summary, totals, options: eventOptions } = event.payload
       this.#set({
         phase: 'processing',
@@ -383,11 +402,12 @@ export class PhotoUploadActionImpl {
           }
         }
         case 'error': {
-          this.#updateEntries(entries =>
-            entries.map(entry => ({
+          this.#updateEntries((entries) =>
+            entries.map((entry) => ({
               ...entry,
               status: entry.status === 'processing' ? 'error' : entry.status,
-            })))
+            })),
+          )
           return {
             phase: 'error',
             processingError: event.payload.message,
@@ -398,13 +418,14 @@ export class PhotoUploadActionImpl {
           }
         }
         case 'complete': {
-          this.#updateEntries(entries =>
-            entries.map(entry => ({
+          this.#updateEntries((entries) =>
+            entries.map((entry) => ({
               ...entry,
               status: entry.status === 'processing' ? 'done' : entry.status,
               progress: 1,
               uploadedBytes: entry.size,
-            })))
+            })),
+          )
           return {
             phase: 'completed',
             processingState: {
@@ -422,8 +443,8 @@ export class PhotoUploadActionImpl {
   }
 
   #handleUploadProgress: NonNullable<PhotoUploadRequestOptions['onUploadProgress']> = (snapshot) => {
-    const progressMap = new Map(snapshot.files.map(file => [file.index, file]))
-    this.#updateEntries(entries =>
+    const progressMap = new Map(snapshot.files.map((file) => [file.index, file]))
+    this.#updateEntries((entries) =>
       entries.map((entry) => {
         const current = progressMap.get(entry.index)
         if (!current) {
@@ -435,7 +456,8 @@ export class PhotoUploadActionImpl {
           progress: current.progress,
           uploadedBytes: current.uploadedBytes,
         }
-      }))
+      }),
+    )
   }
 }
 
