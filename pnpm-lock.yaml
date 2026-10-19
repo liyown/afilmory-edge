@@ -1043,6 +1043,9 @@ importers:
       '@afilmory/task-queue':
         specifier: workspace:*
         version: link:../../packages/task-queue
+      '@afilmory/typing':
+        specifier: workspace:*
+        version: link:../../../packages/typing
       '@afilmory/utils':
         specifier: workspace:*
         version: link:../../../packages/utils

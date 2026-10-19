@@ -1,6 +1,6 @@
-import type { PhotoManifestItem } from '@afilmory/builder'
 import type { ManifestChangePayload } from '@afilmory/db'
 import { photoAssets, tenantManifestChanges, tenantManifestStates } from '@afilmory/db'
+import type { PhotoManifestItem } from '@afilmory/typing'
 import type { AtomicPlan } from '@core/database/atomic'
 import { DbAccessor } from '@core/database/database.provider'
 import type { DrizzleDb } from '@core/database/tokens'

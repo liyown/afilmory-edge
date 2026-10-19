@@ -71,12 +71,6 @@ type UploadAssetsOptions = {
   abortSignal?: AbortSignal
 }
 
-declare module '@tsuki-hono/event-emitter' {
-  interface Events {
-    'photo.manifest.changed': { tenantId: string, revision?: number }
-  }
-}
-
 @injectable()
 export class PhotoAssetService {
   private readonly logger = createLogger('PhotoAssetService')

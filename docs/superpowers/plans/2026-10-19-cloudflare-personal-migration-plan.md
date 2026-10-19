@@ -10,43 +10,44 @@ Target reader: **执行这个计划的 agent**。本文件不按"人日"编排�
 
 ## 执行状态（滚动更新）
 
-| 任务 | 状态 | 证据 |
-| --- | --- | --- |
-| H1 登录 | ✅ | `cf auth whoami` → liuyaowen.smile@gmail.com / account `4104edd6…f902` |
-| H3 域名 | ✅ 临时 | 用 `*.workers.dev`，无需绑定 |
-| T0.1 骨架 | ✅ | `cf init workers apps/edge --no-install`；`cf build` 产出 `.cloudflare/output/v0/.../bundle/index.js`；`cf dev` 后 `curl :5173/health` → `{"ok":true,"worker":"afilmory-edge",...}` |
-| T0.2 装饰器门禁 | ✅ **通过** | `curl :5173/api/spike/decorators` → `{"ok":true,"message":"hello tsyringe!","metadata":["Suffix"]}`。SWC 的 `emitDecoratorMetadata` 在 workerd 生效，§2.1 路线成立 |
-| T0.3 bindings | ✅ **通过** | `curl :5173/api/spike/bindings` → `{"d1":{"ok":1},"r2":{...,"body":"hello-r2"},"kv":{"value":"hello-kv"}}`；`cloudflare.config.ts` 已声明 D1/R2/KV/ASSETS |
-| T1.1 Web 产物 | ✅ | `AFILMORY_EMBED_MANIFEST=false vite build`；`dist/index.html` 含空 `<script id="manifest">` 与默认 `<script id="config">`；dist 32 MB |
-| T1.2 静态托管 | ✅ | `vite.config.ts` 的 `publicDir` 指到 `apps/web/dist`；`cf build` 产出 `.cloudflare/output/v0/workers/default/assets/`（33 个文件）；`cf dev` 下 `/favicon-32x32.png` → `200 image/png` |
-| T1.3 manifest 注入 | ✅ | `HTMLRewriter` 改写 `<script id="manifest">`；seed R2 后 `curl /` 得到 `window.__MANIFEST__ = {"version":"v0","data":[{"id":"spike-photo"...}]}`，响应头 `x-ssr: 1`；`/api/manifest` 走 KV 60s 缓存 |
-| T1.4 照片详情 meta | ✅ | `/photos/spike-photo` 注入 og/twitter（含 `property=` 与 `name=` 两种 twitter 形态的清理）、`<title>`；未知 id 返回 404 |
-| T1.5 OG 渲染 | ✅ | 改用 **workers-og**（自带 workerd 适配的 satori + resvg-wasm，HTML 字符串输入）；`/og/spike-photo` → `200 image/png`、1200×630、82 KB，肉眼核对排版/字体正常。直接引 satori 会在 harfbuzz 初始化时报 `reading 'href'`，已弃用 |
-| **T1.6 首次部署** | ✅ | `https://afilmory-edge.liuyaowen-smile.workers.dev`；startup 32 ms；`/health`、`/`、`/photos/:id`、`/og/:id`、`/api/manifest` 全部线上验证通过 |
-| T2.1 D1 schema | ✅ | 新增 `be/packages/db/src/schema.sqlite.ts`（15 表：含 `tenant_membership`/`system_setting`，因为保留代码仍在用）+ `drizzle.config.sqlite.ts` + `migrations-sqlite/0000_heavy_skin.sql`；`pnpm --filter @afilmory/db type-check` 通过。时间戳用 ISO 文本而非 epoch，避免改动现有 `.toISOString()` 调用点 |
-| T2.2 D1 provider | ✅ | 新增 `database.d1.provider.ts` / `database.d1.module.ts`；edge 构建把 `@core/database/database.{provider,module}` 与 `@afilmory/db` 别名到 D1/SQLite，业务代码零改动。`curl :5173/api/health` → `{"status":"ok",...,"tenant":{"id":"1","slug":"root","status":"active"}}`。`generateId` 改为 Worker 原生雪花（`nodejs-snowflake` 依赖 WASM+`__dirname`，workerd 不可用） |
-| T2.3 事务改写 | ✅ | 个人版路径上的 4 处交互式事务已清除：`ManifestSyncService` 改为「单条 `UPDATE ... RETURNING` 分配 revision + batch 内子查询写入 changes + 剪枝」，photo 删除合并为单个 plan，上传/更新改为「单条 upsert + 幂等 change batch」。`node:sqlite` 回归测试 5/5 通过（含双连接并发 revision 唯一性、重复删除不产生重复行） |
-| T2.4 数据迁移/初始化 | ✅ | 新增 `be/apps/core/scripts/migrate-pg-to-d1.ts`：15 表类型转换 + 外键/自引用排序 + 分批 `INSERT ... ON CONFLICT DO UPDATE` + D1 REST batch + 本地 SQLite 传输 + 行数/抽样对账；无历史时幂等 seed tenant/superadmin/owner/manifest state。6/6 测试通过；真实 PG/D1 联调待凭据 |
-| T2.5 租户 shim | ✅ | `TenantContextResolver` 永远返回 root 行（去掉初始化门禁/host 解析），`OnModuleInit` 启动预热；`ensureRootTenant` 用 `ON CONFLICT DO NOTHING` 并发安全创建 **active** root，并自动激活历史 inactive 行。3 files / 10 tests 通过（任意 host/path、并发、重试、middleware 内 `requireTenantContext()`）；Worker 端到端挂载留待 T3.1 |
-| T3.1 better-auth + D1 | ✅ | Worker 内挂载 `EdgeCoreModule`（Database/InProcessEvent/AppState/Setting/SystemSetting/Tenant/Auth）；drizzle adapter 按 `PERSONAL_DEPLOYMENT` 走 sqlite schema；新增 `isoDateText` 解决 better-auth 传 `Date` 而 D1 只接受原始值；Apple 服务构建期替换为禁用 stub；社交登录/邮件验证关闭。`cf dev` 实测：匿名 `/api/auth/session` → `null`；`POST /api/auth/sign-in/email` → 200 + session cookie；带 cookie 的 session 返回 user/session/memberships；`/api/auth/social/providers` → `[]`；`/api/mobile-auth/apple/configuration` → `enabled:false`；`pnpm -C apps/edge build` 通过 |
-| T3.2 单管理员引导 | ✅ | 新增 `bootstrap:admin`（本地 D1 / 远程 D1 REST）：幂等创建 superadmin + root owner + credential account，密码用 `better-auth/crypto` 的 scrypt 哈希；未给密码时随机生成并只打印一次，重跑不改密码。个人模式 `POST /api/auth/sign-up/email` → 403，同时 better-auth `emailAndPassword.disableSignUp=true` 兜底。本地 D1 实测：`auth_user` 1 行、credential 1 行；注册 403 且未新增用户；登录 + session 正常 |
-| T3.3 dashboard 托管 | ✅ | `apps/edge/scripts/sync-assets.sh` 合并两个 SPA；dashboard 按原生 base 托管在 `/platform/`（`/dashboard/*` → 302），Worker 对 SPA 路由回退到 `/platform/index.html`；`/api/*` 同源转发到 `EdgeCoreModule` 并挂载 `DashboardModule`（overview/analytics 改写为 SQLite）。headless Chrome 实测 `admin@local.test` 登录后进入 `/platform`，概览与空图库页面正常渲染。`/api/photos/assets` 缺口已在 T4.2 关闭；`/api/billing/plan` 仍 404（billing 为个人版非目标） |
-| T4.1 上传意图 | ✅ | 新增 `POST /api/photos/upload-intent`（`aws4fetch` 预签名）+ `PUT /api/photos/upload-content` Worker 代理兜底。本地 `.dev.vars` 用 `R2_*=disabled` 走代理；预签名 URL 结构已用临时凭据核对（host/bucket/key、`X-Amz-Signature`、`X-Amz-Expires=3600`）。**未覆盖**：真实 R2 直传（无凭据）；>100 MB multipart 仅实现未联调 |
-| T4.2 完成回调 + 去重 | ✅ | `POST /api/photos/upload-complete`：multipart 合并 → HEAD 校验 → 唯一键幂等插入 `photo_asset`；重复调用返回同一 asset。`GET /api/photos/assets` / `assets/summary` 改为 D1 实现，dashboard 图库显示真实行 |
-| T4.3 元数据提取 | ✅ | `ExifMetadataService` 对 R2 做 256 KB range 读 + `exifr`（tiff/exif/gps/xmp/iptc），映射相机/曝光/GPS/关键词；客户端宽高与 thumbhash 优先。合成 FUJIFILM X-T5 JPEG 上传后 manifest `exif.Make/Model/Software` 正确，相机集合自动生成。**未覆盖**：真实 iPhone HEIC / GPS 照片与 exiftool 的逐字段对比（仓库样例图均无 EXIF） |
-| T4.4 缩略图 URL | ✅（含降级） | `R2UploadService.thumbnailUrl()`：`R2_PUBLIC_BASE_URL` 为绝对地址时生成 `/cdn-cgi/image/width=1024,format=auto,quality=80/...`；保持 `/media` 相对地址时回退原图，避免 workers.dev 无 Image Resizing 时裂图 |
-| T4.5 manifest 增量更新 | ✅ | `ManifestPublisher` 在完成上传/删除/改标签后全量重建 manifest（`data` + `cameras`/`lenses`）写入 R2 `manifest.json`，删除 KV `manifest:cache`，资产标记 `synced`。实测上传后同请求内 `/api/manifest` 出现新照片，画廊首页 `<img>` 指向 `/media/photos/1/...`，无控制台/HTTP 错误 |
-| T4.6 Live Photo | ✅ | dashboard 按文件名 base 配对 `HEIC/JPEG + MOV`：MOV 作为伴随对象上传但不单独建 asset；完整回调带 `videoKey`，manifest 写入 `{ type:'live-photo', videoUrl, s3Key }`；删除照片时连同配对视频一起删 R2 对象。UI 实测一次 complete 携带 `videoKey`，`/media` 视频 200，删除后照片与视频均 404。**未覆盖**：真实 Live Photo 播放（测试用 MOV 为合成字节） |
-| T5.1 评论 / 反应 | ✅ | Worker 模块图挂载 `CommentModule` + `ReactionModule`，评论/评论表情/照片反应全部读写 D1。`CommentService` 的作者网站回退去掉自定义域名 join（个人版无域名功能），保留 `https://<slug>.<baseDomain>`。Worker shell 注入 `useCloud: true`，画廊评论区默认显示。headless Chrome：发评论 → 刷新仍在；点赞 0→1 → 刷新仍为 1；`/api/reactions/add` count=3 → 查询返回 `{ applause: 3 }`；无 HTTP/页面错误 |
-| T0.4 裁剪 core | 🚧 模块图完成 | `personal.module.ts` 修正 import 路径、补齐全局 middleware/guard/interceptor；新增 `InProcessEventModule`（§2.6，去掉事件对 Redis 的依赖）。已删除 `activity`、`super-admin`、`featured-galleries`、`gallery-subscriptions`、`mobile`、`user-safety`、`account-deletion`、`static-web`、`mail`、`index.module.ts`；`app.factory` / `openapi` 已切到 `PersonalModule`；`tsc --noEmit` 通过。**仍待**：billing/managed-storage/push/data-sync 与 photo/system-setting 解耦（与 T4 上传重写重叠），以及 billing 本身删除 |
+| 任务                             | 状态          | 证据                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| H1 登录                          | ✅            | `cf auth whoami` → liuyaowen.smile@gmail.com / account `4104edd6…f902`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| H3 域名                          | ✅ 临时       | 用 `*.workers.dev`，无需绑定                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| T0.1 骨架                        | ✅            | `cf init workers apps/edge --no-install`；`cf build` 产出 `.cloudflare/output/v0/.../bundle/index.js`；`cf dev` 后 `curl :5173/health` → `{"ok":true,"worker":"afilmory-edge",...}`                                                                                                                                                                                                                                                                                                                                                                                                   |
+| T0.2 装饰器门禁                  | ✅ **通过**   | `curl :5173/api/spike/decorators` → `{"ok":true,"message":"hello tsyringe!","metadata":["Suffix"]}`。SWC 的 `emitDecoratorMetadata` 在 workerd 生效，§2.1 路线成立                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| T0.3 bindings                    | ✅ **通过**   | `curl :5173/api/spike/bindings` → `{"d1":{"ok":1},"r2":{...,"body":"hello-r2"},"kv":{"value":"hello-kv"}}`；`cloudflare.config.ts` 已声明 D1/R2/KV/ASSETS                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| T1.1 Web 产物                    | ✅            | `AFILMORY_EMBED_MANIFEST=false vite build`；`dist/index.html` 含空 `<script id="manifest">` 与默认 `<script id="config">`；dist 32 MB                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| T1.2 静态托管                    | ✅            | `vite.config.ts` 的 `publicDir` 指到 `apps/web/dist`；`cf build` 产出 `.cloudflare/output/v0/workers/default/assets/`（33 个文件）；`cf dev` 下 `/favicon-32x32.png` → `200 image/png`                                                                                                                                                                                                                                                                                                                                                                                                |
+| T1.3 manifest 注入               | ✅            | `HTMLRewriter` 改写 `<script id="manifest">`；seed R2 后 `curl /` 得到 `window.__MANIFEST__ = {"version":"v0","data":[{"id":"spike-photo"...}]}`，响应头 `x-ssr: 1`；`/api/manifest` 走 KV 60s 缓存                                                                                                                                                                                                                                                                                                                                                                                   |
+| T1.4 照片详情 meta               | ✅            | `/photos/spike-photo` 注入 og/twitter（含 `property=` 与 `name=` 两种 twitter 形态的清理）、`<title>`；未知 id 返回 404                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| T1.5 OG 渲染                     | ✅            | 改用 **workers-og**（自带 workerd 适配的 satori + resvg-wasm，HTML 字符串输入）；`/og/spike-photo` → `200 image/png`、1200×630、82 KB，肉眼核对排版/字体正常。直接引 satori 会在 harfbuzz 初始化时报 `reading 'href'`，已弃用                                                                                                                                                                                                                                                                                                                                                         |
+| **T1.6 首次部署**                | ✅            | `https://afilmory-edge.liuyaowen-smile.workers.dev`；startup 32 ms；`/health`、`/`、`/photos/:id`、`/og/:id`、`/api/manifest` 全部线上验证通过                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| T2.1 D1 schema                   | ✅            | 新增 `be/packages/db/src/schema.sqlite.ts`（15 表：含 `tenant_membership`/`system_setting`，因为保留代码仍在用）+ `drizzle.config.sqlite.ts` + `migrations-sqlite/0000_heavy_skin.sql`；`pnpm --filter @afilmory/db type-check` 通过。时间戳用 ISO 文本而非 epoch，避免改动现有 `.toISOString()` 调用点                                                                                                                                                                                                                                                                               |
+| T2.2 D1 provider                 | ✅            | 新增 `database.d1.provider.ts` / `database.d1.module.ts`；edge 构建把 `@core/database/database.{provider,module}` 与 `@afilmory/db` 别名到 D1/SQLite，业务代码零改动。`curl :5173/api/health` → `{"status":"ok",...,"tenant":{"id":"1","slug":"root","status":"active"}}`。`generateId` 改为 Worker 原生雪花（`nodejs-snowflake` 依赖 WASM+`__dirname`，workerd 不可用）                                                                                                                                                                                                              |
+| T2.3 事务改写                    | ✅            | 个人版路径上的 4 处交互式事务已清除：`ManifestSyncService` 改为「单条 `UPDATE ... RETURNING` 分配 revision + batch 内子查询写入 changes + 剪枝」，photo 删除合并为单个 plan，上传/更新改为「单条 upsert + 幂等 change batch」。`node:sqlite` 回归测试 5/5 通过（含双连接并发 revision 唯一性、重复删除不产生重复行）                                                                                                                                                                                                                                                                  |
+| T2.4 数据迁移/初始化             | ✅            | 新增 `be/apps/core/scripts/migrate-pg-to-d1.ts`：15 表类型转换 + 外键/自引用排序 + 分批 `INSERT ... ON CONFLICT DO UPDATE` + D1 REST batch + 本地 SQLite 传输 + 行数/抽样对账；无历史时幂等 seed tenant/superadmin/owner/manifest state。6/6 测试通过；真实 PG/D1 联调待凭据                                                                                                                                                                                                                                                                                                          |
+| T2.5 租户 shim                   | ✅            | `TenantContextResolver` 永远返回 root 行（去掉初始化门禁/host 解析），`OnModuleInit` 启动预热；`ensureRootTenant` 用 `ON CONFLICT DO NOTHING` 并发安全创建 **active** root，并自动激活历史 inactive 行。3 files / 10 tests 通过（任意 host/path、并发、重试、middleware 内 `requireTenantContext()`）；Worker 端到端挂载留待 T3.1                                                                                                                                                                                                                                                     |
+| T3.1 better-auth + D1            | ✅            | Worker 内挂载 `EdgeCoreModule`（Database/InProcessEvent/AppState/Setting/SystemSetting/Tenant/Auth）；drizzle adapter 按 `PERSONAL_DEPLOYMENT` 走 sqlite schema；新增 `isoDateText` 解决 better-auth 传 `Date` 而 D1 只接受原始值；Apple 服务构建期替换为禁用 stub；社交登录/邮件验证关闭。`cf dev` 实测：匿名 `/api/auth/session` → `null`；`POST /api/auth/sign-in/email` → 200 + session cookie；带 cookie 的 session 返回 user/session/memberships；`/api/auth/social/providers` → `[]`；`/api/mobile-auth/apple/configuration` → `enabled:false`；`pnpm -C apps/edge build` 通过 |
+| T3.2 单管理员引导                | ✅            | 新增 `bootstrap:admin`（本地 D1 / 远程 D1 REST）：幂等创建 superadmin + root owner + credential account，密码用 `better-auth/crypto` 的 scrypt 哈希；未给密码时随机生成并只打印一次，重跑不改密码。个人模式 `POST /api/auth/sign-up/email` → 403，同时 better-auth `emailAndPassword.disableSignUp=true` 兜底。本地 D1 实测：`auth_user` 1 行、credential 1 行；注册 403 且未新增用户；登录 + session 正常                                                                                                                                                                            |
+| T3.3 dashboard 托管              | ✅            | `apps/edge/scripts/sync-assets.sh` 合并两个 SPA；dashboard 按原生 base 托管在 `/platform/`（`/dashboard/*` → 302），Worker 对 SPA 路由回退到 `/platform/index.html`；`/api/*` 同源转发到 `EdgeCoreModule` 并挂载 `DashboardModule`（overview/analytics 改写为 SQLite）。headless Chrome 实测 `admin@local.test` 登录后进入 `/platform`，概览与空图库页面正常渲染。`/api/photos/assets` 缺口已在 T4.2 关闭；`/api/billing/plan` 仍 404（billing 为个人版非目标）                                                                                                                       |
+| T4.1 上传意图                    | ✅            | 新增 `POST /api/photos/upload-intent`（`aws4fetch` 预签名）+ `PUT /api/photos/upload-content` Worker 代理兜底。本地 `.dev.vars` 用 `R2_*=disabled` 走代理；预签名 URL 结构已用临时凭据核对（host/bucket/key、`X-Amz-Signature`、`X-Amz-Expires=3600`）。**未覆盖**：真实 R2 直传（无凭据）；>100 MB multipart 仅实现未联调                                                                                                                                                                                                                                                            |
+| T4.2 完成回调 + 去重             | ✅            | `POST /api/photos/upload-complete`：multipart 合并 → HEAD 校验 → 唯一键幂等插入 `photo_asset`；重复调用返回同一 asset。`GET /api/photos/assets` / `assets/summary` 改为 D1 实现，dashboard 图库显示真实行                                                                                                                                                                                                                                                                                                                                                                             |
+| T4.3 元数据提取                  | ✅            | `ExifMetadataService` 对 R2 做 256 KB range 读 + `exifr`（tiff/exif/gps/xmp/iptc），映射相机/曝光/GPS/关键词；客户端宽高与 thumbhash 优先。合成 FUJIFILM X-T5 JPEG 上传后 manifest `exif.Make/Model/Software` 正确，相机集合自动生成。**未覆盖**：真实 iPhone HEIC / GPS 照片与 exiftool 的逐字段对比（仓库样例图均无 EXIF）                                                                                                                                                                                                                                                          |
+| T4.4 缩略图 URL                  | ✅（含降级）  | `R2UploadService.thumbnailUrl()`：`R2_PUBLIC_BASE_URL` 为绝对地址时生成 `/cdn-cgi/image/width=1024,format=auto,quality=80/...`；保持 `/media` 相对地址时回退原图，避免 workers.dev 无 Image Resizing 时裂图                                                                                                                                                                                                                                                                                                                                                                           |
+| T4.5 manifest 增量更新           | ✅            | `ManifestPublisher` 在完成上传/删除/改标签后全量重建 manifest（`data` + `cameras`/`lenses`）写入 R2 `manifest.json`，删除 KV `manifest:cache`，资产标记 `synced`。实测上传后同请求内 `/api/manifest` 出现新照片，画廊首页 `<img>` 指向 `/media/photos/1/...`，无控制台/HTTP 错误                                                                                                                                                                                                                                                                                                      |
+| T4.6 Live Photo                  | ✅            | dashboard 按文件名 base 配对 `HEIC/JPEG + MOV`：MOV 作为伴随对象上传但不单独建 asset；完整回调带 `videoKey`，manifest 写入 `{ type:'live-photo', videoUrl, s3Key }`；删除照片时连同配对视频一起删 R2 对象。UI 实测一次 complete 携带 `videoKey`，`/media` 视频 200，删除后照片与视频均 404。**未覆盖**：真实 Live Photo 播放（测试用 MOV 为合成字节）                                                                                                                                                                                                                                 |
+| T5.1 评论 / 反应                 | ✅            | Worker 模块图挂载 `CommentModule` + `ReactionModule`，评论/评论表情/照片反应全部读写 D1。`CommentService` 的作者网站回退去掉自定义域名 join（个人版无域名功能），保留 `https://<slug>.<baseDomain>`。Worker shell 注入 `useCloud: true`，画廊评论区默认显示。headless Chrome：发评论 → 刷新仍在；点赞 0→1 → 刷新仍为 1；`/api/reactions/add` count=3 → 查询返回 `{ applause: 3 }`；无 HTTP/页面错误                                                                                                                                                                                   |
+| T5.2 feed / sitemap / well-known | ✅            | `FeedModule` + `WellKnownModule` 挂载进 Worker；`Redis` 缓存换成 KV 版 `CacheService`（`/api/spike/bindings` 确认 KV 可读写）。`/sitemap.xml` 新增动态 controller（原 Vite 构建期静态文件在 edge 构建中不产出）。`/feed.xml`、`/sitemap.xml`、`/.well-known/apple-app-site-association`、`/apple-app-site-association` 返回 200；xmllint 校验通过（feed 2 项、sitemap 3 URL）；feed ETag 二次请求 304；`/`、`/api/health`、`/api/manifest`、评论计数均未回归                                                                                                                          |
+| T0.4 裁剪 core                   | 🚧 模块图完成 | `personal.module.ts` 修正 import 路径、补齐全局 middleware/guard/interceptor；新增 `InProcessEventModule`（§2.6，去掉事件对 Redis 的依赖）。已删除 `activity`、`super-admin`、`featured-galleries`、`gallery-subscriptions`、`mobile`、`user-safety`、`account-deletion`、`static-web`、`mail`、`index.module.ts`；`app.factory` / `openapi` 已切到 `PersonalModule`；`tsc --noEmit` 通过。**仍待**：billing/managed-storage/push/data-sync 与 photo/system-setting 解耦（与 T4 上传重写重叠），以及 billing 本身删除                                                                 |
 
 **线上资源（`cf deploy --provision` 创建）**
 
-| Binding | 资源 | ID |
-| --- | --- | --- |
-| `CACHE` | KV Namespace | `e2c83a08e73246e98f62306bd72e15d9` |
-| `DB` | D1 Database | `afilmory-db` |
-| `PHOTOS` | R2 Bucket | `afilmory-photos` |
+| Binding  | 资源         | ID                                 |
+| -------- | ------------ | ---------------------------------- |
+| `CACHE`  | KV Namespace | `e2c83a08e73246e98f62306bd72e15d9` |
+| `DB`     | D1 Database  | `afilmory-db`                      |
+| `PHOTOS` | R2 Bucket    | `afilmory-photos`                  |
 
 部署命令注意：`pnpm --filter @afilmory/edge deploy` 会命中 pnpm 内置的 `deploy` 子命令并报
 `ERR_PNPM_INVALID_DEPLOY_TARGET`；必须用 **`pnpm -C apps/edge run deploy`**（或 `pnpm run deploy`）。
@@ -103,14 +104,14 @@ pnpm install
 
 ## 1. 平台约束（编码时必须遵守）
 
-| 约束 | 值 | 影响 |
-| --- | --- | --- |
-| Worker 内存 | 128 MB | 禁止在 Worker 里解码大图 |
-| 请求体 | 100 MB（Pro）/ 200 MB（Business） | 上传必须**直传**，不经过 Worker |
-| 静态资源请求 | 免费、无限 | SPA / dashboard / 缩略图优先走 static |
-| CPU | 默认 30 s，可调至 5 min | 仅用于 manifest 组装、OG、EXIF |
-| 静态资源数量 | 100,000 个/版本 | 缩略图不要打进 assets |
-| 兼容日期 | ≥ 2026-08-04 | `nodejs_compat` 默认开启，`process.env` 自动填充 |
+| 约束         | 值                                | 影响                                             |
+| ------------ | --------------------------------- | ------------------------------------------------ |
+| Worker 内存  | 128 MB                            | 禁止在 Worker 里解码大图                         |
+| 请求体       | 100 MB（Pro）/ 200 MB（Business） | 上传必须**直传**，不经过 Worker                  |
+| 静态资源请求 | 免费、无限                        | SPA / dashboard / 缩略图优先走 static            |
+| CPU          | 默认 30 s，可调至 5 min           | 仅用于 manifest 组装、OG、EXIF                   |
+| 静态资源数量 | 100,000 个/版本                   | 缩略图不要打进 assets                            |
+| 兼容日期     | ≥ 2026-08-04                      | `nodejs_compat` 默认开启，`process.env` 自动填充 |
 
 ---
 
@@ -131,12 +132,12 @@ FeedModule, OgModule, HealthModule, WellKnownModule, AuthModule, DashboardModule
 
 **删除清单（T0.4 执行）**
 
-| 类别 | 删除对象 |
-| --- | --- |
-| 模块 | `platform/billing/**`、`platform/super-admin/**`、`platform/tenant/tenant-domain.*`、`platform/managed-storage/**`、`platform/gallery-subscriptions/**`、`platform/user-safety/**`、`platform/account-deletion/**`、`platform/featured-galleries/**`、`platform/activity/**`、`platform/mobile/mobile-storage-handoff*`、`platform/push-notifications/**`（除非要推送）、`infrastructure/static-web/**`、`infrastructure/data-sync/**` |
-| 表 | `tenant_domain`、`tenant_membership`、`gallery_subscription`、`apns_device`、`apple_authorization`、`account_deletion_request`、`billing_*`(7)、`managed_storage_*`(2)、`content_report`、`user_block`、`super_admin_audit_log`、`tenant_cleanup_*`(2)、`platform_activity_event`、`mobile_storage_handoff`、`system_setting` |
-| 依赖 | `ioredis`、`@afilmory/task-queue`、`@afilmory/redis`、`@resvg/resvg-js`、`pg-native`、`busboy`、`ejs`(若模板被替换)、`@apple/app-store-server-library`、`@creem_io/better-auth`、`resend`(若无邮件) |
-| Dashboard | **保留整个 `be/apps/dashboard` 应用**（上传、照片库、设置、统计都在这里），只删其中的 `super-admin/**`、`billing/**`、`managed-storage/**` 页面 |
+| 类别      | 删除对象                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 模块      | `platform/billing/**`、`platform/super-admin/**`、`platform/tenant/tenant-domain.*`、`platform/managed-storage/**`、`platform/gallery-subscriptions/**`、`platform/user-safety/**`、`platform/account-deletion/**`、`platform/featured-galleries/**`、`platform/activity/**`、`platform/mobile/mobile-storage-handoff*`、`platform/push-notifications/**`（除非要推送）、`infrastructure/static-web/**`、`infrastructure/data-sync/**` |
+| 表        | `tenant_domain`、`tenant_membership`、`gallery_subscription`、`apns_device`、`apple_authorization`、`account_deletion_request`、`billing_*`(7)、`managed_storage_*`(2)、`content_report`、`user_block`、`super_admin_audit_log`、`tenant_cleanup_*`(2)、`platform_activity_event`、`mobile_storage_handoff`、`system_setting`                                                                                                          |
+| 依赖      | `ioredis`、`@afilmory/task-queue`、`@afilmory/redis`、`@resvg/resvg-js`、`pg-native`、`busboy`、`ejs`(若模板被替换)、`@apple/app-store-server-library`、`@creem_io/better-auth`、`resend`(若无邮件)                                                                                                                                                                                                                                    |
+| Dashboard | **保留整个 `be/apps/dashboard` 应用**（上传、照片库、设置、统计都在这里），只删其中的 `super-admin/**`、`billing/**`、`managed-storage/**` 页面                                                                                                                                                                                                                                                                                        |
 
 删除后 `be/apps/core/src` 预计从 343 个文件降到 ~120。表从 37 张降到 10 张（见 §2.3）。
 
@@ -146,52 +147,58 @@ FeedModule, OgModule, HealthModule, WellKnownModule, AuthModule, DashboardModule
 删掉它属于纯机械重构、收益为零、风险很高；保留单行 tenant 是唯一合理的「零改动」做法。
 
 ### 2.2 单租户用 shim，不改业务代码
+
 `requireTenantContext()` 被大量服务调用，**保留 tenant 概念**：数据库里固定一行 tenant，
 `TenantResolverInterceptor` 在个人版里改为「永远解析到该行」。这样 photo/comment/reaction 一行不用改。
 
 ### 2.3 数据库：D1，单库
+
 保留 11 张表：`tenant`、`auth_user`、`auth_session`、`auth_account`、`auth_verification`、
 `settings`、`photo_asset`、`tenant_manifest_state`、`tenant_manifest_change`、`photo_sync_run`、
 `comment`（+ `comment_reaction`、`reactions` 若保留互动）。
 单库、不分片；10 GB 对个人画廊足够。
 
 ### 2.4 上传：直传 + 元数据
+
 浏览器/App 拿预签名 URL 直接 PUT 到 R2（>100 MB 用 multipart）；Worker 只负责签名、校验、EXIF、manifest。
 **不用 busboy**，不经过 Worker 转发字节。
 
 ### 2.5 缩略图：Cloudflare Images 变换（默认）
+
 原图进 R2，缩略图由 `/cdn-cgi/image/...` 即时生成并缓存。Worker 里只生成 URL，不算图。
 备选（T5.5，默认不做）：wasm 自算。
 
 ### 2.6 去掉 Redis / 任务队列
+
 `EventModule`（SSE 广播）改为进程内事件总线；`setInterval` 改 Cron；队列暂不需要（个人场景同步处理即可）。
 
 ### 2.7 新应用：`apps/edge`
+
 替换 `apps/ssr`（Next 不再使用）。`apps/edge` = Hono Worker + `cloudflare.config.ts` + Vite 构建。
 
 **线上资源（`cf deploy --provision` 创建）**
 
-| Binding | 资源 | ID |
-| --- | --- | --- |
-| `CACHE` | KV Namespace | `e2c83a08e73246e98f62306bd72e15d9` |
-| `DB` | D1 Database | `afilmory-db` |
-| `PHOTOS` | R2 Bucket | `afilmory-photos` |
+| Binding  | 资源         | ID                                 |
+| -------- | ------------ | ---------------------------------- |
+| `CACHE`  | KV Namespace | `e2c83a08e73246e98f62306bd72e15d9` |
+| `DB`     | D1 Database  | `afilmory-db`                      |
+| `PHOTOS` | R2 Bucket    | `afilmory-photos`                  |
 
 部署命令注意：`pnpm --filter @afilmory/edge deploy` 会命中 pnpm 内置的 `deploy` 子命令并报
 `ERR_PNPM_INVALID_DEPLOY_TARGET`；必须用 **`pnpm -C apps/edge run deploy`**（或 `pnpm run deploy`）。
 
 **工具链是新的 `cf` CLI（v1.0.0-beta.18），不是 wrangler。** 命令对照：
 
-| 用途 | 命令 |
-| --- | --- |
-| 脚手架 | `cf init workers <dir>` |
-| 本地开发（本地模拟资源） | `cf dev` / `cf dev --local --persist-to ~/.config/cloudflare/state` |
-| 构建 | `cf build`（产物是 Build Output Specification） |
-| 部署 | `cf deploy`（`--provision` 会自动创建缺失的绑定资源，`--dry-run` 只构建校验） |
-| D1 | `cf d1 create|list|query|migrations` |
-| R2 | `cf r2 buckets|objects` |
-| KV | `cf kv namespaces|keys` |
-| 认证 | `cf auth login|whoami`（已登录：liuyaowen.smile@gmail.com） |
+| 用途                     | 命令                                                                          |
+| ------------------------ | ----------------------------------------------------------------------------- |
+| 脚手架                   | `cf init workers <dir>`                                                       |
+| 本地开发（本地模拟资源） | `cf dev` / `cf dev --local --persist-to ~/.config/cloudflare/state`           |
+| 构建                     | `cf build`（产物是 Build Output Specification）                               |
+| 部署                     | `cf deploy`（`--provision` 会自动创建缺失的绑定资源，`--dry-run` 只构建校验） |
+| D1                       | `cf d1 create                                                                 | list                                         | query | migrations` |
+| R2                       | `cf r2 buckets                                                                | objects`                                     |
+| KV                       | `cf kv namespaces                                                             | keys`                                        |
+| 认证                     | `cf auth login                                                                | whoami`（已登录：liuyaowen.smile@gmail.com） |
 
 配置写在 `apps/edge/cloudflare.config.ts`：`defineConfig({ worker: { name, compatibilityDate, entrypoint, env, assets, triggers, limits, observability } })`，绑定用 `bindings.d1({name})` / `bindings.r2({name})` / `bindings.kv({id})` / `bindings.assets()`。
 `apps/ssr` 保留到 T7.4 再删除。
@@ -200,14 +207,14 @@ FeedModule, OgModule, HealthModule, WellKnownModule, AuthModule, DashboardModule
 
 ## 3. 人工解锁项（agent 无法自行完成，先列出来）
 
-| ID | 事项 | 谁做 | 阻塞哪些任务 |
-| --- | --- | --- | --- |
-| H1 | ~~Cloudflare 登录~~ **已完成**：`cf auth whoami` → liuyaowen.smile@gmail.com | — | — |
-| H2 | R2 bucket / D1 / KV 的创建（可用 `cf deploy --provision` 自动创建，或人手动建） | 人确认命名 | T0.3 之后 |
-| H3 | 域名：先用 `*.workers.dev` 临时域名，无需操作 | — | 不阻塞 |
-| H4 | 决定缩略图路线（默认 Images） | 人 | T5.x |
-| H5 | 迁移现有数据（是否已有线上 PG 数据要搬） | 人 | T2.5 |
-| H6 | APNs 证书/Key（仅当要保留推送） | 人 | T8 |
+| ID  | 事项                                                                            | 谁做       | 阻塞哪些任务 |
+| --- | ------------------------------------------------------------------------------- | ---------- | ------------ |
+| H1  | ~~Cloudflare 登录~~ **已完成**：`cf auth whoami` → liuyaowen.smile@gmail.com    | —          | —            |
+| H2  | R2 bucket / D1 / KV 的创建（可用 `cf deploy --provision` 自动创建，或人手动建） | 人确认命名 | T0.3 之后    |
+| H3  | 域名：先用 `*.workers.dev` 临时域名，无需操作                                   | —          | 不阻塞       |
+| H4  | 决定缩略图路线（默认 Images）                                                   | 人         | T5.x         |
+| H5  | 迁移现有数据（是否已有线上 PG 数据要搬）                                        | 人         | T2.5         |
+| H6  | APNs 证书/Key（仅当要保留推送）                                                 | 人         | T8           |
 
 > **当前状态：H1/H3 已解锁。** Agent 用 `cf dev`（本地模拟）+ `cf build --dry-run` 即可推进全部开发，
 > 只有 `cf deploy` 会改动线上资源；首次部署前用 `cf deploy --dry-run` 确认产物。
@@ -231,6 +238,7 @@ T1.6 + T2.5 + T3.3 ────────────────────�
 ```
 
 **可并行轨道**（agent 应在一条轨道等待构建/部署时推进另一条）：
+
 - 轨道 A（前端/边缘）：T1.x
 - 轨道 B（数据）：T2.x
 - 轨道 C（认证/后台）：T3.x
@@ -246,18 +254,21 @@ T1.6 + T2.5 + T3.3 ────────────────────�
 ### Phase 0 — 骨架与可行性门禁
 
 **T0.1 创建 `apps/edge` 骨架**
+
 - 状态：**已完成**（`cf init workers apps/edge --no-install`；`cloudflare.config.ts` 指向 `afilmory-edge`；
   根脚本 `dev:edge` / `build:edge` / `deploy:edge` 已加）。
 - 验收：`cf dev` 后 `curl localhost:<port>/health` 返回 `{ok:true}`。
 - 回退：无（新增目录）。
 
 **T0.2 装饰器构建链 spike（门禁）**
+
 - 动作：在 `apps/edge` 里 import 一个最小 tsyringe 类（@injectable + constructor 注入），用 Vite+SWC 打包，
   `cf dev` 里 resolve 成功并返回字段。
 - 验收：worker 内 `container.resolve(Foo)` 输出注入值；`cf deploy --dry-run` 报告 bundle 大小，`cf workers check` 报告 startup 时间。
 - 失败处理：若 `emitDecoratorMetadata` 丢失 → 改用显式 `@inject(TOKEN)`（记录到 §7）。**这是唯一可能推翻 §2.1 的门禁。**
 
 **T0.3 Binding 清单与本地环境**
+
 - 动作：`cloudflare.config.ts` 的 `env` 写入 `ASSETS: bindings.assets()`、`DB: bindings.d1({name:'afilmory-db'})`、
   `PHOTOS: bindings.r2({name:'afilmory-photos'})`、`CACHE: bindings.kv({})`；`.dev.vars.example`；`drizzle.config.ts`（d1-http）。
 - 验收：`cf dev --local` 能读到全部 binding；`cf d1 query <db> --local --command 'select 1'` 成功。
@@ -265,31 +276,37 @@ T1.6 + T2.5 + T3.3 ────────────────────�
 ### Phase 1 — 只读画廊上线（可独立交付）
 
 **T1.1 Web 构建产物**
+
 - 动作：`pnpm --filter @afilmory/web build`（`AFILMORY_EMBED_MANIFEST=false`）；确认 `dist/index.html` 含
   `<script id="manifest">` 与 `<script id="config">` 空标签。
 - 验收：`ls apps/web/dist/index.html` 且 grep 到两个占位标签。
 
 **T1.2 静态托管 + SPA 回退**
+
 - 动作：`assets.directory = ../web/dist`，`not_found_handling = single-page-application`，
   `run_worker_first = ["/", "/photos/*", "/og/*", "/share/*", "/api/*"]`。
 - 验收：`curl /`、`/photos/xxx`（不存在时回落 index.html）、`/assets/*.js` 命中静态资源。
 
 **T1.3 manifest / config 注入**
+
 - 动作：manifest 存 R2（`manifest.json`），KV 缓存 60 s；`HTMLRewriter` 替换两个 script 内容；
   注入 `X-SSR: 1` 头。dev 模式回落到本地文件。
 - 验收：`curl / | grep __MANIFEST__` 有数据；改 R2 object 后 ≤60 s 生效。
 
 **T1.4 照片详情 meta**
+
 - 动作：`/photos/:photoId` 读 manifest → 注入 title / og:* / twitter:*；不存在返回 404 + 原 shell。
 - 验收：`curl /photos/<真实id> | grep og:image` 指向 `/og/<id>`。
 
 **T1.5 OG 渲染**
+
 - 动作：satori → SVG → `@resvg/resvg-wasm` → PNG(1200×630)；字体（Geist + PingFang 子集）放 R2，
   首次加载后 `caches.default` 缓存；`Cache-Control: public, max-age=86400`。
 - 验收：`curl -o og.png /og/<id>` 得到 PNG；`file og.png` 显示 1200x630；连续 10 次请求内存无增长。
 - 风险：中文字体导致内存超限 → 用字体子集（只保留常用字）并记录体积。
 
 **T1.6 部署脚本 + 首次上线**
+
 - 动作：`scripts/deploy-edge.sh`：build web → 上传 manifest/字体到 R2 → `cf deploy --provision`。
 - 验收：`https://afilmory-edge.<subdomain>.workers.dev` 可访问画廊；OG 链接在社交预览里正确。
 - 依赖：H2（首次 `--provision` 会自动建资源）。
@@ -297,12 +314,14 @@ T1.6 + T2.5 + T3.3 ────────────────────�
 ### Phase 2 — 数据层（D1）
 
 **T2.1 D1 schema 子集**
+
 - 动作：新建 `be/packages/db/src/schema.sqlite.ts`（11 张表，§2.3）；`drizzle.config.sqlite.ts`；
   生成 `migrations-sqlite/0000_*.sql`。转换规则：enum→TEXT、jsonb→TEXT(json)、timestamp→INTEGER(epoch)、
   boolean→INTEGER、`defaultNow()`→`(unixepoch())`。
 - 验收：`cf d1 migrations apply <db> --local` 成功；`cf d1 query <db> --local --command "select name from sqlite_master where type='table'"` 表数与 §2.3 一致。
 
 **T2.2 D1 provider**
+
 - 状态：**已完成（2026-10-19）**。
 - 实现：
   - `be/apps/core/src/database/database.d1.provider.ts`：导出与 Node 版同名的
@@ -337,6 +356,7 @@ T1.6 + T2.5 + T3.3 ────────────────────�
 - 回退：Node 构建仍使用 `database.provider.ts`（PG），alias 只作用于 `apps/edge`。
 
 **T2.3 事务改写**
+
 - 状态：**已完成（2026-10-19）**。
 - 动作：扫描个人版路径上的 `.transaction(`，实际命中 4 处（计划里预估的 comment/reaction 已不再使用事务）：
   `ManifestSyncService.recordDrafts`、`PhotoAssetService.deleteAssets`、
@@ -352,13 +372,13 @@ T1.6 + T2.5 + T3.3 ────────────────────�
     3. N 条 `insert tenant_manifest_change`，revision 用
        `(select revision from tenant_manifest_state where tenant_id = ?) - 偏移`
     4. `delete ... where revision <= 当前 revision - 10000`
-    以上语句在同一个 PG 事务或同一个 D1 batch 内执行；并发写入靠 `UPDATE` 行锁/串行化，
-    不再需要显式 `for update`。
+       以上语句在同一个 PG 事务或同一个 D1 batch 内执行；并发写入靠 `UPDATE` 行锁/串行化，
+       不再需要显式 `for update`。
   - `PhotoAssetService.deleteAssets` 把 `delete photo_asset` 与 draft plan 合并成一个 atomic plan。
   - 上传与标签更新需要读取 upsert/update 返回的行来生成 change payload，而 D1 的 batch 不能
     中途读结果，因此拆成「单条 `INSERT ... ON CONFLICT DO UPDATE RETURNING` / `UPDATE RETURNING`」
-    + `recordDrafts()` 幂等批次。刻意接受两步之间极小窗口的最终一致（变更可重放/幂等），
-    没有引入 Durable Object。
+    - `recordDrafts()` 幂等批次。刻意接受两步之间极小窗口的最终一致（变更可重放/幂等），
+      没有引入 Durable Object。
   - 回归测试：
     - `manifest-sync.service.spec.ts`：连续调用 revision 连续（1,2 → 3）；两个数据库连接并发写入
       revision 仍为 `[1,2]` 无重复；超过保留窗口的旧 change 被剪枝。
@@ -378,6 +398,7 @@ T1.6 + T2.5 + T3.3 ────────────────────�
 - 回退：若某处 batch 语义不成立，可把该调用单独切回 `for update` + 串行化，不影响其他路径。
 
 **T2.4 数据迁移/初始化脚本**
+
 - 状态：**已完成（2026-10-19，真实 PG/D1 联调留待凭据就绪）**。
 - 动作：新增 `be/apps/core/scripts/migrate-pg-to-d1.ts`（根脚本 `pnpm migrate:pg-to-d1`）：
   读 PG（Hyperdrive 连接串或普通 `DATABASE_URL`）→ 转换 → 分批 `batch()` 写 D1；
@@ -416,6 +437,7 @@ T1.6 + T2.5 + T3.3 ────────────────────�
     对账会报告 count mismatch，需要人工清理。
 
 **T2.5 租户 shim**
+
 - 状态：**已完成（2026-10-19，模块级验证；Worker 挂载属于 T3.1）**。
 - 实现：
   - `TenantContextResolver` 去掉 `AppStateService` 初始化门禁与租户域名/host 解析：
@@ -444,6 +466,7 @@ T1.6 + T2.5 + T3.3 ────────────────────�
 ### Phase 3 — 认证与后台
 
 **T3.1 better-auth + D1**
+
 - 状态：**已完成（2026-10-19）**。
 - 实现：
   - 新增 `apps/edge/src/core-app.ts`：`EdgeCoreModule` 只挂载认证所需模块
@@ -491,6 +514,7 @@ T1.6 + T2.5 + T3.3 ────────────────────�
   - `EdgeCoreModule` 只包含认证切片；settings/photo/feed 等模块待后续任务接入。
 
 **T3.2 单管理员引导**
+
 - 状态：**已完成（2026-10-19）**。
 - 实现：
   - 新增 `be/apps/core/scripts/bootstrap-admin.ts` + `bootstrap:admin` 脚本：
@@ -520,6 +544,7 @@ T1.6 + T2.5 + T3.3 ────────────────────�
   - core/edge `tsc --noEmit`、eslint、`pnpm -C apps/edge build` → 通过。
 
 **T3.3 dashboard 托管（与画廊同一个 Worker，不单独部署）**
+
 - 状态：**已完成（2026-10-19）**。
 - 实现：
   - 新增 `apps/edge/scripts/sync-assets.sh`：清空并按顺序复制 `apps/web/dist`（Worker 根）与
@@ -557,6 +582,7 @@ T1.6 + T2.5 + T3.3 ────────────────────�
 ### Phase 4 — 上传（核心，功能对等）
 
 **T4.1 上传意图接口**
+
 - 动作：`POST /api/photos/upload-intent`，body: `{ filename, size, contentType, directory? }`。
   返回 `{ mode: 'single'|'multipart'|'proxy', url|uploadId+parts, key, headers }`。R2 用 `aws4fetch` 签名。
 - 验收：`curl` 拿到预签名 URL；用 `curl -X PUT --data-binary @photo.jpg <url>` 成功写入 R2。
@@ -570,6 +596,7 @@ T1.6 + T2.5 + T3.3 ────────────────────�
   `X-Amz-Signature`、`X-Amz-Expires=3600`。真实 R2 直传待凭据。
 
 **T4.2 完成回调 + 去重**
+
 - 动作：`POST /api/photos/upload-complete`：HEAD 校验对象、取 size/etag、查 `photo_asset` 唯一键去重，
   写 `pending` 记录，返回 assetId。
 - 验收：重复调用返回同一 asset（幂等）；同 key 不产生两行。
@@ -582,6 +609,7 @@ T1.6 + T2.5 + T3.3 ────────────────────�
   图库出现新行。
 
 **T4.3 元数据提取**
+
 - 动作：R2 range 读前 256 KB → `exifr` 解析 EXIF/XMP/GPS；宽高用 `Image` 头解析或由客户端传；
   `thumbhash` 由客户端在 form 字段传入（iOS 已有 `Core/ThumbHash.swift`，Web 用 canvas）。
 - 验收：拿 3 张真实照片（含 iPhone HEIC、单反 JPEG、带 GPS 的）对比 exiftool 输出，字段差异清单写入 PR 描述。
@@ -596,6 +624,7 @@ T1.6 + T2.5 + T3.3 ────────────────────�
   （仓库内样片均已剥除 EXIF），留待有真实照片时补验。
 
 **T4.4 缩略图 URL**
+
 - 动作：生成 `/cdn-cgi/image/width=<w>,format=auto,quality=<q>/<r2-custom-domain>/<key>`；
   manifest 写入 `thumbnailUrl`/`originalUrl`，保持字段名不变。
 - 验收：浏览器打开缩略图返回 WebP/AVIF；HEIC 原图可出图。
@@ -608,6 +637,7 @@ T1.6 + T2.5 + T3.3 ────────────────────�
   （需要已启用 Image Resizing 的线上域名）。
 
 **T4.5 manifest 增量更新**
+
 - 动作：上传完成后更新 `photo_asset` + `tenant_manifest_change` → 重建 manifest（个人量级可全量重建）→
   写 R2 → 失效 KV。保持 `ManifestSyncService.emitChanged` 的对外语义（改为进程内事件）。
 - 验收：上传后 ≤5 s，`/api/manifest` 与画廊首页出现新照片。
@@ -619,6 +649,7 @@ T1.6 + T2.5 + T3.3 ────────────────────�
   headless Chrome 打开 `/` 后 `<img>` 指向 `/media/photos/1/...`，无 HTTP/页面错误。
 
 **T4.6 Live Photo 配对**
+
 - 动作：同 base name 的 HEIC + MOV 作为一组写入；manifest 字段与现在一致。
 - 验收：上传一组 Live Photo，详情页能播放视频。
 - 实现（2026-10-19）：`uploadPhotoAssets` 先按小写 base name 建立图片索引，再把 MOV 分成两类：
@@ -634,6 +665,7 @@ T1.6 + T2.5 + T3.3 ────────────────────�
 ### Phase 5 — 保留的互动与输出
 
 **T5.1 评论 / 反应**：保留现有 controller/service，跑在 D1 上；验收：发评论 → 刷新可见；反应计数正确。
+
 - 实现（2026-10-19）：`EdgeCoreModule` 导入 `CommentModule` / `ReactionModule`，复用原有
   controller/service（`/api/comments`、`/api/comments/count`、`/api/comments/:id/reactions`、
   `/api/reactions/add|stats`）。数据落在 `comment`、`comment_reaction`、`reactions` 三张 D1 表；
@@ -649,17 +681,39 @@ T1.6 + T2.5 + T3.3 ────────────────────�
   提交评论后立即出现，刷新后仍可见；点赞数 0→1，刷新后仍为 1；控制台与网络无错误。
 - 边界：评论审核钩子仍是 `AllowAllCommentModerationHook`（与原个人配置一致）；未覆盖多用户并发
   评论/表情竞争（D1 唯一索引负责去重）。
-**T5.2 feed / sitemap / well-known**：现有路由原样挂载；验收：`/feed.xml`、`/sitemap.xml` 返回 200 且 XML 合法。
-**T5.3 分享页 / embed**：`/share/iframe`、`/share/embed.js` 用 Worker 渲染（React SSR 或模板字符串）；验收：iframe 可嵌入。
+  **T5.2 feed / sitemap / well-known**：现有路由原样挂载；验收：`/feed.xml`、`/sitemap.xml` 返回 200 且 XML 合法。
+- 实现（2026-10-19）：`EdgeCoreModule` 导入 `FeedModule` / `WellKnownModule`，路由原样复用
+  `FeedController`（`/feed.xml`）与 `WellKnownController`（AASA 两个路径）。`index.ts` 把
+  `/feed.xml`、`/sitemap.xml`、`/.well-known/apple-app-site-association`、
+  `/apple-app-site-association` 转发到 core app，并加入 `runWorkerFirst`，避免被静态资源/SPA
+  回退吞掉。
+- Worker 适配：ioredis 无法在 workerd 运行，`CacheModule`/`CacheService` 通过 vite alias +
+  tsconfig paths 换成 KV 实现（`apps/edge/src/modules/cache`），接口保持不变；`@core/database/tokens`
+  换成 D1 的 `DrizzleDb`；`ManifestModule` 去掉 `PhotoModule` 依赖（否则会拉入
+  billing/managed-storage/push/redis），`manifest-sync` 的 `photo.manifest.changed` 事件声明移到
+  `manifest-sync.types.ts`；manifest/feed 代码改用 `@afilmory/typing` 与 builder 深路径导入，
+  避免把整个 builder barrel（sharp/heic/og-renderer）打进 Worker；`@afilmory/core` 增加
+  `@afilmory/typing` 依赖。
+- sitemap：原实现是 `apps/web/plugins/vite/feed-sitemap.ts` 的构建期静态文件，Worker 的 SPA 构建
+  不产出该文件；改为 `SitemapService` 从 D1 manifest + site settings 动态生成，KV 缓存 300s，
+  与 feed 使用同一套 site URL（未配置时回退请求 origin）。
+- 验证：`pnpm -C apps/edge typecheck`、`be/apps/core` 的 `tsc --noEmit`、`cf build` 均通过。
+  本地 `cf dev`：四个路径全部 200；`xmllint` 校验 feed/sitemap 合法（2 items / 3 URLs）；
+  `If-None-Match` 命中 feed 返回 304；`/api/spike/bindings` 的 KV put/get 正常。
+- 边界：sitemap 仅靠 300s TTL 失效（feed 会监听 `setting.updated` 与 `photo.manifest.changed`
+  主动失效）；未配置 `site.url` 时地址来自请求 origin；AASA 内容为固定 App ID，不含按租户动态配置。
+  **T5.3 分享页 / embed**：`/share/iframe`、`/share/embed.js` 用 Worker 渲染（React SSR 或模板字符串）；验收：iframe 可嵌入。
 
 ### Phase 6 — iOS 兼容
 
 **T6.1 契约核对**
+
 - 动作：对照 `apps/mobile/Afilmory/Core/Networking/APIEndpoint.swift` 逐个端点核对路径/方法/字段；
   产出差异表（缺哪个补哪个）。
 - 验收：`Afilmory Local` 指向新 Worker（本地或 preview）能登录、看 feed、评论。
 
 **T6.2 上传兼容**
+
 - 动作：若 iOS 仍走 multipart → Worker 提供一条 ≤100 MB 的兼容通道；否则改 iOS 走预签名。
 - 验收：真机/模拟器上传 1 张成功并在网页端可见。
 
@@ -688,14 +742,14 @@ T1.6 + T2.5 + T3.3 ────────────────────�
 
 ## 7. 已知风险与回退
 
-| 风险 | 触发条件 | 回退 |
-| --- | --- | --- |
-| 装饰器元数据在 Worker 构建中丢失 | T0.2 失败 | 显式 `@inject(TOKEN)`；或该模块留 Node（不推荐） |
-| D1 无法表达某处事务 | T2.3 | DO 串行化；或该接口降级为「最终一致 + 幂等」 |
-| EXIF 字段缺失 | T4.3 | 保留 `exiftool` 作为一次性离线补数据脚本，不阻塞线上 |
-| 中文字体撑爆 128 MB | T1.5 | 字体子集 + 只缓存渲染结果 |
-| Images 变换不满足画质 | T4.4 | 切 T4.4b（wasm）或容器（最后手段） |
-| 大文件上传失败 | T4.1 | 检查 multipart 分片大小与 R2 限制；保留单文件 PUT 兜底 |
+| 风险                             | 触发条件  | 回退                                                   |
+| -------------------------------- | --------- | ------------------------------------------------------ |
+| 装饰器元数据在 Worker 构建中丢失 | T0.2 失败 | 显式 `@inject(TOKEN)`；或该模块留 Node（不推荐）       |
+| D1 无法表达某处事务              | T2.3      | DO 串行化；或该接口降级为「最终一致 + 幂等」           |
+| EXIF 字段缺失                    | T4.3      | 保留 `exiftool` 作为一次性离线补数据脚本，不阻塞线上   |
+| 中文字体撑爆 128 MB              | T1.5      | 字体子集 + 只缓存渲染结果                              |
+| Images 变换不满足画质            | T4.4      | 切 T4.4b（wasm）或容器（最后手段）                     |
+| 大文件上传失败                   | T4.1      | 检查 multipart 分片大小与 R2 限制；保留单文件 PUT 兜底 |
 
 ---
 

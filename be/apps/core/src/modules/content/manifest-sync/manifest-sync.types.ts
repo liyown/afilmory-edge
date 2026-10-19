@@ -1,5 +1,11 @@
-import type { PhotoManifestItem } from '@afilmory/builder'
 import type { ManifestChangeOperation, ManifestChangePayload } from '@afilmory/db'
+import type { PhotoManifestItem } from '@afilmory/typing'
+
+declare module '@tsuki-hono/event-emitter' {
+  interface Events {
+    'photo.manifest.changed': { tenantId: string, revision?: number }
+  }
+}
 
 export type PhotoChangeAsset = NonNullable<ManifestChangePayload['asset']>
 

@@ -1,7 +1,8 @@
-import type { AfilmoryManifest } from '@afilmory/builder'
-import { CURRENT_MANIFEST_VERSION, migrateManifest } from '@afilmory/builder'
+import { migrateManifest } from '@afilmory/builder/manifest/migrate.js'
 import type { ManifestVersion } from '@afilmory/builder/manifest/version.js'
+import { CURRENT_MANIFEST_VERSION } from '@afilmory/builder/manifest/version.js'
 import type { PhotoAssetManifest } from '@afilmory/db'
+import type { AfilmoryManifest } from '@afilmory/typing'
 
 export type PhotoAssetManifestPayload = PhotoAssetManifest | null
 

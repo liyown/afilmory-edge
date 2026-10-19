@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto'
 
-import type { AfilmoryManifest, CameraInfo, LensInfo, PhotoManifestItem } from '@afilmory/builder'
-import { CURRENT_MANIFEST_VERSION, migrateManifest } from '@afilmory/builder'
+import { migrateManifest } from '@afilmory/builder/manifest/migrate.js'
 import type { ManifestVersion } from '@afilmory/builder/manifest/version.js'
+import { CURRENT_MANIFEST_VERSION } from '@afilmory/builder/manifest/version.js'
 import type { PhotoAssetManifest } from '@afilmory/db'
 import { CURRENT_PHOTO_MANIFEST_VERSION, photoAssets } from '@afilmory/db'
+import type { AfilmoryManifest, CameraInfo, LensInfo, PhotoManifestItem } from '@afilmory/typing'
 import { DbAccessor } from '@core/database/database.provider'
 import { requireTenantContext } from '@core/modules/platform/tenant/tenant.context'
 import { createLogger } from '@tsuki-hono/common'
@@ -75,7 +76,9 @@ export class ManifestService {
 
     if (records.length === 0) {
       return {
-        version: CURRENT_PHOTO_MANIFEST_VERSION,
+        // The SQLite schema widens ManifestVersion to string so the Worker
+        // bundle does not pull the builder package just for a literal type.
+        version: CURRENT_PHOTO_MANIFEST_VERSION as ManifestVersion,
         data: [],
         cameras: [],
         lenses: [],
@@ -280,7 +283,7 @@ export class ManifestService {
         return version as ManifestVersion
       }
     }
-    return CURRENT_PHOTO_MANIFEST_VERSION
+    return CURRENT_PHOTO_MANIFEST_VERSION as ManifestVersion
   }
 
   private ensureCurrentManifestVersion(manifest: AfilmoryManifest): AfilmoryManifest {

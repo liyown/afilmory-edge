@@ -5,10 +5,12 @@ import { Module } from '@tsuki-hono/common'
 import { ManifestModule } from '../manifest/manifest.module'
 import { FeedController } from './feed.controller'
 import { FeedService } from './feed.service'
+import { SitemapController } from './sitemap.controller'
+import { SitemapService } from './sitemap.service'
 
 @Module({
   imports: [CacheModule, SiteSettingModule, ManifestModule],
-  controllers: [FeedController],
-  providers: [FeedService],
+  controllers: [FeedController, SitemapController],
+  providers: [FeedService, SitemapService],
 })
 export class FeedModule {}

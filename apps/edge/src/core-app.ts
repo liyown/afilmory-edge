@@ -14,8 +14,10 @@ import { AppStateModule } from '@core/modules/app/app-state/app-state.module'
 import { SettingModule } from '@core/modules/configuration/setting/setting.module'
 import { SystemSettingModule } from '@core/modules/configuration/system-setting/system-setting.module'
 import { CommentModule } from '@core/modules/content/comment/comment.module'
+import { FeedModule } from '@core/modules/content/feed/feed.module'
 import { ReactionModule } from '@core/modules/content/reaction/reaction.module'
 import { InProcessEventModule } from '@core/modules/infrastructure/event/in-process-event.module'
+import { WellKnownModule } from '@core/modules/infrastructure/well-known/well-known.module'
 import { AuthModule } from '@core/modules/platform/auth/auth.module'
 import { DashboardModule } from '@core/modules/platform/dashboard/dashboard.module'
 import { TenantModule } from '@core/modules/platform/tenant/tenant.module'
@@ -26,8 +28,8 @@ import { createApplication } from '@tsuki-hono/core'
 import { PersonalPhotoModule } from './modules/photos/personal-photo.module'
 
 /**
- * The core graph that runs in the Worker. Feed, share and well-known routes
- * are still mounted in later tasks.
+ * The core graph that runs in the Worker. Share routes are still mounted in a
+ * later task.
  */
 @Module({
   imports: [
@@ -42,6 +44,8 @@ import { PersonalPhotoModule } from './modules/photos/personal-photo.module'
     PersonalPhotoModule,
     CommentModule,
     ReactionModule,
+    FeedModule,
+    WellKnownModule,
   ],
   providers: [
     { provide: APP_MIDDLEWARE, useClass: RequestContextMiddleware },
