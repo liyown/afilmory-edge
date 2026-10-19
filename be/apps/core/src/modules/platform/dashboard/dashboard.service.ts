@@ -35,11 +35,12 @@ export class DashboardService {
       .select({
         totalPhotos: sql<number>`count(*)`,
         totalStorageBytes: sql<number>`coalesce(sum(${photoAssets.size}), 0)`,
-        thisMonthUploads: sql<number>`count(*) filter (where date_trunc('month', ${photoAssets.createdAt}) = date_trunc('month', now()))`,
-        previousMonthUploads: sql<number>`count(*) filter (where date_trunc('month', ${photoAssets.createdAt}) = date_trunc('month', now() - interval '1 month'))`,
-        synced: sql<number>`count(*) filter (where ${photoAssets.syncStatus} = 'synced')`,
-        pending: sql<number>`count(*) filter (where ${photoAssets.syncStatus} = 'pending')`,
-        conflicts: sql<number>`count(*) filter (where ${photoAssets.syncStatus} = 'conflict')`,
+        // D1 is SQLite: timestamps are ISO text, so compare their YYYY-MM prefix.
+        thisMonthUploads: sql<number>`coalesce(sum(case when substr(${photoAssets.createdAt}, 1, 7) = strftime('%Y-%m', 'now') then 1 else 0 end), 0)`,
+        previousMonthUploads: sql<number>`coalesce(sum(case when substr(${photoAssets.createdAt}, 1, 7) = strftime('%Y-%m', 'now', '-1 month') then 1 else 0 end), 0)`,
+        synced: sql<number>`coalesce(sum(case when ${photoAssets.syncStatus} = 'synced' then 1 else 0 end), 0)`,
+        pending: sql<number>`coalesce(sum(case when ${photoAssets.syncStatus} = 'pending' then 1 else 0 end), 0)`,
+        conflicts: sql<number>`coalesce(sum(case when ${photoAssets.syncStatus} = 'conflict' then 1 else 0 end), 0)`,
       })
       .from(photoAssets)
       .where(eq(photoAssets.tenantId, tenant.tenant.id))
@@ -103,29 +104,29 @@ export class DashboardService {
     const tenant = requireTenantContext()
     const db = this.dbAccessor.get()
 
-    const uploadTrendResult = await db.execute<{ month: string | null; uploads: number | null }>(sql`
-      with months as (
-        select generate_series(
-          date_trunc('month', now()) - interval '11 months',
-          date_trunc('month', now()),
-          interval '1 month'
-        ) as month_start
+    const uploadTrendResult = await db.execute<{ month: string | null, uploads: number | null }>(sql`
+      with recursive months(month_start) as (
+        select strftime('%Y-%m', 'now', 'start of month', '-11 months')
+        union all
+        select strftime('%Y-%m', month_start || '-01', '+1 month')
+        from months
+        where month_start < strftime('%Y-%m', 'now', 'start of month')
       )
-      select to_char(months.month_start, 'YYYY-MM') as month,
-             coalesce(upload_counts.uploads, 0)::int as uploads
+      select months.month_start as month,
+             coalesce(upload_counts.uploads, 0) as uploads
       from months
       left join (
-        select date_trunc('month', ${photoAssets.createdAt}) as month_start,
-               count(*)::int as uploads
+        select substr(${photoAssets.createdAt}, 1, 7) as month,
+               count(*) as uploads
         from ${photoAssets}
         where ${photoAssets.tenantId} = ${tenant.tenant.id}
-          and ${photoAssets.createdAt} >= date_trunc('month', now()) - interval '11 months'
-        group by month_start
-      ) as upload_counts on upload_counts.month_start = months.month_start
+          and substr(${photoAssets.createdAt}, 1, 7) >= strftime('%Y-%m', 'now', 'start of month', '-11 months')
+        group by month
+      ) as upload_counts on upload_counts.month = months.month_start
       order by months.month_start
     `)
 
-    const uploadTrends = uploadTrendResult.rows.map((row) => ({
+    const uploadTrends = uploadTrendResult.rows.map(row => ({
       month: row.month ?? '',
       uploads: Number(row.uploads ?? 0),
     }))
@@ -134,8 +135,8 @@ export class DashboardService {
       .select({
         totalBytes: sql<number>`coalesce(sum(${photoAssets.size}), 0)`,
         totalPhotos: sql<number>`count(*)`,
-        currentMonthBytes: sql<number>`coalesce(sum(${photoAssets.size}) filter (where date_trunc('month', ${photoAssets.createdAt}) = date_trunc('month', now())), 0)`,
-        previousMonthBytes: sql<number>`coalesce(sum(${photoAssets.size}) filter (where date_trunc('month', ${photoAssets.createdAt}) = date_trunc('month', now() - interval '1 month')), 0)`,
+        currentMonthBytes: sql<number>`coalesce(sum(case when substr(${photoAssets.createdAt}, 1, 7) = strftime('%Y-%m', 'now') then ${photoAssets.size} else 0 end), 0)`,
+        previousMonthBytes: sql<number>`coalesce(sum(case when substr(${photoAssets.createdAt}, 1, 7) = strftime('%Y-%m', 'now', '-1 month') then ${photoAssets.size} else 0 end), 0)`,
       })
       .from(photoAssets)
       .where(eq(photoAssets.tenantId, tenant.tenant.id))
@@ -151,18 +152,18 @@ export class DashboardService {
       .groupBy(photoAssets.storageProvider)
 
     const providers: DashboardStorageProviderUsage[] = providerUsageRaw
-      .map((entry) => ({
+      .map(entry => ({
         provider: (entry.provider ?? 'unknown').trim() || 'unknown',
         bytes: Number(entry.bytes ?? 0),
         photoCount: Number(entry.photoCount ?? 0),
       }))
       .sort((a, b) => b.bytes - a.bytes)
 
-    const popularTagsResult = await db.execute<{ tag: string | null; count: number | null }>(sql`
-      select tag, count(*)::int as count
+    const popularTagsResult = await db.execute<{ tag: string | null, count: number | null }>(sql`
+      select tag, count(*) as count
       from (
-        select nullif(trim(jsonb_array_elements_text(${photoAssets.manifest}->'data'->'tags')), '') as tag
-        from ${photoAssets}
+        select nullif(trim(tag_value.value), '') as tag
+        from ${photoAssets}, json_each(json_extract(${photoAssets.manifest}, '$.data.tags')) as tag_value
         where ${photoAssets.tenantId} = ${tenant.tenant.id}
       ) as tag_items
       where tag is not null
@@ -182,13 +183,13 @@ export class DashboardService {
           count: Number(row.count ?? 0),
         }
       })
-      .filter((value): value is { tag: string; count: number } => value !== null)
+      .filter((value): value is { tag: string, count: number } => value !== null)
 
-    const topDevicesRaw = await db.execute<{ make: string | null; model: string | null; count: number | null }>(sql`
+    const topDevicesRaw = await db.execute<{ make: string | null, model: string | null, count: number | null }>(sql`
       select
-        nullif(trim(${photoAssets.manifest}::jsonb #>> '{data,exif,Make}'), '') as make,
-        nullif(trim(${photoAssets.manifest}::jsonb #>> '{data,exif,Model}'), '') as model,
-        count(*)::int as count
+        nullif(trim(json_extract(${photoAssets.manifest}, '$.data.exif.Make')), '') as make,
+        nullif(trim(json_extract(${photoAssets.manifest}, '$.data.exif.Model')), '') as model,
+        count(*) as count
       from ${photoAssets}
       where ${photoAssets.tenantId} = ${tenant.tenant.id}
       group by make, model

@@ -15,6 +15,7 @@ import { SettingModule } from '@core/modules/configuration/setting/setting.modul
 import { SystemSettingModule } from '@core/modules/configuration/system-setting/system-setting.module'
 import { InProcessEventModule } from '@core/modules/infrastructure/event/in-process-event.module'
 import { AuthModule } from '@core/modules/platform/auth/auth.module'
+import { DashboardModule } from '@core/modules/platform/dashboard/dashboard.module'
 import { TenantModule } from '@core/modules/platform/tenant/tenant.module'
 import { APP_GUARD, APP_INTERCEPTOR, APP_MIDDLEWARE, createZodValidationPipe, Module } from '@tsuki-hono/common'
 import type { HonoHttpApplication } from '@tsuki-hono/core'
@@ -34,6 +35,7 @@ import { createApplication } from '@tsuki-hono/core'
     SystemSettingModule,
     TenantModule,
     AuthModule,
+    DashboardModule,
   ],
   providers: [
     { provide: APP_MIDDLEWARE, useClass: RequestContextMiddleware },

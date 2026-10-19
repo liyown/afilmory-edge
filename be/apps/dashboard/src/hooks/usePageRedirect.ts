@@ -22,7 +22,6 @@ const {
   NO_ACCESS: NO_ACCESS_PATH,
   DEFAULT_AUTHENTICATED: DEFAULT_AUTHENTICATED_PATH,
   SUPERADMIN_ROOT: SUPERADMIN_ROOT_PATH,
-  SUPERADMIN_DEFAULT: SUPERADMIN_DEFAULT_PATH,
 } = ROUTE_PATHS
 
 type BizErrorPayload = { code?: number | string }
@@ -128,9 +127,7 @@ export function usePageRedirect() {
 
     const { pathname } = location
     const session = sessionQuery.data
-    const isSuperAdmin = session?.user.role === 'superadmin'
     const isOnSuperAdminPage = pathname.startsWith(SUPERADMIN_ROOT_PATH)
-    const isOnRootLoginPage = pathname === ROOT_LOGIN_PATH
     const requestedWorkspace = session?.requestedWorkspace ?? null
     const requestedMembership = session?.requestedMembership ?? null
     const isTenantPending = Boolean(session && requestedWorkspace?.isPlaceholder)
@@ -139,10 +136,11 @@ export function usePageRedirect() {
         && (requestedMembership.role === 'admin' || requestedMembership.role === 'owner')
     const isOnWelcomePage = pathname === WELCOME_PATH
 
-    if (session && isSuperAdmin) {
-      if (!isOnSuperAdminPage || pathname === DEFAULT_LOGIN_PATH || isOnRootLoginPage) {
-        navigate(SUPERADMIN_DEFAULT_PATH, { replace: true })
-      }
+    // Personal deployments have a single owner account, so a superadmin is the
+    // workspace owner and belongs on the regular dashboard rather than the
+    // removed multi-tenant console.
+    if (session && isOnSuperAdminPage) {
+      navigate(DEFAULT_AUTHENTICATED_PATH, { replace: true })
       return
     }
 
@@ -165,11 +163,6 @@ export function usePageRedirect() {
     }
 
     if (session && !isTenantPending && isOnWelcomePage) {
-      navigate(DEFAULT_AUTHENTICATED_PATH, { replace: true })
-      return
-    }
-
-    if (session && !isSuperAdmin && isOnSuperAdminPage) {
       navigate(DEFAULT_AUTHENTICATED_PATH, { replace: true })
       return
     }

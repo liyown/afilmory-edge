@@ -19,7 +19,19 @@ export default defineConfig({
     assets: {
       htmlHandling: 'auto-trailing-slash',
       notFoundHandling: 'single-page-application',
-      runWorkerFirst: ['/', '/health', '/media/*', '/api/*', '/og/*', '/photos/*', '/share/*'],
+      runWorkerFirst: [
+        '/',
+        '/health',
+        '/dashboard',
+        '/dashboard/*',
+        '/media/*',
+        '/api/*',
+        '/og/*',
+        '/photos/*',
+        '/platform',
+        '/platform/*',
+        '/share/*',
+      ],
     },
     observability: {
       enabled: true,

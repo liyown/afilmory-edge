@@ -6,6 +6,23 @@ import { runDecoratorSpike } from './decorator-spike'
 import { loadManifest, serveAppShell, servePhotoShell } from './html'
 import { renderOgImage } from './og'
 
+const DASHBOARD_BASENAME = '/platform'
+const DASHBOARD_ALIAS = '/dashboard'
+const ASSET_EXTENSION_PATTERN = /\.[a-z0-9]+$/i
+
+/**
+ * T3.3: the dashboard is a separate SPA built with `base: '/platform/'`.
+ * Existing files are served verbatim; client-side routes fall back to its
+ * index.html instead of the gallery shell.
+ */
+async function serveDashboardAsset(request: Request): Promise<Response> {
+  const url = new URL(request.url)
+  const target = ASSET_EXTENSION_PATTERN.test(url.pathname)
+    ? url
+    : new URL(`${DASHBOARD_BASENAME}/index.html`, request.url)
+  return await env.ASSETS.fetch(target)
+}
+
 // T0.3: prove every planned binding is reachable from the Worker in local mode.
 async function runBindingSpike() {
   const result: Record<string, unknown> = {}
@@ -73,6 +90,19 @@ export default {
       })
     }
 
+    // T3.3: keep the legacy `/dashboard` path working by pointing it at the
+    // dashboard's native base path.
+    if (url.pathname === DASHBOARD_ALIAS || url.pathname.startsWith(`${DASHBOARD_ALIAS}/`)) {
+      const target = new URL(request.url)
+      const suffix = url.pathname.slice(DASHBOARD_ALIAS.length)
+      target.pathname = suffix ? `${DASHBOARD_BASENAME}${suffix}` : `${DASHBOARD_BASENAME}/`
+      return Response.redirect(target.toString(), 302)
+    }
+
+    if (url.pathname === DASHBOARD_BASENAME || url.pathname.startsWith(`${DASHBOARD_BASENAME}/`)) {
+      return await serveDashboardAsset(request)
+    }
+
     // T0.2 gate: proves tsyringe can resolve constructor injection inside workerd
     // (i.e. SWC emitted design:paramtypes and reflect-metadata survived the bundle).
     if (url.pathname === '/api/spike/decorators') {
@@ -106,6 +136,12 @@ export default {
 
     if (url.pathname === '/api/manifest') {
       return Response.json(await loadManifest(env))
+    }
+
+    // T3.3: the dashboard calls the same-origin core API.
+    if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
+      const app = await getCoreApp()
+      return app.getInstance().fetch(request)
     }
 
     // T1.3: HTML shell with injected manifest (only for the routes listed in

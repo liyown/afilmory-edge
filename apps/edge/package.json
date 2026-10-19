@@ -3,9 +3,13 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "cf dev",
-    "build": "cf build",
+    "build": "pnpm build:spas && pnpm sync-assets && cf build",
+    "build:dashboard": "pnpm -C ../../be/apps/dashboard build",
+    "build:spas": "pnpm build:web && pnpm build:dashboard",
+    "build:web": "pnpm -C ../../apps/web exec vite build",
     "deploy": "cf deploy",
+    "dev": "cf dev",
+    "sync-assets": "bash scripts/sync-assets.sh",
     "typecheck": "cf workers types && tsc"
   },
   "dependencies": {

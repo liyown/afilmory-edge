@@ -30,6 +30,7 @@ Target reader: **执行这个计划的 agent**。本文件不按"人日"编排�
 | T2.5 租户 shim | ✅ | `TenantContextResolver` 永远返回 root 行（去掉初始化门禁/host 解析），`OnModuleInit` 启动预热；`ensureRootTenant` 用 `ON CONFLICT DO NOTHING` 并发安全创建 **active** root，并自动激活历史 inactive 行。3 files / 10 tests 通过（任意 host/path、并发、重试、middleware 内 `requireTenantContext()`）；Worker 端到端挂载留待 T3.1 |
 | T3.1 better-auth + D1 | ✅ | Worker 内挂载 `EdgeCoreModule`（Database/InProcessEvent/AppState/Setting/SystemSetting/Tenant/Auth）；drizzle adapter 按 `PERSONAL_DEPLOYMENT` 走 sqlite schema；新增 `isoDateText` 解决 better-auth 传 `Date` 而 D1 只接受原始值；Apple 服务构建期替换为禁用 stub；社交登录/邮件验证关闭。`cf dev` 实测：匿名 `/api/auth/session` → `null`；`POST /api/auth/sign-in/email` → 200 + session cookie；带 cookie 的 session 返回 user/session/memberships；`/api/auth/social/providers` → `[]`；`/api/mobile-auth/apple/configuration` → `enabled:false`；`pnpm -C apps/edge build` 通过 |
 | T3.2 单管理员引导 | ✅ | 新增 `bootstrap:admin`（本地 D1 / 远程 D1 REST）：幂等创建 superadmin + root owner + credential account，密码用 `better-auth/crypto` 的 scrypt 哈希；未给密码时随机生成并只打印一次，重跑不改密码。个人模式 `POST /api/auth/sign-up/email` → 403，同时 better-auth `emailAndPassword.disableSignUp=true` 兜底。本地 D1 实测：`auth_user` 1 行、credential 1 行；注册 403 且未新增用户；登录 + session 正常 |
+| T3.3 dashboard 托管 | ✅ | `apps/edge/scripts/sync-assets.sh` 合并两个 SPA；dashboard 按原生 base 托管在 `/platform/`（`/dashboard/*` → 302），Worker 对 SPA 路由回退到 `/platform/index.html`；`/api/*` 同源转发到 `EdgeCoreModule` 并挂载 `DashboardModule`（overview/analytics 改写为 SQLite）。headless Chrome 实测 `admin@local.test` 登录后进入 `/platform`，概览与空图库页面正常渲染。**已知缺口**：`/api/photos/assets` 与 `/api/billing/plan` 仍 404（photo 模块待 T4 解耦） |
 | T0.4 裁剪 core | 🚧 模块图完成 | `personal.module.ts` 修正 import 路径、补齐全局 middleware/guard/interceptor；新增 `InProcessEventModule`（§2.6，去掉事件对 Redis 的依赖）。已删除 `activity`、`super-admin`、`featured-galleries`、`gallery-subscriptions`、`mobile`、`user-safety`、`account-deletion`、`static-web`、`mail`、`index.module.ts`；`app.factory` / `openapi` 已切到 `PersonalModule`；`tsc --noEmit` 通过。**仍待**：billing/managed-storage/push/data-sync 与 photo/system-setting 解耦（与 T4 上传重写重叠），以及 billing 本身删除 |
 
 **线上资源（`cf deploy --provision` 创建）**
@@ -512,9 +513,40 @@ T1.6 + T2.5 + T3.3 ────────────────────�
   - core/edge `tsc --noEmit`、eslint、`pnpm -C apps/edge build` → 通过。
 
 **T3.3 dashboard 托管（与画廊同一个 Worker，不单独部署）**
-- 动作：`apps/edge/scripts/sync-assets.sh` 把 `apps/web/dist` 与 `be/apps/dashboard/dist` 合并到 `apps/edge/public/`
-  （根目录 = 画廊，`/dashboard/` = 后台）；Worker 对 `/dashboard/*` 回退到 `/dashboard/index.html`；API 同源。
-- 验收：浏览器打开 `/dashboard` 能登录并看到画廊列表。
+- 状态：**已完成（2026-10-19）**。
+- 实现：
+  - 新增 `apps/edge/scripts/sync-assets.sh`：清空并按顺序复制 `apps/web/dist`（Worker 根）与
+    `be/apps/dashboard/dist`（`public/platform/`）。`apps/edge/public/` 已加入 `.gitignore`。
+  - `apps/edge` 构建链：`build = build:spas → sync-assets → cf build`，其中 web 直接用
+    `vite build`（原 `pnpm build` 的 manifest precheck 依赖本地照片目录，个人版不再需要）。
+  - 路径偏差：dashboard 源码/构建产物原生使用 `/platform/`（`vite.config.ts` 的 `base`、
+    `DASHBOARD_BASENAME`、硬编码的 `/platform/login`），因此实际托管在 `/platform/`；
+    `/dashboard` 与 `/dashboard/*` 在 Worker 里 302 到对应 `/platform/*`。
+  - `cloudflare.config.ts` 把 `/platform`、`/platform/*`、`/dashboard`、`/dashboard/*` 加入
+    `runWorkerFirst`；Worker 对带扩展名的请求直接取静态资源，其余 SPA 路由回退到
+    `/platform/index.html`，避免落到画廊的根 `index.html`。
+  - `router.tsx` 的 basename 在未注入 `window.__AFILMORY_DASHBOARD_BASENAME__` 时默认 `/platform`。
+  - 个人版没有多租户控制台：dashboard 的 `useLogin` / `usePageRedirect` 不再把 superadmin
+    送到 `/superadmin/settings`，而是与普通 owner 一样进入 `/`（T0.4 已删除后端 super-admin 模块）。
+  - `EdgeCoreModule` 挂载 `DashboardModule`；`/api/*` 兜底转发到 core app。`getOverview` 与
+    `getAnalytics` 的 PG 方言（`date_trunc`/`interval`/`filter`/`generate_series`/`jsonb`）已改写为
+    SQLite（`strftime`、`substr`、`case when`、递归 CTE、`json_each`/`json_extract`）。
+- 验证：
+  - `curl /platform/`、`/platform/login` → 200 `text/html`；`/dashboard/login` → 302
+    `http://localhost:5173/platform/login`；`/` 仍返回画廊 shell。
+  - `POST /api/auth/sign-in/email` → 200，`GET /api/auth/session` 返回 root tenant + owner；
+    `GET /api/dashboard/overview` → 200（stats 全 0、`recent_activity: []`）；
+    `GET /api/dashboard/analytics` → 200（12 个月趋势，当前月 `2026-10`）。
+  - headless Chrome（playwright-core + 本机 Chrome）输入 `admin@local.test` 登录：
+    跳转 `/platform`，概览页渲染正常（中文界面、4 张统计卡、空状态）；`/platform/photos/library`
+    渲染图库列表空状态。
+  - `pnpm -C apps/edge exec tsc --noEmit`、`pnpm -C be/apps/core exec tsc --noEmit`、
+    `pnpm -C apps/edge build`、`pnpm -C be/apps/dashboard build` → 通过。
+- 验收：浏览器打开 `/platform`（或 `/dashboard`）能登录并看到 dashboard；图库页可打开但为空。
+- 已知缺口（不阻塞）：
+  - `/api/photos/assets` 仍是 404：`PhotoModule` 依赖 billing/managed-storage/push/data-sync，
+    与 T4 上传重写一起解耦。在 T4 完成前，即使 D1 已有 `photo_asset` 行，图库页也只显示空状态。
+  - `/api/billing/plan` 404：Header 的套餐徽标查询，billing 不在个人版模块图内；后续删除 billing 页面时一并处理。
 
 ### Phase 4 — 上传（核心，功能对等）
 

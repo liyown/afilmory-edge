@@ -57,13 +57,6 @@ export function useLogin() {
       setAuthUser(session.user)
       setErrorMessage(null)
 
-      const isSuperAdmin = session.user.role === 'superadmin'
-
-      if (isSuperAdmin) {
-        navigate('/superadmin/settings', { replace: true })
-        return
-      }
-
       const { activeWorkspace, requestedMembership, requestedWorkspace } = session
       if (requestedWorkspace?.isPlaceholder) {
         navigate(ROUTE_PATHS.WELCOME, { replace: true })
