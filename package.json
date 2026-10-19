@@ -30,6 +30,7 @@
     "format": "prettier --write \"apps/**/*.{ts,tsx,js,jsx,json,css,md}\" \"packages/**/*.{ts,tsx,js,jsx,json,css,md}\" \"be/**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "lint": "eslint --fix",
     "migrate:manifest": "tsx scripts/migrate-manifest.ts",
+    "migrate:pg-to-d1": "pnpm -C be/apps/core migrate:pg-to-d1",
     "preinstall": "sh scripts/preinstall.sh",
     "prepare": "simple-git-hooks",
     "reinstall": "rm -rf **/*/node_modules && rm -rf node_modules && pnpm install",

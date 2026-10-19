@@ -26,6 +26,7 @@ Target reader: **执行这个计划的 agent**。本文件不按"人日"编排�
 | T2.1 D1 schema | ✅ | 新增 `be/packages/db/src/schema.sqlite.ts`（15 表：含 `tenant_membership`/`system_setting`，因为保留代码仍在用）+ `drizzle.config.sqlite.ts` + `migrations-sqlite/0000_heavy_skin.sql`；`pnpm --filter @afilmory/db type-check` 通过。时间戳用 ISO 文本而非 epoch，避免改动现有 `.toISOString()` 调用点 |
 | T2.2 D1 provider | ✅ | 新增 `database.d1.provider.ts` / `database.d1.module.ts`；edge 构建把 `@core/database/database.{provider,module}` 与 `@afilmory/db` 别名到 D1/SQLite，业务代码零改动。`curl :5173/api/health` → `{"status":"ok",...,"tenant":{"id":"1","slug":"root","status":"active"}}`。`generateId` 改为 Worker 原生雪花（`nodejs-snowflake` 依赖 WASM+`__dirname`，workerd 不可用） |
 | T2.3 事务改写 | ✅ | 个人版路径上的 4 处交互式事务已清除：`ManifestSyncService` 改为「单条 `UPDATE ... RETURNING` 分配 revision + batch 内子查询写入 changes + 剪枝」，photo 删除合并为单个 plan，上传/更新改为「单条 upsert + 幂等 change batch」。`node:sqlite` 回归测试 5/5 通过（含双连接并发 revision 唯一性、重复删除不产生重复行） |
+| T2.4 数据迁移/初始化 | ✅ | 新增 `be/apps/core/scripts/migrate-pg-to-d1.ts`：15 表类型转换 + 外键/自引用排序 + 分批 `INSERT ... ON CONFLICT DO UPDATE` + D1 REST batch + 本地 SQLite 传输 + 行数/抽样对账；无历史时幂等 seed tenant/superadmin/owner/manifest state。6/6 测试通过；真实 PG/D1 联调待凭据 |
 | T0.4 裁剪 core | 🚧 模块图完成 | `personal.module.ts` 修正 import 路径、补齐全局 middleware/guard/interceptor；新增 `InProcessEventModule`（§2.6，去掉事件对 Redis 的依赖）。已删除 `activity`、`super-admin`、`featured-galleries`、`gallery-subscriptions`、`mobile`、`user-safety`、`account-deletion`、`static-web`、`mail`、`index.module.ts`；`app.factory` / `openapi` 已切到 `PersonalModule`；`tsc --noEmit` 通过。**仍待**：billing/managed-storage/push/data-sync 与 photo/system-setting 解耦（与 T4 上传重写重叠），以及 billing 本身删除 |
 
 **线上资源（`cf deploy --provision` 创建）**
@@ -366,9 +367,42 @@ T1.6 + T2.5 + T3.3 ────────────────────�
 - 回退：若某处 batch 语义不成立，可把该调用单独切回 `for update` + 串行化，不影响其他路径。
 
 **T2.4 数据迁移/初始化脚本**
-- 动作：`scripts/migrate-pg-to-d1.ts`：读 PG（Hyperdrive 或本地连接）→ 转换 → `batch()` 写 D1；
-  幂等（按主键 upsert）。无历史数据时只 seed 单行 tenant + 管理员。
-- 验收：行数对账一致；抽样 10 行 JSON 字段 diff 为空。
+- 状态：**已完成（2026-10-19，真实 PG/D1 联调留待凭据就绪）**。
+- 动作：新增 `be/apps/core/scripts/migrate-pg-to-d1.ts`（根脚本 `pnpm migrate:pg-to-d1`）：
+  读 PG（Hyperdrive 连接串或普通 `DATABASE_URL`）→ 转换 → 分批 `batch()` 写 D1；
+  每行 `INSERT ... ON CONFLICT (主键) DO UPDATE`，可重复执行；无历史租户时只 seed
+  单行 tenant + 管理员 + owner membership + manifest state。
+- 实现：
+  - 覆盖个人版 SQLite schema 的全部 15 张表；表顺序即外键顺序。`comment.parent_id`
+    自引用在写入前做拓扑排序，避免子评论先于父评论触发 FK 错误。
+  - 类型转换：`boolean → 0/1`、PG `bigint` 字符串 → number、`jsonb → JSON 文本`
+    （`system_setting.value`、`photo_asset.manifest`/`conflict_payload`、
+    `tenant_manifest_change.payload`、`photo_sync_run.summary`）、时间戳 → UTC ISO 文本。
+    `pg` 的 timestamp type parser 被覆盖为返回原始字符串，防止进程时区把 UTC 时间平移。
+  - D1 传输实现 REST API 的 `{"batch":[{"sql","params"},...]}`，默认 50 条/批（上限 100）；
+    同时提供 `--local-file` 的 `node:sqlite` 传输，用于本地演练与测试。
+  - 迁移后自动对账：逐表比较 PG/D1 行数，并按主键抽样 10 行比较全部列；
+    JSON 列先 parse 再稳定序列化比较，避免键顺序造成假 diff。
+  - 无历史数据时 seed 是幂等的：按 `tenant.slug` 与 `auth_user.email`（`lower(trim())`）
+    查找既有行；管理员设为 `superadmin`，membership 设为 `owner/active`。
+    密码/credential account 留给 T3.2，不在迁移脚本里生成。
+- 验证：
+  - `pnpm -C be/apps/core exec vitest run scripts/migrate-pg-to-d1.spec.ts`
+    → 1 file / 6 tests passed（类型转换、自引用排序、分批、幂等重跑、JSON 对账、
+    seed 幂等、D1 REST batch 请求形状与错误透传）
+  - `pnpm -C be/apps/core exec eslint scripts/migrate-pg-to-d1.ts scripts/migrate-pg-to-d1.spec.ts` → 通过
+  - 临时 tsconfig（`include: scripts/migrate-pg-to-d1*.ts`）下 `tsc --noEmit` → 通过；
+    注意 core 的 `tsconfig.json` 只 include `src/**/*`，scripts 不参与常规类型检查。
+  - `pnpm -C be/apps/core migrate:pg-to-d1 -- --help` 与 `--dry-run` 输出正常。
+  - 本地端到端：`--local-file /tmp/afilmory-migrate-test.sqlite --admin-email owner@example.com`
+    → 首次 `tenant=created, admin=created, membership=created`；重复执行
+    → `tenant=existing, admin=existing, membership=existing`，行数仍为 1/1/1/1。
+- 已知缺口：
+  - D1 传输使用 `CLOUDFLARE_API_TOKEN` + account/database id；不走 `cf` 的 OAuth 配置。
+  - 仓库当前没有可用 PG 与真实 D1 凭据（`be/apps/core/.env` 断链），
+    「真实数据行数对账 + 抽样 diff」尚未在真实库上执行；逻辑已由 SQLite 等价测试覆盖。
+  - 迁移不删除 D1 中源库已不存在的行（只做 upsert）；首次迁移后若源行数变少，
+    对账会报告 count mismatch，需要人工清理。
 
 **T2.5 租户 shim**
 - 动作：`TenantResolverInterceptor` 个人版实现：永远返回固定 tenant；启动时确保该行存在。
