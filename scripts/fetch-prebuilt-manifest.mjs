@@ -15,11 +15,12 @@
  *   GALLERY_REPO           GitHub owner/repo，取 main 分支根下的
  *                          photos-manifest.json（jsDelivr 失败时回退 raw）
  *
- * 用法（Vercel Build Command 示例，Root Directory 为 apps/ssr）：
- *   pnpm -w run build:manifest:fetch && pnpm -w run build
+ * 用法（需要构建期打包 manifest 的宿主，例如静态托管）：
+ *   pnpm -w run build:manifest:fetch && pnpm -w run build:demo
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 // 兼容任意 cwd：按脚本自身位置定位仓库根
@@ -65,7 +66,8 @@ async function fetchManifest() {
 
       console.log(`[fetch-manifest] 来源 ${host(url)}，共 ${json.data.length} 张`)
       return json
-    } catch (e) {
+    }
+    catch (e) {
       errors.push(`${host(url)} → ${e.message}`)
     }
   }

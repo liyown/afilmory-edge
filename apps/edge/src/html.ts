@@ -1,5 +1,5 @@
 // T1.3: serve the SPA shell and inject the live manifest/config before it
-// reaches the browser, replacing apps/ssr's linkedom-based implementation.
+// reaches the browser, replacing the legacy Next host's linkedom renderer.
 //
 // The SPA is built with AFILMORY_EMBED_MANIFEST=false, so `index.html` ships
 // with empty `<script id="manifest">` / `<script id="config">` placeholders.
@@ -25,7 +25,7 @@ const EMPTY_MANIFEST: ManifestPayload = {
   lenses: [],
 }
 
-export async function loadManifest(env: Env): Promise<ManifestPayload> {
+export async function loadManifest(env: Pick<Env, 'CACHE' | 'PHOTOS'>): Promise<ManifestPayload> {
   const cached = await env.CACHE.get(MANIFEST_CACHE_KEY)
   if (cached) {
     return JSON.parse(cached) as ManifestPayload
@@ -88,7 +88,7 @@ function escapeHtml(value: string): string {
 
 /**
  * T1.4: photo detail shell — same HTML as `/`, but with the photo's Open Graph
- * and Twitter meta tags. Mirrors apps/ssr's prod.ts without linkedom.
+ * and Twitter meta tags. Mirrors the legacy Next host's prod.ts without linkedom.
  */
 export async function servePhotoShell(request: Request, env: Env, photoId: string): Promise<Response> {
   const manifest = await loadManifest(env)

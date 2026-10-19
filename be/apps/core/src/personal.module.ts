@@ -20,6 +20,7 @@ import { ManifestSyncModule } from './modules/content/manifest-sync/manifest-syn
 import { OgModule } from './modules/content/og/og.module'
 import { PhotoModule } from './modules/content/photo/photo.module'
 import { ReactionModule } from './modules/content/reaction/reaction.module'
+import { ShareModule } from './modules/content/share/share.module'
 import { InProcessEventModule } from './modules/infrastructure/event/in-process-event.module'
 import { HealthModule } from './modules/infrastructure/health/health.module'
 import { WellKnownModule } from './modules/infrastructure/well-known/well-known.module'
@@ -50,6 +51,7 @@ import { DashboardModule } from './modules/platform/dashboard/dashboard.module'
     CommentModule,
     ReactionModule,
     FeedModule,
+    ShareModule,
     OgModule,
     HealthModule,
     WellKnownModule,

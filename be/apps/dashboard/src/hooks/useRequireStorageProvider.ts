@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router'
 
 import { PUBLIC_ROUTES } from '~/constants/routes'
 import type { SessionResponse } from '~/modules/auth/api/session'
-import { useManagedStoragePlansQuery } from '~/modules/storage-plans'
 import { useStorageProvidersQuery } from '~/modules/storage-providers'
 
 const STORAGE_SETUP_PATH = '/photos/storage'
@@ -18,35 +17,17 @@ export function useRequireStorageProvider({ session, isLoading }: UseRequireStor
   const navigate = useNavigate()
 
   const pathname = location.pathname || '/'
-  const shouldCheck =
-    !isLoading &&
-    !!session &&
-    session.user.role !== 'superadmin' &&
-    !PUBLIC_ROUTES.has(pathname) &&
-    !pathname.startsWith('/superadmin')
+  const shouldCheck = !isLoading && !!session && !PUBLIC_ROUTES.has(pathname)
 
   const storageProvidersQuery = useStorageProvidersQuery({
     enabled: shouldCheck,
   })
 
-  const managedStoragePlansQuery = useManagedStoragePlansQuery({
-    enabled: shouldCheck,
-  })
-
-  const hasManagedStoragePlan =
-    managedStoragePlansQuery.isSuccess &&
-    managedStoragePlansQuery.data.managedStorageEnabled &&
-    Boolean(managedStoragePlansQuery.data.currentPlanId)
-
-  const isCheckingManagedStoragePlan = managedStoragePlansQuery.isPending
-
-  const needsSetup =
-    shouldCheck &&
-    storageProvidersQuery.isSuccess &&
-    (storageProvidersQuery.data?.providers.length ?? 0) === 0 &&
-    !storageProvidersQuery.isFetching &&
-    !isCheckingManagedStoragePlan &&
-    !hasManagedStoragePlan
+  const needsSetup
+    = shouldCheck
+      && storageProvidersQuery.isSuccess
+      && (storageProvidersQuery.data?.providers.length ?? 0) === 0
+      && !storageProvidersQuery.isFetching
 
   const navigateOnceRef = useRef(false)
   useEffect(() => {

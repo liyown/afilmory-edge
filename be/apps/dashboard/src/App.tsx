@@ -13,18 +13,9 @@ import { RootProviders } from './providers/root-providers'
 export const App: FC = () => {
   return (
     <RootProviders>
-      <AppLayer />
+      <AuthenticatedAppLayer />
     </RootProviders>
   )
-}
-
-function AppLayer() {
-  const location = useLocation()
-  if (location.pathname === '/storage-handoff') {
-    return <Outlet />
-  }
-
-  return <AuthenticatedAppLayer />
 }
 
 function AuthenticatedAppLayer() {

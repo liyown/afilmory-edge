@@ -1,6 +1,6 @@
 # Cloudflare 个人部署迁移 — Agent 执行计划
 
-Status: **ready to execute**（等待人工解锁项，见 §3）
+Status: **已执行完成**（2026-10-19；各任务验收证据见下表，未覆盖的联调项已逐条标注）
 Date: 2026-10-19
 Target reader: **执行这个计划的 agent**。本文件不按"人日"编排；单位是**任务（T）**、**依赖**、**验收证据**。
 
@@ -39,7 +39,14 @@ Target reader: **执行这个计划的 agent**。本文件不按"人日"编排�
 | T4.6 Live Photo                  | ✅            | dashboard 按文件名 base 配对 `HEIC/JPEG + MOV`：MOV 作为伴随对象上传但不单独建 asset；完整回调带 `videoKey`，manifest 写入 `{ type:'live-photo', videoUrl, s3Key }`；删除照片时连同配对视频一起删 R2 对象。UI 实测一次 complete 携带 `videoKey`，`/media` 视频 200，删除后照片与视频均 404。**未覆盖**：真实 Live Photo 播放（测试用 MOV 为合成字节）                                                                                                                                                                                                                                 |
 | T5.1 评论 / 反应                 | ✅            | Worker 模块图挂载 `CommentModule` + `ReactionModule`，评论/评论表情/照片反应全部读写 D1。`CommentService` 的作者网站回退去掉自定义域名 join（个人版无域名功能），保留 `https://<slug>.<baseDomain>`。Worker shell 注入 `useCloud: true`，画廊评论区默认显示。headless Chrome：发评论 → 刷新仍在；点赞 0→1 → 刷新仍为 1；`/api/reactions/add` count=3 → 查询返回 `{ applause: 3 }`；无 HTTP/页面错误                                                                                                                                                                                   |
 | T5.2 feed / sitemap / well-known | ✅            | `FeedModule` + `WellKnownModule` 挂载进 Worker；`Redis` 缓存换成 KV 版 `CacheService`（`/api/spike/bindings` 确认 KV 可读写）。`/sitemap.xml` 新增动态 controller（原 Vite 构建期静态文件在 edge 构建中不产出）。`/feed.xml`、`/sitemap.xml`、`/.well-known/apple-app-site-association`、`/apple-app-site-association` 返回 200；xmllint 校验通过（feed 2 项、sitemap 3 URL）；feed ETag 二次请求 304；`/`、`/api/health`、`/api/manifest`、评论计数均未回归                                                                                                                          |
-| T0.4 裁剪 core                   | 🚧 模块图完成 | `personal.module.ts` 修正 import 路径、补齐全局 middleware/guard/interceptor；新增 `InProcessEventModule`（§2.6，去掉事件对 Redis 的依赖）。已删除 `activity`、`super-admin`、`featured-galleries`、`gallery-subscriptions`、`mobile`、`user-safety`、`account-deletion`、`static-web`、`mail`、`index.module.ts`；`app.factory` / `openapi` 已切到 `PersonalModule`；`tsc --noEmit` 通过。**仍待**：billing/managed-storage/push/data-sync 与 photo/system-setting 解耦（与 T4 上传重写重叠），以及 billing 本身删除                                                                 |
+| T5.3 分享页 / embed              | ✅            | 新增 core `ShareModule`：`/share/embed.js` 直接返回 `@afilmory/sdk` 的 `SHARE_EMBED_SCRIPT`（200、`text/javascript`、`max-age=300, s-maxage=86400`）；`/share/iframe` 用模板字符串从 D1 manifest + site settings 渲染单图 / `ids` 集合 / `tag` 集合（布局、limit/clamp、overflow、EXIF、thumbhash 占位、resize postMessage 与原 Next SSR 一致）。Worker 转发两个路径，`runWorkerFirst` 已有 `/share/*`。headless Chrome：embed 脚本生成 sandbox iframe 并指向 `/share/iframe?...`，resize 消息把高度从默认回写为 800px（单图）/409px（网格）；未知 id/ids/tag 返回 404；单测 5 项通过                                                                                                                                                                                                                              |
+| T6.1 iOS 契约核对                | ✅            | 逐端点差异表见 Phase 6：auth/manifest/comments/reactions/assets/dashboard/site settings 全部匹配；租户域名/gallery-directory/data-sync/push/billing/account-deletion 与 user-safety 端点有意 404。修复 `initUiSchemaI18n()`（`ui-schema` 500）与 assets `changes`/`change` 响应形状。本地实测登录 200、manifest 200、评论创建/列表 200。**未覆盖**：真机/模拟器 |
+| T6.2 上传兼容                    | ✅            | 新增 `POST /api/photos/assets/upload`：Worker 原生 `formData()` 解析 iOS multipart（≤100 MB、8 文件），按扩展名区分照片/视频、Live Photo 按 base 名配对，确定性 key 保证重试幂等；`createProgressSseResponse` 输出 `start/stage/action/complete/error`。实测 SSE 全事件、manifest/web 可见、重发同 `photoId`、MOV `video` 字段与删除级联；`PATCH tags` 返回 `change`、`DELETE` 返回 `changes[]`。**未覆盖**：真实 iOS 客户端联调 |
+| T7.1 定时任务                    | ✅            | `cloudflare.config.ts` 声明 hourly `0 * * * *`（孤儿上传清理 + OG 预热）与 daily `30 2 * * *`（D1 备份）两个 scheduled trigger；Worker `scheduled()` → `runScheduled(cron, env)`。清理只删 24h 前、未被 `photo_asset.storage_key` 或 Live Photo `data[].video.s3Key` 引用的 `photos/` 对象；OG 预热每次最多渲染 50 张并删除陈旧 `og/` key。Local Explorer 实测两个 cron 均 `outcome: ok`，日志分别为 `cron.hourly`（scanned 5/deleted 0/rendered 5）与 `cron.backup`（15 表/37 行/3403 B）。**未覆盖**：尚未部署，真实 trigger 触发未验证 |
+| T7.2 可观测性                    | ✅            | `observability.enabled: true`；请求日志（`/`、`/api/*`、`/photos/*`、`/og/*`、`/share/*`、feed/sitemap/well-known）与 cron 日志均为单行 JSON（event/ts/status/durationMs）；未捕获异常单独 `request.error`。`/api/health` 并发探活 D1（tenant 行）、R2（`list` 1 个对象）、KV（读 `health:probe`），每项返回 `latencyMs`，任一失败则 `degraded`。实测 `{"status":"ok","services":{...}}` |
+| T7.3 备份恢复                    | ✅            | 每日把全部用户表逐表 `select *` 后 gzip 为 JSON（跳过 D1 内部 `_cf_*` 表），写入 R2 `backups/d1/<ISO>.json.gz`，KV `backup:last` 记录最近一次，保留 14 份。`pnpm restore:d1-backup --file <gz> [--local|--local-file <path>] [--dry-run]` 解压/校验版本、按表 delete+insert、自动补迁移并跑 `foreign_key_check`。实测下载备份恢复到本地 SQLite，15 表 37 行，与线上计数逐表一致。边界：逻辑备份而非官方 `d1 export`，恢复是整表覆盖 |
+| T7.4 下线旧栈                    | ✅            | 删除 `apps/ssr` 与根 `Dockerfile`，根 `dev`/`build` 改指 `@afilmory/edge`，ESLint ignore、`.dockerignore`、`.vscode` 配置清理，`AGENTS.md`/`README`/`DEVELOPMENT.md`/`docs/architecture.md` 更新，`pnpm-lock.yaml` 重新生成。`pnpm build` 退出码 0，产物为 web + dashboard + Worker bundle，不再出现 Next。保留 `Dockerfile.core`/`Dockerfile.oauth` 供可选 core 部署 |
+| T0.4 裁剪 core                   | ✅            | `personal.module.ts` 修正 import 路径、补齐全局 middleware/guard/interceptor；新增 `InProcessEventModule`（§2.6，去掉事件对 Redis 的依赖）。已删除 `activity`、`super-admin`、`featured-galleries`、`gallery-subscriptions`、`mobile`、`user-safety`、`account-deletion`、`static-web`、`mail`、`billing`、`managed-storage`、`push-notifications`、`index.module.ts`；`app.factory` / `openapi` 已切到 `PersonalModule`。Dashboard 同步删除 `superadmin/**`、`storage-handoff`、`plan`、`settings/{data,domain}` 页面及 billing/super-admin/storage-plans/data-management/storage-handoff/sync/usage/custom-domain 模块与组件，Header/UserMenu/StorageProvidersManager/路由守卫/API 调用点全部解耦。验证：dashboard 与 core `tsc --noEmit` 通过；core vitest 77 项通过，`manifest.public.controller.spec.ts` 在补齐 `DATABASE_URL`/`REDIS_URL`/`CONFIG_ENCRYPTION_KEY` 后 8 项通过（该文件仅需环境变量、不连真实数据库）；根 `pnpm build` 退出码 0，产出 web + dashboard + Worker bundle。**保留**：`infrastructure/data-sync/{data-sync.types,builder-log-relay}`（上传进度事件类型仍被 photo 上传使用，按「替换而非砍功能」保留）；`tenant_membership`、`system_setting` 表仍分别被 site-setting / app-state 使用。**后续**：PG `schema.ts` 的 billing 表与未用依赖（`ioredis`/`@afilmory/task-queue`/`@resvg/resvg-js`/`pg-native`/`ejs`/`@apple/app-store-server-library`/`@creem_io/better-auth`/`resend`）在 T7 统一清理 |
 
 **线上资源（`cf deploy --provision` 创建）**
 
@@ -143,6 +150,8 @@ FeedModule, OgModule, HealthModule, WellKnownModule, AuthModule, DashboardModule
 
 **实测依赖（2026-10-19）**：这张表低估了耦合——`billing` 被 `AuthModule`/`TenantModule`/`PhotoModule`/`StorageSetting`/`SystemSetting` 引用，`user-safety` 被 `CommentModule` 引用，`push-notifications`/`managed-storage`/`data-sync` 被 `PhotoModule` 引用。正确顺序是**先解耦调用点，再删文件**；photo 相关的解耦与 T4 上传重写重叠，放到 T4 一起做。
 
+**执行结果（T0.4 完成时的偏差）**：`infrastructure/data-sync` 只保留 `data-sync.types.ts` 与 `builder-log-relay.ts` 两个上传进度事件文件（被 photo 上传与 Worker `PersonalPhotoService` 使用）；`tenant_membership` 仍用于站点 owner 判定，`system_setting` 仍用于 app state / 系统设置存储，两者不删。PG `schema.ts` 的 billing 表与未用依赖留待 T7 统一清理。
+
 **保留 `tenant` 表 + 固定一行**：`photo/comment/reaction` 里 `tenantId` 过滤有几百处，
 删掉它属于纯机械重构、收益为零、风险很高；保留单行 tenant 是唯一合理的「零改动」做法。
 
@@ -201,7 +210,7 @@ FeedModule, OgModule, HealthModule, WellKnownModule, AuthModule, DashboardModule
 | 认证                     | `cf auth login                                                                | whoami`（已登录：liuyaowen.smile@gmail.com） |
 
 配置写在 `apps/edge/cloudflare.config.ts`：`defineConfig({ worker: { name, compatibilityDate, entrypoint, env, assets, triggers, limits, observability } })`，绑定用 `bindings.d1({name})` / `bindings.r2({name})` / `bindings.kv({id})` / `bindings.assets()`。
-`apps/ssr` 保留到 T7.4 再删除。
+`apps/ssr` 已在 T7.4 删除；`apps/edge` 是唯一生产宿主。
 
 ---
 
@@ -703,27 +712,164 @@ T1.6 + T2.5 + T3.3 ────────────────────�
 - 边界：sitemap 仅靠 300s TTL 失效（feed 会监听 `setting.updated` 与 `photo.manifest.changed`
   主动失效）；未配置 `site.url` 时地址来自请求 origin；AASA 内容为固定 App ID，不含按租户动态配置。
   **T5.3 分享页 / embed**：`/share/iframe`、`/share/embed.js` 用 Worker 渲染（React SSR 或模板字符串）；验收：iframe 可嵌入。
+- 实现（2026-10-19）：新增 `be/apps/core/src/modules/content/share`（`ShareModule` /
+  `ShareController` / `ShareService`），挂进 `PersonalModule` 与 Worker 的 `EdgeCoreModule`。
+  `/share/embed.js` 直接返回 `@afilmory/sdk` 的 `SHARE_EMBED_SCRIPT`；`/share/iframe` 用模板字符串
+  渲染，替代原 `apps/ssr` 的 Next server component：支持 `id`（单图）、`ids`（按请求顺序的集合）、
+  `tag`（manifest 过滤，`limit` 默认 9、范围 1–24）、`layout=grid|strip`（默认 ≤4 张走 strip），
+  集合包含 header / overflow tile / footer badge，单图包含 EXIF chips、拍摄信息、thumbhash 模糊占位。
+  所有插值做 HTML 转义；`site.url` 未配置时回退请求 origin；`thumbhash`（纯 JS，workerd 可运行）
+  加入 core 依赖用于服务端解码占位图。`apps/edge/src/index.ts` 把两个 path 转发到 core app。
+- 验证：`pnpm -C apps/edge typecheck`、core `tsc --noEmit`、ESLint、`cf build` 均通过；
+  `npx vitest run src/modules/content/share/share.service.spec.ts` 5 项通过（单图转义、ids 顺序、
+  tag+limit+overflow、origin 回退、404）。本地 `cf dev`：`/share/embed.js` 200（3096 B）；
+  `/share/iframe?id=...` 200 且渲染真实缩略图与详情链接；`?ids=...&layout=grid` 200；
+  未知 id/tag 404。headless Chrome 从嵌入页实测：脚本生成
+  `<iframe src=".../share/iframe?..." sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox">`，
+  并收到 `afilmory:resize` 消息调整高度（单图 800px、双图网格 409px）；响应无 `X-Frame-Options`。
+- 边界：分享页保持原 embed 的功能边界（静态卡片，不含画廊交互式 viewer / Live Photo 播放，
+  与原 Next 分享页一致）；iframe HTML 缓存 60s，manifest 更新后最多延迟一分钟；本地样例照片
+  均无 tag/thumbHash，tag 渲染与非空 thumbhash 占位由单测覆盖，未做真实数据视觉核对。
 
 ### Phase 6 — iOS 兼容
 
 **T6.1 契约核对**
 
-- 动作：对照 `apps/mobile/Afilmory/Core/Networking/APIEndpoint.swift` 逐个端点核对路径/方法/字段；
-  产出差异表（缺哪个补哪个）。
-- 验收：`Afilmory Local` 指向新 Worker（本地或 preview）能登录、看 feed、评论。
+- 动作：对照 iOS 的 endpoint 定义与响应模型逐个核对路径/方法/字段；差异表如下（base URL 为
+  `{gallery-origin}/api`）。
+
+| iOS 端点 | 方法 | Worker 行为 | 结论 |
+| --- | --- | --- | --- |
+| `auth/session` | GET | 匿名 `null`；带 cookie 返回 user/session/memberships | ✅ |
+| `auth/sign-in/email` | POST | 200 + session cookie | ✅ |
+| `auth/sign-out` | POST | 200 `{success:true}` | ✅ |
+| `auth/sign-up/email` | POST | 403「个人部署已关闭注册」 | 有意关闭 |
+| `mobile-auth/apple/configuration` | GET | `enabled:false` | ✅（Apple 登录在个人版关闭） |
+| `auth/one-time-token/verify`、`auth/sign-in/social`、`native/oauth/*` | POST/GET | 404/未启用 | 有意关闭（仅邮箱密码登录） |
+| `manifest/snapshot` | GET | `{revision, manifest}` | ✅ |
+| `manifest/changes?after=` | GET | `{revision, expired, changes}` | ✅（T6.2 起上传/改标签/删除都会分配 revision） |
+| `manifest/photos/search` | POST | 过滤/分页结果 | ✅ |
+| `comments?photoId=` | GET | `{comments, relations, users, next_cursor}` | ✅ |
+| `comments` | POST | 创建评论（需登录） | ✅ |
+| `comments/count?photoId=` | GET | `{count}` | ✅ |
+| `comments/:id/reactions` | POST | 切换表情，返回 `{item}` | ✅ |
+| `comments/all`、`comments/:id` | GET/DELETE | 管理员列表/软删除 | ✅ |
+| `comments/:id/reports`、`comments/:id/block-author` | POST | 404 | 有意缺失（user-safety 已在 T0.4 移除） |
+| `reactions`、`reactions/add` | GET/POST | D1 照片反应读写 | ✅ |
+| `photos/assets` | GET/DELETE | 列表/删除（`changes` 为 `PhotoChange[]`） | ✅ |
+| `photos/assets/:id/tags` | PATCH | 更新标签并返回 `change` | ✅ |
+| `photos/assets/upload` | POST | T6.2 新增的 multipart + SSE 兼容通道 | ✅ |
+| `dashboard/overview`、`dashboard/analytics` | GET | SQLite 聚合 | ✅ |
+| `site/settings/ui-schema` | GET | UI schema + values | ✅（补 UI schema i18n 初始化） |
+| `site/settings` | POST | 批量更新设置 | ✅ |
+| `tenant/domains*`、`tenant/check-slug` | GET/POST | 404 | 有意缺失（个人版无自定义域名） |
+| `gallery-directory`、`gallery-subscriptions*` | GET | 404 | 有意缺失（个人版单站点） |
+| `data-sync/*` | GET/POST | 404 | 有意缺失（无外部数据同步） |
+| `push-devices` | GET/POST/DELETE | 404 | 有意缺失（无推送） |
+| `billing/*`、`account-deletion/*` | GET/POST | 404 | 有意缺失（个人版无计费/自助删号） |
+
+- 契约修复：
+  - `getCoreApp()` 启动时调用 `initUiSchemaI18n()`；此前 `/api/site/settings/ui-schema` 会因
+    「UI schema i18n is not initialized」返回 500。
+  - `PATCH photos/assets/:id/tags` 返回 `{...asset, change}`，`DELETE photos/assets` 的
+    `changes` 改为 `PhotoChange[]`，与 iOS Studio 的解码模型一致。
+  - 上传完成、改标签、删除都会调用 `ManifestSyncService` 写入 revision/change，iOS 可在
+    `manifest/changes` 与 SSE 事件里拿到增量。
+- 验收：本地 Worker 实测 `admin@local.test` 登录 200、`manifest/snapshot` 200、发评论 200 且
+  列表可见、`site/settings/ui-schema` 200。iOS 差异表覆盖了 `Core/Networking/APIEndpoint.swift`
+  以及 Comments/Studio/Upload 相关 endpoint。
 
 **T6.2 上传兼容**
 
-- 动作：若 iOS 仍走 multipart → Worker 提供一条 ≤100 MB 的兼容通道；否则改 iOS 走预签名。
-- 验收：真机/模拟器上传 1 张成功并在网页端可见。
+- 动作：iOS 仍按「一个资源一个 multipart 请求」上传（`UploadJobPreparer`），因此在 Worker 新增
+  `POST /api/photos/assets/upload`：
+  - 用 Worker 原生 `request.formData()` 解析 `directory` 文本字段与重复的 `files` 文件字段；
+    请求体/文件总和上限 100 MB，单批最多 8 个文件。
+  - 按文件扩展名区分照片与 MOV/MP4；Live Photo 以 base filename 配对，MOV 只作为伴随对象写入 R2，
+    照片的 manifest 写入 `video: { type:'live-photo', videoUrl, s3Key }`。
+  - 存储 key 为 `photos/{tenant}/{directory}/{base}.{ext}`（不掺随机 id），同一请求重试会命中
+    同一 key 并复用已有 asset，避免 iOS 后台重试产生重复照片。
+  - 复用 `PersonalPhotoService.completeUpload()`（HEAD 校验、EXIF 提取、D1 幂等插入、manifest
+    重建），再通过 `createProgressSseResponse` 输出 iOS 期望的
+    `start` / `stage` / `action` / `complete` / `error` 事件（`event: progress`，payload 内
+    的 `change` 可直接用于 replica）。
+- 验证：本地 `cf dev` 用与 iOS 相同的 multipart 形状 + `Accept: text/event-stream` 实测：
+  1 张 JPEG 上传返回 `start → stage → action → complete`，`/api/manifest/snapshot` 出现新照片、
+  revision 递增，`/media/...` 200，glyph `/` 注入的 manifest 也包含该照片；同一请求重发复用
+  原 `photoId`、manifest 仅 1 条。Live Photo（JPEG+MOV）上传后 manifest 含 `video` 字段，照片与
+  MOV 的 `/media` 均 200；仅有 MOV 或 `.txt` 时返回 `error` 事件。`PATCH tags` 返回 `change`，
+  `DELETE assets` 返回 `changes` 数组且伴随 MOV 一并删除。
+- 边界：上传体经 `formData()` 解析会驻留 Worker 内存，100 MB 是兼容通道上限而非建议值（iOS
+  压缩照片通常远小于此）；未在真机/模拟器运行 iOS App，验证的是同形状 HTTP/SSE 契约。真实设备
+  上的 HEIC EXIF、后台 URLSession 重试与 Live Photo 播放仍需一次人工联调。
 
 ### Phase 7 — 运维与收尾
 
-**T7.1 Cron**：`triggers.scheduled("0 * * * *")`；清理临时上传、预热 OG 缓存；验收：`cf workers deployments list` + 日志确认 cron 执行。
-**T7.2 可观测**：`observability.enabled`、结构化日志、`/api/health` 含 D1/R2 探活。
-**T7.3 备份**：D1 `export` → R2，Cron 每日；验收：能从备份恢复到本地 D1。
-**T7.4 下线旧栈**：删除 `apps/ssr`、`Dockerfile*` 中的 Next 相关步骤、更新 `AGENTS.md`/`README`；
-验收：`pnpm build` 不再依赖 Next。
+**T7.1 定时任务**
+
+- `apps/edge/cloudflare.config.ts` 用 `triggers.scheduled` 声明两个 cron：
+  - `0 * * * *`（每小时）→ `runHourlyMaintenance`
+  - `30 2 * * *`（每日）→ `runDailyBackup`
+- Worker 导出 `scheduled(controller, env)`，把 `controller.cron` 交给 `runScheduled()` 分发；
+  配置里的 cron 字面量与 `src/cron.ts` 的导出常量重复（dev server 无法从 config 导入 Worker 源码），
+  两处已加同步注释。
+- 每小时任务并行执行：
+  - `cleanupOrphanUploads`：列出 `photos/` 下对象，删除**未被** `photo_asset.storage_key`
+    或 manifest 中 Live Photo `data[].video.s3Key` 引用、且创建超过 24h 的对象。早于该窗口的
+    未引用对象可能属于正在进行的 multipart 上传，因此不删。
+  - `prewarmOgImages`：按 manifest 渲染缺失的 `/og/:id` PNG 到 `og/`（每次最多 50 张），
+    并删除指纹已变化的陈旧 key；key 含标题/描述 FNV 哈希，改文案会自动失效。
+- 每日任务把 D1 逻辑备份写入 R2（见 T7.3）。
+- 验证：`cf dev` 下用 Local Explorer 的
+  `POST /cdn-cgi/local/explorer/api/local/scheduled?worker=<name>` 分别触发两个 cron，
+  均返回 `outcome: ok`；日志为 `{"event":"cron.hourly","cleanup":{"scanned":5,"deleted":0},"og":{"rendered":5,"removed":5}}`
+  与 `{"event":"cron.backup","key":"backups/d1/...json.gz","tableCount":15,"rowCount":37,"bytes":3403}`。
+- 边界：本地只验证了 handler 与真实 cron 字符串的分发；部署后仍需确认 Cloudflare 的 trigger
+  实际触发（日志时间戳）。多图预热时 `workers-og` 会打印
+  `Already initialized` 噪声，库内部捕获且图片正常，属已知无害输出。
+
+**T7.2 可观测性与健康检查**
+
+- `observability: { enabled: true }`。
+- 请求日志只覆盖有意义的路径（`/`、`/api/*`、`/photos/*`、`/og/*`、`/share/*`、
+  `/feed.xml`、`/sitemap.xml`、`/.well-known/*`），避免静态资源刷屏；每行 JSON 含
+  `event: request`、方法、路径、状态码、耗时；未捕获异常记录 `request.error` 后仍返回 500。
+- cron 与备份各自输出结构化事件，便于 Workers Logs 检索。
+- `/api/health` 并发探活三个依赖，各自返回 `status` 与 `latencyMs`：
+  - database：读 tenant 行（同时作为 personal tenant shim 的冒烟）
+  - storage：`PHOTOS.list({ limit: 1 })`
+  - cache：读 KV `health:probe`
+  任一失败则整体 `status: degraded`，否则 `ok`。
+- 实测：`/api/health` → `{"status":"ok","services":{"database":{"status":"ok","latencyMs":18,...},"storage":{"status":"ok","objects":1},"cache":{"status":"ok"}}}`。
+
+**T7.3 备份与恢复**
+
+- 备份：逐表 `select *`（D1 的 `sqlite_master` 会暴露 `_cf_METADATA` 等内部表，读取会被
+  `SQLITE_AUTH` 拒绝，因此跳过 `_cf_` 前缀），序列化为
+  `{ version: 1, exportedAt, tables }`，`CompressionStream('gzip')` 压缩后写入
+  `backups/d1/<ISO 时间戳>.json.gz`；KV `backup:last` 保存最近一次；按 key 排序保留 14 份。
+- 恢复：`be/apps/core/scripts/restore-d1-backup.ts`，命令
+  `pnpm restore:d1-backup --file <备份>`；支持 `--local`（Miniflare D1 目录）、
+  `--local-file <sqlite>`、`--dry-run`。自动识别 gzip/纯 JSON、校验版本，schema 缺失时先跑
+  SQLite 迁移，事务内整表 `delete` + 按列 `insert`，结束后 `pragma foreign_key_check`。
+- 验证：从本地 R2 下载 gzip（3403 B，gzip 头合法），`--dry-run` 与真实恢复到
+  `/tmp/restore-test.sqlite` 均成功（15 表 37 行）；随后逐表对比 tenants/users/assets/
+  comments/changes 计数与线上一致（1/1/5/4/5），tenant `root/active` 原样保留。
+- 边界：这是逻辑备份，不是官方 `d1 export` 的 SQL 转储；恢复为整表覆盖，不合并增量。
+  远程恢复仍需 `wrangler d1 execute` 或迁移脚本实际演练一次。
+
+**T7.4 下线旧栈**
+
+- 删除 `apps/ssr`（Next 宿主）与根 `Dockerfile`（Next/standalone 专用）。
+- 根脚本：`dev` → `@afilmory/edge dev`，`build` → `@afilmory/edge build`（内部先构建
+  web + dashboard，再由 `sync-assets.sh` 合并进 Worker assets）。
+- 清理 `eslint.config.mjs`、`.dockerignore`、`.vscode/settings.json`、`fetch-prebuilt-manifest.mjs`
+  中的旧路径；`AGENTS.md`、`README.md`、`DEVELOPMENT.md`、`docs/architecture.md`
+  改为 edge 架构描述；`pnpm install --lockfile-only` 移除 `apps/ssr` importer。
+- 验收：`pnpm build` 退出码 0，输出 web、dashboard 与 Worker bundle
+  （`index.js` 2,459 kB / gzip 628 kB），构建链路中不再出现 Next。
+- 保留：`Dockerfile.core`、`Dockerfile.oauth` 仍可用于可选的自托管 core；`apps/docs` 中
+  上游的 Docker/Vercel 部署指南描述的是旧栈，属公开文档迁移，未在本任务改写。
 
 ---
 

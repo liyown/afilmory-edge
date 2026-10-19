@@ -21,21 +21,10 @@ afterEach(() => {
 
 function createService(accessor: unknown) {
   const manifestSyncService = new ManifestSyncService(accessor as never, { emit: vi.fn() } as never)
-  const billingUsageService = { recordEvent: vi.fn() }
 
-  const service = new PhotoAssetService(
-    accessor as never,
-    {} as never,
-    {} as never,
-    {} as never,
-    billingUsageService as never,
-    {} as never,
-    {} as never,
-    {} as never,
-    manifestSyncService,
-  )
+  const service = new PhotoAssetService(accessor as never, {} as never, {} as never, manifestSyncService)
 
-  return { service, billingUsageService }
+  return { service }
 }
 
 function insertAsset(sqlite: DatabaseSync, tenantId: string, assetId: string) {
@@ -73,14 +62,13 @@ describe('photoAssetService delete transaction', () => {
     openDatabases.push(sqlite)
     seedTenant(sqlite, 'tenant-1')
     insertAsset(sqlite, 'tenant-1', 'asset-1')
-    const { service, billingUsageService } = createService(accessor)
+    const { service } = createService(accessor)
 
     const changes = await withTenant('tenant-1', () => service.deleteAssets(['asset-1']))
 
     expect(changes).toHaveLength(1)
     expect(changes[0]).toMatchObject({ revision: 1, operation: 'delete', photoId: 'photo-asset-1' })
     expect(sqlite.prepare('select count(*) as count from photo_asset').get()).toMatchObject({ count: 0 })
-    expect(billingUsageService.recordEvent).toHaveBeenCalledTimes(1)
   })
 
   it('is a no-op when the same assets are deleted twice', async () => {
@@ -88,13 +76,12 @@ describe('photoAssetService delete transaction', () => {
     openDatabases.push(sqlite)
     seedTenant(sqlite, 'tenant-1')
     insertAsset(sqlite, 'tenant-1', 'asset-1')
-    const { service, billingUsageService } = createService(accessor)
+    const { service } = createService(accessor)
 
     await withTenant('tenant-1', () => service.deleteAssets(['asset-1']))
     const second = await withTenant('tenant-1', () => service.deleteAssets(['asset-1']))
 
     expect(second).toEqual([])
     expect(sqlite.prepare('select count(*) as count from tenant_manifest_change').get()).toMatchObject({ count: 1 })
-    expect(billingUsageService.recordEvent).toHaveBeenCalledTimes(1)
   })
 })

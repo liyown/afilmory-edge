@@ -123,7 +123,7 @@ See Afilmory in action:
 afilmory/
 ├── apps/
 │   ├── web/              # Gallery SPA (Vite + React 19 + React Router 7)
-│   ├── ssr/              # Next.js host: serves the SPA, injects manifest, OG/SEO
+│   ├── edge/             # Cloudflare Worker: serves SPA, injects manifest, OG/SEO, cron
 │   ├── mobile/           # Native iOS app (Swift / UIKit, XcodeGen)
 │   ├── site/             # Marketing site (Astro)
 │   ├── docs/             # Documentation site (Vite + MDX)
@@ -172,9 +172,10 @@ afilmory/
 - **WebGL** - Automatic fallback for browsers without WebGPU
 - **HDR Gain Maps** - JPEG gain-map parsing and HDR compositing on `dynamic-range: high` displays
 
-### SSR Host
+### Edge Host
 
-- **Next.js 16** - Serves the SPA, injects the manifest, and renders dynamic OG images and SEO metadata
+- **Cloudflare Workers** - Serves the SPA, injects the manifest from R2, renders dynamic OG images/SEO metadata, and runs scheduled backup/cleanup
+- **D1 + R2 + KV** - D1 for relational data, R2 for photos/manifest/OG cache/backups, KV for hot caches
 
 ### Backend Stack
 
@@ -238,16 +239,16 @@ cp .env.template .env
 
 ```bash
 # Development
-pnpm dev                    # Start web + SSR
+pnpm dev                    # Start the Cloudflare Worker + web app
 pnpm dev:be                 # Start backend services
 pnpm --filter web dev       # Web app only
-pnpm --filter @afilmory/ssr dev  # SSR only
+pnpm dev:edge               # Cloudflare Worker only
 pnpm --filter @afilmory/dashboard dev  # Admin dashboard
 pnpm dev:mobile             # Build and run the iOS app in Simulator
 pnpm site:dev               # Marketing site
 
 # Build
-pnpm build                  # Build production web app
+pnpm build                  # Build web + dashboard + Cloudflare Worker
 pnpm build:manifest         # Generate photo manifest (incremental)
 pnpm build:manifest -- --force  # Full rebuild
 pnpm build:manifest -- --force-manifest    # Regenerate manifest only

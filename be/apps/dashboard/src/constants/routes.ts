@@ -5,8 +5,6 @@ export const ROUTE_PATHS = {
   TENANT_MISSING: '/tenant-missing',
   TENANT_RESTRICTED: '/tenant-restricted',
   DEFAULT_AUTHENTICATED: '/',
-  SUPERADMIN_ROOT: '/superadmin',
-  SUPERADMIN_DEFAULT: '/superadmin/settings',
   NO_ACCESS: '/no-access',
 } as const
 

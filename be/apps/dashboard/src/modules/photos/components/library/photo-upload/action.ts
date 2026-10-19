@@ -1,7 +1,5 @@
 import type { StoreApi } from 'zustand'
 
-import { presentBillingUpgradeModal, resolveBillingUpgradeCategory } from '~/modules/billing/upgrade-prompts'
-
 import type { PhotoSyncProgressEvent } from '../../../types'
 import type { PhotoUploadRequestOptions } from '../upload.types'
 import type { PhotoUploadState } from './initialState'
@@ -187,10 +185,6 @@ export class PhotoUploadActionImpl {
         this.#updateEntries(() => createFileEntries(currentFiles, this.#previewCache))
       }
       else {
-        const upgradeCategory = resolveBillingUpgradeCategory(error)
-        if (upgradeCategory) {
-          presentBillingUpgradeModal(upgradeCategory)
-        }
         const message = getErrorMessage(error, '上传失败，请稍后再试。')
         this.#set({
           uploadError: message,

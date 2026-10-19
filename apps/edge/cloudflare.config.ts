@@ -1,6 +1,11 @@
-import { bindings, defineConfig } from 'cf/config'
+import { bindings, defineConfig, triggers } from 'cf/config'
 
 import * as entrypoint from './src/index.ts' with { type: 'cf-worker' }
+
+// Keep in sync with src/cron.ts (the dev server cannot import Worker source
+// from the config module).
+const HOURLY_CRON = '0 * * * *'
+const DAILY_BACKUP_CRON = '30 2 * * *'
 
 export default defineConfig({
   worker: {
@@ -45,6 +50,7 @@ export default defineConfig({
         '/share/*',
       ],
     },
+    triggers: [triggers.scheduled({ schedule: HOURLY_CRON }), triggers.scheduled({ schedule: DAILY_BACKUP_CRON })],
     observability: {
       enabled: true,
     },

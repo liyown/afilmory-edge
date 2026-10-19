@@ -1,6 +1,6 @@
 import { getI18n } from '~/i18n'
 
-import { MANAGED_STORAGE_ACTIVE_ID, storageProvidersI18nKeys } from './constants'
+import { storageProvidersI18nKeys } from './constants'
 import type { StorageProvider, StorageProviderType } from './types'
 
 function generateId() {
@@ -26,8 +26,8 @@ function coerceProvider(input: unknown): StorageProvider | null {
   const record = input as Record<string, unknown>
   const typeInput = typeof record.type === 'string' ? record.type.trim() : ''
   const type: StorageProviderType = typeInput.length > 0 ? typeInput : 's3'
-  const configInput =
-    record.config && typeof record.config === 'object' && !Array.isArray(record.config)
+  const configInput
+    = record.config && typeof record.config === 'object' && !Array.isArray(record.config)
       ? (record.config as Record<string, unknown>)
       : {}
 
@@ -63,15 +63,16 @@ export function parseStorageProviders(raw: string | null): StorageProvider[] {
       return []
     }
 
-    return parsed.map((item) => coerceProvider(item)).filter((item): item is StorageProvider => item !== null)
-  } catch {
+    return parsed.map(item => coerceProvider(item)).filter((item): item is StorageProvider => item !== null)
+  }
+  catch {
     return []
   }
 }
 
 export function serializeStorageProviders(providers: readonly StorageProvider[]): string {
   return JSON.stringify(
-    providers.map((provider) => ({
+    providers.map(provider => ({
       ...provider,
       config: normalizeConfigRecord(provider.config),
     })),
@@ -103,11 +104,7 @@ export function ensureActiveProviderId(providers: readonly StorageProvider[], ac
     return null
   }
 
-  if (activeId === MANAGED_STORAGE_ACTIVE_ID) {
-    return activeId
-  }
-
-  return providers.some((provider) => provider.id === activeId) ? activeId : null
+  return providers.some(provider => provider.id === activeId) ? activeId : null
 }
 
 export function reorderProvidersByActive(
@@ -123,8 +120,12 @@ export function reorderProvidersByActive(
   const collator = new Intl.Collator(locale)
 
   return [...providers].sort((a, b) => {
-    if (a.id === activeId) return -1
-    if (b.id === activeId) return 1
+    if (a.id === activeId) {
+      return -1
+    }
+    if (b.id === activeId) {
+      return 1
+    }
     const nameA = a.name || i18n.t(storageProvidersI18nKeys.card.untitled)
     const nameB = b.name || i18n.t(storageProvidersI18nKeys.card.untitled)
     return collator.compare(nameA, nameB)

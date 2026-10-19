@@ -1,28 +1,20 @@
-import { Button, Modal, Prompt } from '@afilmory/ui'
+import { Button, Modal } from '@afilmory/ui'
 import { Spring } from '@afilmory/utils'
 import { ShieldCheck } from 'lucide-react'
 import { m } from 'motion/react'
-import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
+import { startTransition, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
-import { useSetPhotoSyncAutoRun } from '~/atoms/photo-sync'
 import { LinearBorderPanel } from '~/components/common/LinearBorderPanel'
 import { MainPageLayout, useMainPageLayout } from '~/components/layouts/MainPageLayout'
 import { useBlock } from '~/hooks/useBlock'
 import { getRequestErrorMessage } from '~/lib/errors'
-import { useManagedStoragePlansQuery } from '~/modules/storage-plans'
 
-import { MANAGED_STORAGE_ACTIVE_ID, storageProvidersI18nKeys } from '../constants'
-import {
-  useStorageProviderSchemaQuery,
-  useStorageProvidersQuery,
-  useUpdateStorageProvidersMutation,
-} from '../hooks'
+import { storageProvidersI18nKeys } from '../constants'
+import { useStorageProviderSchemaQuery, useStorageProvidersQuery, useUpdateStorageProvidersMutation } from '../hooks'
 import type { StorageProvider } from '../types'
 import { createEmptyProvider } from '../utils'
-import { ManagedStorageEntryCard } from './ManagedStorageEntryCard'
 import { ProviderCard } from './ProviderCard'
 import { ProviderEditModal } from './ProviderEditModal'
 
@@ -41,10 +33,7 @@ export function StorageProvidersManager() {
     error: schemaError,
   } = useStorageProviderSchemaQuery()
   const updateMutation = useUpdateStorageProvidersMutation()
-  const managedPlansQuery = useManagedStoragePlansQuery()
   const { setHeaderActionState } = useMainPageLayout()
-  const navigate = useNavigate()
-  const setPhotoSyncAutoRun = useSetPhotoSyncAutoRun()
 
   const providerForm = providerSchema ?? null
   const schemaReady = Boolean(providerForm)
@@ -57,8 +46,6 @@ export function StorageProvidersManager() {
   const [providers, setProviders] = useState<StorageProvider[]>([])
   const [activeProviderId, setActiveProviderId] = useState<string | null>(null)
   const [isDirty, setIsDirty] = useState(false)
-  const initialProviderStateRef = useRef<boolean | null>(null)
-  const hasShownSyncPromptRef = useRef(false)
 
   useBlock({
     when: isDirty,
@@ -83,25 +70,12 @@ export function StorageProvidersManager() {
     })
   }, [data])
 
-  useEffect(() => {
-    if (!data) {
-      return
-    }
-    if (initialProviderStateRef.current === null) {
-      initialProviderStateRef.current = data.providers.length > 0
-    }
-  }, [data])
-
   const providerTypeLabels = useMemo(() => {
     if (!providerForm) {
       return new Map<string, string>()
     }
     return new Map(providerForm.types.map(type => [type.value, type.label]))
   }, [providerForm])
-
-  const managedPlanAvailable = Boolean(managedPlansQuery.data?.currentPlan)
-  const managedActive = activeProviderId === MANAGED_STORAGE_ACTIVE_ID
-  const effectiveActiveId = managedActive ? null : activeProviderId
 
   const markDirty = () => setIsDirty(true)
 
@@ -156,33 +130,14 @@ export function StorageProvidersManager() {
   }
 
   const handleSave = () => {
-    const resolvedActiveId
-      = activeProviderId === MANAGED_STORAGE_ACTIVE_ID ? MANAGED_STORAGE_ACTIVE_ID : activeProviderId
-
     updateMutation.mutate(
       {
         providers,
-        activeProviderId: resolvedActiveId,
+        activeProviderId,
       },
       {
         onSuccess: () => {
           setIsDirty(false)
-          const hadProvidersInitially
-            = initialProviderStateRef.current ?? ((data?.providers.length ?? 0) > 0)
-          if (!hadProvidersInitially && providers.length > 0 && !hasShownSyncPromptRef.current) {
-            initialProviderStateRef.current = true
-            hasShownSyncPromptRef.current = true
-            Prompt.prompt({
-              title: t(storageProvidersI18nKeys.prompt.title),
-              description: t(storageProvidersI18nKeys.prompt.description),
-              onConfirmText: t(storageProvidersI18nKeys.prompt.confirm),
-              onCancelText: t(storageProvidersI18nKeys.prompt.cancel),
-              onConfirm: () => {
-                setPhotoSyncAutoRun('apply')
-                navigate('/photos/sync')
-              },
-            })
-          }
         },
         onError: (error) => {
           const message = getRequestErrorMessage(error, t('errors.request.generic'))
@@ -193,12 +148,7 @@ export function StorageProvidersManager() {
   }
 
   const disableSave
-    = isLoading
-      || isError
-      || !schemaReady
-      || !isDirty
-      || updateMutation.isPending
-      || (providers.length === 0 && activeProviderId !== MANAGED_STORAGE_ACTIVE_ID)
+    = isLoading || isError || !schemaReady || !isDirty || updateMutation.isPending || providers.length === 0
   useEffect(() => {
     setHeaderActionState((prev) => {
       const nextState = {
@@ -277,13 +227,6 @@ export function StorageProvidersManager() {
         transition={Spring.presets.smooth}
         className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
       >
-        <ManagedStorageEntryCard
-          isActive={managedActive}
-          canToggle={managedPlanAvailable}
-          onMakeActive={() => handleSetActive(MANAGED_STORAGE_ACTIVE_ID)}
-          onMakeInactive={() => handleSetActive(null)}
-        />
-
         {providers.map((provider, index) => (
           <m.div
             key={provider.id}
@@ -293,10 +236,10 @@ export function StorageProvidersManager() {
           >
             <ProviderCard
               provider={provider}
-              isActive={provider.id === effectiveActiveId}
+              isActive={provider.id === activeProviderId}
               onEdit={() => handleEditProvider(provider)}
               onToggleActive={() => {
-                if (provider.id === effectiveActiveId) {
+                if (provider.id === activeProviderId) {
                   setActiveProviderId(null)
                   markDirty()
                   return
@@ -365,7 +308,6 @@ export function StorageProvidersManager() {
           </div>
         </LinearBorderPanel>
       </m.div>
-
     </>
   )
 }

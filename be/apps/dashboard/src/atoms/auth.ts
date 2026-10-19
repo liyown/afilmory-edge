@@ -18,8 +18,3 @@ export function useUserRole() {
   const user = useAuthUserValue()
   return user?.role ?? null
 }
-
-export function useIsSuperAdmin() {
-  const user = useAuthUserValue()
-  return user?.role === 'superadmin'
-}

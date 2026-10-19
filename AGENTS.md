@@ -21,9 +21,9 @@ When those files contradict anything below, prefer them (except where flagged st
 
 ```bash
 # Dev
-pnpm dev                          # SSR wrapper (also serves SPA in dev, Next on :1924)
+pnpm dev                          # Cloudflare Worker (edge) + SPA on :5173
 pnpm --filter web dev             # SPA only
-pnpm --filter @afilmory/ssr dev   # SSR only
+pnpm dev:edge                     # Cloudflare Worker only
 pnpm dev:be                       # Backend (be/apps/core) via nodemon
 pnpm --filter @afilmory/dashboard dev  # Admin dashboard
 pnpm dev:mobile                   # Build + run the native iOS app (Local variant) in Simulator
@@ -31,7 +31,7 @@ pnpm site:dev                     # Astro marketing site (127.0.0.1:4325)
 pnpm docs:dev                     # Docs site
 
 # Build
-pnpm build                        # Production build (via @afilmory/ssr)
+pnpm build                        # Production build (web + dashboard + Worker)
 pnpm build:demo                   # Demo data + web build
 pnpm build:manifest               # Run photo pipeline → photos-manifest.json + thumbnails (incremental)
 pnpm build:manifest -- --force            # Full rebuild of photos AND manifest
@@ -39,9 +39,8 @@ pnpm build:manifest -- --force-manifest   # Regenerate manifest only
 pnpm build:manifest -- --force-thumbnails # Regenerate thumbnails only
 pnpm build:variant-report         # Builder cluster/variant analysis report
 
-# DB (Drizzle; schema lives in be/packages/db, SSR has its own)
+# DB (Drizzle; schema lives in be/packages/db)
 pnpm --filter @afilmory/be db:generate / db:migrate / db:studio
-pnpm --filter @afilmory/ssr db:generate / db:migrate
 
 # Quality
 pnpm lint                         # eslint --fix (append paths to scope it: `pnpm lint apps/web/src/...`)
@@ -94,9 +93,9 @@ Afilmory is a photo gallery composed of several deployable layers plus a builder
         ┌────────────────────────┼─────────────────────────┐
         │                                                  │
 ┌───────┴───────────────┐                       ┌──────────┴──────────┐
-│ apps/ssr (Next.js 15) │                       │ be/apps/core (Hono) │
-│ static manifest JSON  │                       │ DB-backed manifest  │
-│ + dynamic OG / SEO    │                       │ + dashboard / API   │
+│ apps/edge (Worker)    │                       │ be/apps/core (Hono) │
+│ D1 + R2 bindings      │                       │ DB-backed manifest  │
+│ + OG / SEO / cron     │                       │ + dashboard / API   │
 └───────────────────────┘                       └──────────┬──────────┘
                                                            │ REST + SSE
                                                 ┌──────────┴──────────┐
@@ -112,7 +111,7 @@ Key implications when changing things:
 - **`packages/data`** owns `PhotoLoader` (the singleton that wraps the manifest into lookup maps). Anything photo-related goes through it. Shared types live in `packages/typing`.
 - **`packages/builder`** is the only place that talks to storage providers (S3/B2/GitHub/Eagle/local). It is configured by `builder.config.ts` (infrastructure) which is separate from `site.config.ts` + `config.json` (presentation/branding).
 - **`be/`** uses a NestJS-inspired Hono framework (`@tsuki-hono/core`): `@Module`, `@Controller`, `@Get/@Post/...`, `@injectable()`, request context via `AsyncLocalStorage`. Don't reach for raw Hono primitives in feature code — use the framework decorators (see `be/AGENTS.md`).
-- **`apps/ssr` is a thin host**, not a backend. Its job is to serve the SPA and provide OG/SEO/manifest injection. Heavy logic belongs in `be/apps/core` or `packages/builder`.
+- **`apps/edge` is the production host**, not a separate backend. It serves the SPA/dashboard, injects the manifest, renders OG/SEO, and runs scheduled jobs; the API graph comes from `be/apps/core` with D1/SQLite and R2 bindings. Heavy domain logic belongs in `be/apps/core` or `packages/builder`.
 - **Two separate design systems**: `apps/web` + `packages/ui` follow the dark, material-and-blur system specified in root `DESIGN.md`; `be/apps/dashboard` is a linear, data-first admin UI. Don't mix the two.
 
 ### Workspace Map
@@ -120,7 +119,7 @@ Key implications when changing things:
 | Path | What it is |
 | --- | --- |
 | `apps/web` | Vite + React 19 SPA — the gallery UI (the only web UI codebase) |
-| `apps/ssr` | Next.js 15 host: serves SPA assets, injects manifest, dynamic OG/SEO |
+| `apps/edge` | Cloudflare Worker: serves SPA/dashboard, injects manifest, dynamic OG/SEO, cron (backup/cleanup) |
 | `apps/mobile` | Native Swift/UIKit iOS app (see below) |
 | `apps/site` | Astro marketing/landing site |
 | `apps/docs` | Vite-based documentation site |

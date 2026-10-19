@@ -3,7 +3,6 @@ import process from 'node:process'
 import { Readable } from 'node:stream'
 
 import { BizException, ErrorCode } from '@core/errors'
-import { quotaExceeded } from '@core/modules/platform/billing/quota/billing-quota.error'
 import type { FileInfo } from 'busboy'
 import Busboy from 'busboy'
 import type { Context } from 'hono'
@@ -121,13 +120,8 @@ export class PhotoUploadParser {
             stream.resume()
             process.nextTick(() => {
               fail(
-                quotaExceeded({
-                  reason: 'upload_size',
+                new BizException(ErrorCode.COMMON_BAD_REQUEST, {
                   message: `单次上传大小不能超过 ${formatBytesForDisplay(normalizedBatchLimit)}`,
-                  details: {
-                    limitMb: normalizedBatchLimit / 1024 / 1024,
-                    actualMb: null,
-                  },
                 }),
               )
             })
@@ -144,13 +138,8 @@ export class PhotoUploadParser {
           stream.resume()
           process.nextTick(() => {
             fail(
-              quotaExceeded({
-                reason: 'upload_size',
+              new BizException(ErrorCode.COMMON_BAD_REQUEST, {
                 message: `文件 ${info.filename} 超出大小限制 ${formatBytesForDisplay(normalizedFileSizeLimit)}`,
-                details: {
-                  limitMb: normalizedFileSizeLimit / 1024 / 1024,
-                  actualMb: null,
-                },
               }),
             )
           })

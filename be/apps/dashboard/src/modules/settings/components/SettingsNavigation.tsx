@@ -8,12 +8,6 @@ const SETTINGS_TABS = [
     end: true,
   },
   {
-    id: 'domain',
-    labelKey: 'settings.nav.domain',
-    path: '/settings/domain',
-    end: true,
-  },
-  {
     id: 'user',
     labelKey: 'settings.nav.user',
     path: '/settings/user',
@@ -24,13 +18,6 @@ const SETTINGS_TABS = [
     id: 'account',
     labelKey: 'settings.nav.account',
     path: '/settings/account',
-    end: true,
-  },
-
-  {
-    id: 'data',
-    labelKey: 'settings.nav.data',
-    path: '/settings/data',
     end: true,
   },
 ] as const

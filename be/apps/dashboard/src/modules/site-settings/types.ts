@@ -29,24 +29,3 @@ export type UpdateSiteAuthorPayload = {
   username?: string | null
   avatar?: string | null
 }
-
-export type TenantDomain = {
-  id: string
-  tenantId: string
-  domain: string
-  status: 'pending' | 'verified' | 'disabled'
-  cloudflareHostnameId: string | null
-  hostnameStatus: string | null
-  sslStatus: string | null
-  verificationErrors: string[]
-  lastSyncedAt: string | null
-  verifiedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export type TenantDomainsResponse = {
-  cnameTarget: string
-  customDomainLimit: number | null
-  domains: TenantDomain[]
-}

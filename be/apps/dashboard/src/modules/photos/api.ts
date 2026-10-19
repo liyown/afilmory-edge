@@ -1,22 +1,8 @@
-import { coreApi, coreApiBaseURL } from '~/lib/api-client'
+import { coreApi } from '~/lib/api-client'
 import { camelCaseKeys } from '~/lib/case'
 import { getRequestErrorMessage } from '~/lib/errors'
-import { withLanguageHeaderInit } from '~/lib/request-language'
 
-import type {
-  BillingUsageOverview,
-  PhotoAssetListItem,
-  PhotoAssetSummary,
-  PhotoSyncAction,
-  PhotoSyncConflict,
-  PhotoSyncProgressEvent,
-  PhotoSyncResolution,
-  PhotoSyncResult,
-  PhotoSyncStatus,
-  RunPhotoSyncPayload,
-} from './types'
-
-const STABLE_NEWLINE = /\r?\n/
+import type { PhotoAssetListItem, PhotoAssetSummary, PhotoSyncProgressEvent } from './types'
 
 function normalizeServerMessage(payload: unknown): string | null {
   const message = getRequestErrorMessage(payload, '')
@@ -70,16 +56,6 @@ function extractErrorInfoFromRaw(raw: string | null | undefined): ServerErrorInf
   return extractErrorInfoFromPayload(payload ?? raw ?? null)
 }
 
-async function readResponseErrorInfo(response: Response): Promise<ServerErrorInfo> {
-  try {
-    const text = await response.text()
-    return extractErrorInfoFromRaw(text)
-  }
-  catch {
-    return { message: null, code: null, raw: null }
-  }
-}
-
 function extractErrorInfoFromXhr(xhr: XMLHttpRequest): ServerErrorInfo {
   const raw = typeof xhr.response === 'string' && xhr.response.length > 0 ? xhr.response : (xhr.responseText ?? '')
   return extractErrorInfoFromRaw(raw)
@@ -112,11 +88,6 @@ const createApiError = (
   return error
 }
 
-type RunPhotoSyncOptions = {
-  signal?: AbortSignal
-  onEvent?: (event: PhotoSyncProgressEvent) => void
-}
-
 export type PhotoUploadFileProgress = {
   index: number
   name: string
@@ -137,155 +108,6 @@ export type UploadPhotoAssetsOptions = {
   onProgress?: (snapshot: PhotoUploadProgressSnapshot) => void
   timeoutMs?: number
   onServerEvent?: (event: PhotoSyncProgressEvent) => void
-}
-
-export async function runPhotoSync(
-  payload: RunPhotoSyncPayload,
-  options?: RunPhotoSyncOptions,
-): Promise<PhotoSyncResult> {
-  const response = await fetch(
-    `${coreApiBaseURL}/data-sync/run`,
-    withLanguageHeaderInit({
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'accept': 'text/event-stream',
-      },
-      credentials: 'include',
-      body: JSON.stringify({ dryRun: payload.dryRun ?? false }),
-      signal: options?.signal,
-    }),
-  )
-
-  if (!response.ok || !response.body) {
-    const fallback = `Sync request failed: ${response.status} ${response.statusText}`
-    const errorInfo = await readResponseErrorInfo(response)
-    throw createApiError(errorInfo, fallback, response.status)
-  }
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder('utf-8')
-  let buffer = ''
-  let finalResult: PhotoSyncResult | null = null
-  let lastErrorMessage: string | null = null
-  let lastErrorCode: number | null = null
-
-  const stageEvent = (rawEvent: string) => {
-    const lines = rawEvent.split(STABLE_NEWLINE)
-    let eventName: string | null = null
-    const dataLines: string[] = []
-
-    for (const line of lines) {
-      if (!line) {
-        continue
-      }
-
-      if (line.startsWith(':')) {
-        continue
-      }
-
-      if (line.startsWith('event:')) {
-        eventName = line.slice(6).trim()
-        continue
-      }
-
-      if (line.startsWith('data:')) {
-        dataLines.push(line.slice(5).trim())
-      }
-    }
-
-    if (!eventName || dataLines.length === 0) {
-      return
-    }
-
-    if (eventName !== 'progress') {
-      return
-    }
-
-    const data = dataLines.join('\n')
-
-    try {
-      const parsed = JSON.parse(data)
-      const event = camelCaseKeys<PhotoSyncProgressEvent>(parsed)
-
-      options?.onEvent?.(event)
-
-      if (event.type === 'complete') {
-        finalResult = event.payload
-      }
-
-      if (event.type === 'error') {
-        lastErrorMessage = event.payload.message
-        const payloadCode = (event.payload as { code?: unknown }).code
-        if (typeof payloadCode === 'number' && Number.isFinite(payloadCode)) {
-          lastErrorCode = payloadCode
-        }
-        else if (typeof payloadCode === 'string') {
-          const parsed = Number.parseInt(payloadCode, 10)
-          if (!Number.isNaN(parsed)) {
-            lastErrorCode = parsed
-          }
-        }
-      }
-    }
-    catch (error) {
-      console.error('Failed to parse sync progress event', error)
-    }
-  }
-
-  try {
-    while (true) {
-      const { value, done } = await reader.read()
-      if (done) {
-        break
-      }
-
-      buffer += decoder.decode(value, { stream: true })
-
-      let boundary = buffer.indexOf('\n\n')
-      while (boundary !== -1) {
-        const rawEvent = buffer.slice(0, boundary)
-        buffer = buffer.slice(boundary + 2)
-        stageEvent(rawEvent)
-        boundary = buffer.indexOf('\n\n')
-      }
-    }
-
-    if (buffer.trim().length > 0) {
-      stageEvent(buffer)
-      buffer = ''
-    }
-  }
-  finally {
-    reader.releaseLock()
-  }
-
-  if (lastErrorMessage) {
-    throw createApiError({ message: lastErrorMessage, code: lastErrorCode, raw: null }, lastErrorMessage)
-  }
-
-  if (!finalResult) {
-    throw new Error('Sync completed without a final result. Connection terminated.')
-  }
-
-  return camelCaseKeys<PhotoSyncResult>(finalResult)
-}
-
-export async function listPhotoSyncConflicts(): Promise<PhotoSyncConflict[]> {
-  const conflicts = await coreApi<PhotoSyncConflict[]>('/data-sync/conflicts')
-  return camelCaseKeys<PhotoSyncConflict[]>(conflicts)
-}
-
-export async function resolvePhotoSyncConflict(
-  id: string,
-  payload: { strategy: PhotoSyncResolution, dryRun?: boolean },
-): Promise<PhotoSyncAction> {
-  const result = await coreApi<PhotoSyncAction>(`/data-sync/conflicts/${id}/resolve`, {
-    method: 'POST',
-    body: payload,
-  })
-
-  return camelCaseKeys<PhotoSyncAction>(result)
 }
 
 export async function listPhotoAssets(): Promise<PhotoAssetListItem[]> {
@@ -703,19 +525,4 @@ export async function getPhotoStorageUrl(storageKey: string): Promise<string> {
   const data = camelCaseKeys<{ url: string }>(result)
 
   return data.url
-}
-
-export async function getPhotoUsageOverview(options?: { limit?: number }): Promise<BillingUsageOverview> {
-  const limit = typeof options?.limit === 'number' ? options.limit : 100
-  const response = await coreApi<BillingUsageOverview>('/billing/usage', {
-    method: 'GET',
-    query: { limit },
-  })
-
-  return camelCaseKeys<BillingUsageOverview>(response)
-}
-
-export async function getPhotoSyncStatus(): Promise<PhotoSyncStatus> {
-  const status = await coreApi<PhotoSyncStatus>('/data-sync/status')
-  return camelCaseKeys<PhotoSyncStatus>(status)
 }

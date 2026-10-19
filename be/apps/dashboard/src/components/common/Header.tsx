@@ -1,9 +1,8 @@
 import { clsxm } from '@afilmory/utils'
 import { useTranslation } from 'react-i18next'
-import { NavLink, useNavigate } from 'react-router'
+import { NavLink } from 'react-router'
 
 import { useAuthUserValue } from '~/atoms/auth'
-import { useTenantPlanQuery } from '~/modules/billing'
 
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { UserMenu } from './UserMenu'
@@ -19,9 +18,6 @@ const navigationTabs = [
 
 export function Header() {
   const user = useAuthUserValue()
-  const planQuery = useTenantPlanQuery({ enabled: Boolean(user) })
-  const planLabel = planQuery.data?.plan?.name ?? planQuery.data?.plan?.planId ?? null
-  const navigate = useNavigate()
   const { t } = useTranslation()
 
   return (
@@ -57,59 +53,11 @@ export function Header() {
           {user && (
             <>
               <WorkspaceSwitcher />
-              <div className="hidden md:block">
-                <PlanBadge
-                  label={planLabel}
-                  isLoading={planQuery.isLoading}
-                  onClick={() => navigate('/plan')}
-                  labelKey="header.plan.badge"
-                />
-              </div>
-              <UserMenu
-                user={user}
-                planLabel={planLabel}
-                planLabelKey="header.plan.badge"
-                planLoading={planQuery.isLoading}
-              />
+              <UserMenu user={user} />
             </>
           )}
         </div>
       </div>
     </header>
-  )
-}
-
-function PlanBadge({
-  label,
-  isLoading,
-  onClick,
-  labelKey,
-}: {
-  label: string | null
-  isLoading: boolean
-  onClick: () => void
-  labelKey: I18nKeys
-}) {
-  const { t } = useTranslation()
-  if (isLoading && !label) {
-    return <div className="bg-fill/30 h-6 w-24 animate-pulse rounded-lg border border-fill-tertiary/30" />
-  }
-
-  if (!label) {
-    return null
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="bg-fill/30 text-text-secondary hover:bg-fill/50 flex items-center gap-1.5 rounded border border-fill-tertiary/30 px-2.5 py-1 text-xs font-medium transition sm:text-[13px]"
-    >
-      <span className="text-text-tertiary text-[11px] sm:text-xs font-medium uppercase tracking-wide">
-        {t(labelKey)}
-      </span>
-      <span className="h-1 w-1 rounded-full bg-text-tertiary/40" aria-hidden="true" />
-      <span className="text-text font-semibold capitalize">{label}</span>
-    </button>
   )
 }

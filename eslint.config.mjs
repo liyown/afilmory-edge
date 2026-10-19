@@ -8,8 +8,6 @@ import recursiveSort from './plugins/eslint/eslint-recursive-sort.js'
 // In flat config, some large generated folders slipped through. To be extra safe,
 // put ignores in a top-level config object first, then append the rest.
 const rootIgnores = globalIgnores([
-  'apps/ssr/src/index.html.ts',
-  'apps/ssr/public/**',
   'apps/web/public/**',
   'packages/docs/public/**',
   'apps/mobile/ios/**',
@@ -133,7 +131,7 @@ const hyobanConfig = await defineConfig(
   },
 
   // Redundant but harmless: keep a local ignore in case this block is used standalone somewhere
-  globalIgnores(['apps/ssr/src/index.html.ts', 'apps/ssr/public/**', 'apps/web/public/**', 'packages/docs/public/**']),
+  globalIgnores(['apps/web/public/**', 'packages/docs/public/**']),
 )
 
 export default [

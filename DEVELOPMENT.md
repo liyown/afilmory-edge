@@ -5,9 +5,9 @@ This document is for contributors and self-hosters who want to customize or run 
 ## Workspace Layout
 
 - `apps/web`: React + Vite SPA that consumes `photos-manifest.json` and generated thumbnails under `apps/web/public`.
-- `apps/ssr`: Next.js wrapper that injects the manifest for SEO/OG and proxies SPA assets.
+- `apps/edge`: Cloudflare Worker that serves the SPA/dashboard, injects the manifest for SEO/OG, and runs scheduled maintenance.
 - `packages/builder`: Photo pipeline that syncs sources → processes images → writes manifest/thumbnails into the SPA.
-- `config.json` + `site.config.ts`: Presentation/content config merged at runtime for both SPA and SSR.
+- `config.json` + `site.config.ts`: Presentation/content config merged at runtime for the SPA.
 - `builder.config.ts`: Builder pipeline config (storage, concurrency, repo sync, plugins).
 
 ## Quick Start (from source)
@@ -40,9 +40,9 @@ pnpm run build:manifest -- --force # full rebuild
 5. Run the app
 
 ```bash
-pnpm dev              # SPA + SSR
+pnpm dev              # Cloudflare Worker + SPA
 pnpm --filter web dev # SPA only
-pnpm --filter @afilmory/ssr dev # SSR wrapper only
+pnpm dev:edge         # Cloudflare Worker only
 ```
 
 ## Builder Configuration (`builder.config.ts`)
@@ -99,7 +99,7 @@ Notes:
 
 ## Site Presentation Config (`config.json`)
 
-`config.json` merges into `site.config.ts` for both SPA and SSR:
+`config.json` merges into `site.config.ts` for the SPA:
 
 - `name` / `title` / `description` / `url` / `accentColor`
 - `author`: `{ name, url, avatar }`

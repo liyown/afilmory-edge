@@ -4,8 +4,6 @@ import type { PhotoPageTab } from './PhotoPageTabs'
 import { PHOTO_TABS } from './PhotoPageTabs'
 import { PhotoLibraryTab } from './tabs/PhotoLibraryTab'
 import { PhotoStorageTab } from './tabs/PhotoStorageTab'
-import { PhotoSyncTab } from './tabs/PhotoSyncTab'
-import { PhotoUsageTab } from './tabs/PhotoUsageTab'
 
 const DEFAULT_TAB: PhotoPageTab = 'library'
 
@@ -18,14 +16,8 @@ export function PhotoPage() {
   const activeTab = isPhotoPageTab(tab) ? (tab as PhotoPageTab) : DEFAULT_TAB
 
   switch (activeTab) {
-    case 'sync': {
-      return <PhotoSyncTab />
-    }
     case 'storage': {
       return <PhotoStorageTab />
-    }
-    case 'usage': {
-      return <PhotoUsageTab />
     }
     case 'library': {
       return <PhotoLibraryTab />

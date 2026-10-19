@@ -24,9 +24,7 @@ export function PhotoPageScaffold({ activeTab, children }: PhotoPageScaffoldProp
           activeId={activeTab}
           items={[
             { id: 'library', labelKey: 'photos.tabs.library', to: TAB_ROUTE_MAP.library, end: true },
-            { id: 'sync', labelKey: 'photos.tabs.sync', to: TAB_ROUTE_MAP.sync, end: true },
             { id: 'storage', labelKey: 'photos.tabs.storage', to: TAB_ROUTE_MAP.storage, end: true },
-            { id: 'usage', labelKey: 'photos.tabs.usage', to: TAB_ROUTE_MAP.usage, end: true },
           ]}
         />
 

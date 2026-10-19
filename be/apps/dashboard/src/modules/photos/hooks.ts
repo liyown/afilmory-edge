@@ -4,34 +4,19 @@ import type { UploadPhotoAssetsOptions } from './api'
 import {
   deletePhotoAssets,
   getPhotoAssetSummary,
-  getPhotoSyncStatus,
-  getPhotoUsageOverview,
   listPhotoAssets,
-  listPhotoSyncConflicts,
-  resolvePhotoSyncConflict,
   updatePhotoAssetTags,
   uploadPhotoAssets,
 } from './api'
-import type { PhotoAssetListItem, PhotoSyncResolution } from './types'
+import type { PhotoAssetListItem } from './types'
 
 export const PHOTO_ASSET_SUMMARY_QUERY_KEY = ['photo-assets', 'summary'] as const
 export const PHOTO_ASSET_LIST_QUERY_KEY = ['photo-assets', 'list'] as const
-export const PHOTO_SYNC_CONFLICTS_QUERY_KEY = ['photo-sync', 'conflicts'] as const
-export const PHOTO_SYNC_STATUS_QUERY_KEY = ['photo-sync', 'status'] as const
-export const PHOTO_USAGE_OVERVIEW_QUERY_KEY = ['photo-usage', 'overview'] as const
 
 export function usePhotoAssetSummaryQuery() {
   return useQuery({
     queryKey: PHOTO_ASSET_SUMMARY_QUERY_KEY,
     queryFn: getPhotoAssetSummary,
-  })
-}
-
-export function usePhotoSyncStatusQuery(options?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: PHOTO_SYNC_STATUS_QUERY_KEY,
-    queryFn: getPhotoSyncStatus,
-    enabled: options?.enabled ?? true,
   })
 }
 
@@ -43,27 +28,11 @@ export function usePhotoAssetListQuery(options?: { enabled?: boolean }) {
   })
 }
 
-export function usePhotoSyncConflictsQuery(options?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: PHOTO_SYNC_CONFLICTS_QUERY_KEY,
-    queryFn: listPhotoSyncConflicts,
-    enabled: options?.enabled ?? true,
-  })
-}
-
-export function usePhotoUsageOverviewQuery(options?: { enabled?: boolean; limit?: number }) {
-  return useQuery({
-    queryKey: [...PHOTO_USAGE_OVERVIEW_QUERY_KEY, options?.limit] as const,
-    queryFn: () => getPhotoUsageOverview({ limit: options?.limit }),
-    enabled: options?.enabled ?? true,
-  })
-}
-
 export function useDeletePhotoAssetsMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (variables: { ids: string[]; deleteFromStorage?: boolean }) => {
+    mutationFn: async (variables: { ids: string[], deleteFromStorage?: boolean }) => {
       await deletePhotoAssets(variables.ids, {
         deleteFromStorage: variables.deleteFromStorage,
       })
@@ -78,9 +47,11 @@ export function useDeletePhotoAssetsMutation() {
       })
       // Optimistically remove deleted ids from cache if available
       queryClient.setQueryData<PhotoAssetListItem[] | undefined>(PHOTO_ASSET_LIST_QUERY_KEY, (previous) => {
-        if (!previous) return previous
+        if (!previous) {
+          return previous
+        }
         const idSet = new Set(ids)
-        return previous.filter((item) => !idSet.has(item.id))
+        return previous.filter(item => !idSet.has(item.id))
       })
     },
   })
@@ -124,35 +95,19 @@ export function useUploadPhotoAssetsMutation() {
   })
 }
 
-export function useResolvePhotoSyncConflictMutation() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (variables: { id: string; strategy: PhotoSyncResolution; dryRun?: boolean }) => {
-      return await resolvePhotoSyncConflict(variables.id, {
-        strategy: variables.strategy,
-        dryRun: variables.dryRun,
-      })
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: PHOTO_SYNC_CONFLICTS_QUERY_KEY,
-      })
-    },
-  })
-}
-
 export function useUpdatePhotoTagsMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (variables: { id: string; tags: string[] }) => {
+    mutationFn: async (variables: { id: string, tags: string[] }) => {
       return await updatePhotoAssetTags(variables.id, variables.tags)
     },
     onSuccess: (asset) => {
       queryClient.setQueryData<PhotoAssetListItem[] | undefined>(PHOTO_ASSET_LIST_QUERY_KEY, (previous) => {
-        if (!previous) return previous
-        return previous.map((item) => (item.id === asset.id ? asset : item))
+        if (!previous) {
+          return previous
+        }
+        return previous.map(item => (item.id === asset.id ? asset : item))
       })
     },
   })

@@ -17,6 +17,7 @@
     "dev:reset-superadmin-password": "vite-node src/index.ts --reset-superadmin-password",
     "manifest:migrate": "vite-node src/index.ts manifest:migrate",
     "migrate:pg-to-d1": "vite-node scripts/migrate-pg-to-d1.ts",
+    "restore:d1-backup": "vite-node scripts/restore-d1-backup.ts",
     "seed:dev": "vite-node src/index.ts --seed-dev",
     "test:global-identity-migration": "vite-node scripts/global-identity-migration-verification.ts"
   },
@@ -57,6 +58,7 @@
     "reflect-metadata": "0.2.2",
     "resend": "6.32.1",
     "satori": "catalog:",
+    "thumbhash": "0.1.1",
     "tsyringe": "4.10.0",
     "zod": "^4.6.7"
   },

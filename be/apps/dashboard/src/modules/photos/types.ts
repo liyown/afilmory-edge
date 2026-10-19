@@ -103,49 +103,51 @@ export interface PhotoSyncLogPayload {
   details?: Record<string, unknown> | null
 }
 
-export type PhotoSyncProgressEvent =
-  | {
-      type: 'start'
-      payload: {
-        summary: PhotoSyncResultSummary
-        totals: PhotoSyncStageTotals
-        options: { dryRun: boolean }
-      }
+export interface PhotoSyncLogEvent {
+  type: 'log'
+  payload: PhotoSyncLogPayload
+}
+
+export type PhotoSyncProgressEvent
+  = | {
+    type: 'start'
+    payload: {
+      summary: PhotoSyncResultSummary
+      totals: PhotoSyncStageTotals
+      options: { dryRun: boolean }
     }
+  }
   | {
-      type: 'stage'
-      payload: {
-        stage: PhotoSyncProgressStage
-        status: 'start' | 'complete'
-        processed: number
-        total: number
-        summary: PhotoSyncResultSummary
-      }
+    type: 'stage'
+    payload: {
+      stage: PhotoSyncProgressStage
+      status: 'start' | 'complete'
+      processed: number
+      total: number
+      summary: PhotoSyncResultSummary
     }
+  }
   | {
-      type: 'action'
-      payload: {
-        stage: PhotoSyncProgressStage
-        index: number
-        total: number
-        action: PhotoSyncAction
-        summary: PhotoSyncResultSummary
-      }
+    type: 'action'
+    payload: {
+      stage: PhotoSyncProgressStage
+      index: number
+      total: number
+      action: PhotoSyncAction
+      summary: PhotoSyncResultSummary
     }
+  }
   | {
-      type: 'complete'
-      payload: PhotoSyncResult
-    }
+    type: 'complete'
+    payload: PhotoSyncResult
+  }
   | {
-      type: 'error'
-      payload: {
-        message: string
-      }
+    type: 'error'
+    payload: {
+      message: string
     }
-  | {
-      type: 'log'
-      payload: PhotoSyncLogPayload
-    }
+  }
+  | PhotoSyncLogEvent
 
 export type PhotoSyncStageStatus = 'pending' | 'running' | 'completed'
 
@@ -207,31 +209,4 @@ export interface PhotoAssetSummary {
   synced: number
   conflicts: number
   pending: number
-}
-
-export type BillingUsageEventType = 'photo.asset.created' | 'photo.asset.deleted' | 'data.sync.completed'
-
-export type BillingUsageUnit = 'count' | 'byte'
-
-export interface BillingUsageEvent {
-  id: string
-  tenantId: string
-  eventType: BillingUsageEventType
-  quantity: number
-  unit: BillingUsageUnit
-  metadata: Record<string, unknown> | null
-  occurredAt: string
-  createdAt: string
-  updatedAt: string
-}
-
-export interface BillingUsageTotalsEntry {
-  eventType: BillingUsageEventType
-  totalQuantity: number
-  unit: BillingUsageUnit
-}
-
-export interface BillingUsageOverview {
-  events: BillingUsageEvent[]
-  totals: BillingUsageTotalsEntry[]
 }

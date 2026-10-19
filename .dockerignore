@@ -14,5 +14,3 @@ apps/web/src/data/photos-manifest.json
 .vercel
 
 public/**
-apps/ssr/src/index.html
-apps/ssr/src/index.html.ts

@@ -1,5 +1,4 @@
 export * from './api'
-export * from './components/CustomDomainCard'
 export * from './components/SiteSettingsForm'
 export * from './components/SiteUserProfileForm'
 export * from './hooks'

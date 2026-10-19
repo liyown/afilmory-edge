@@ -1,6 +1,3 @@
-import { BizException, ErrorCode } from '@core/errors'
-import { StoragePlanService } from '@core/modules/platform/billing/plan/storage-plan.service'
-import { getTenantContext } from '@core/modules/platform/tenant/tenant.context'
 import { injectable } from 'tsyringe'
 
 import { getUiSchemaTranslator } from '../../ui/ui-schema/ui-schema.i18n'
@@ -13,10 +10,7 @@ type StorageSettingKey = 'builder.storage.providers' | 'builder.storage.activePr
 
 @injectable()
 export class StorageSettingService {
-  constructor(
-    private readonly settingService: SettingService,
-    private readonly storagePlanService: StoragePlanService,
-  ) {}
+  constructor(private readonly settingService: SettingService) {}
 
   async getUiSchema(options?: SettingOption) {
     const schema = await this.settingService.getUiSchema(options)
@@ -51,19 +45,6 @@ export class StorageSettingService {
     const activeRaw = activeEntry ? String(activeEntry.value ?? '').trim() : ''
     const activeId = activeRaw.length > 0 ? activeRaw : null
 
-    if (activeId === 'managed') {
-      const tenantId = this.resolveTenantId(normalized)
-      if (!tenantId) {
-        throw new BizException(ErrorCode.TENANT_NOT_FOUND)
-      }
-      const plan = await this.storagePlanService.getActivePlanSummaryForTenant(tenantId)
-      if (!plan) {
-        throw new BizException(ErrorCode.COMMON_BAD_REQUEST, {
-          message: '托管存储订阅无效或已过期，无法设为活动存储。',
-        })
-      }
-    }
-
     if (providersEntry) {
       const providers = parseStorageProviders(String(providersEntry.value ?? ''))
 
@@ -84,15 +65,6 @@ export class StorageSettingService {
     }
 
     await this.settingService.setMany(normalized)
-  }
-
-  private resolveTenantId(entries: readonly SettingEntryInput[]): string | null {
-    const entryWithTenant = entries.find(entry => entry.options?.tenantId)
-    if (entryWithTenant?.options?.tenantId) {
-      return entryWithTenant.options.tenantId
-    }
-    const tenant = getTenantContext()
-    return tenant?.tenant.id ?? null
   }
 
   async delete(key: StorageSettingKey): Promise<void> {

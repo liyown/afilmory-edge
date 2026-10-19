@@ -53,10 +53,7 @@ export class PhotoController {
   @Delete('assets')
   async deleteAssets(@Body() body: DeleteAssetsDto) {
     const ids = Array.isArray(body?.ids) ? body.ids : []
-    const deleteFromStorageRequested = body?.deleteFromStorage === true
-    const isManagedStorage = await this.photoAssetService.isManagedStorage()
-    // managed storage always delete from storage
-    const deleteFromStorage = isManagedStorage ? true : deleteFromStorageRequested
+    const deleteFromStorage = body?.deleteFromStorage === true
 
     const changes = await this.photoAssetService.deleteAssets(ids, { deleteFromStorage })
     return { ids, deleted: true, deleteFromStorage, changes }

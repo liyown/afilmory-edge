@@ -4,8 +4,6 @@ import type {
   B2Config,
   GitHubConfig,
   LocalStorageProviderName,
-  ManagedStorageConfig,
-  RemoteStorageConfig,
   S3CompatibleConfig,
 } from '@afilmory/builder/storage/interfaces.js'
 import { BizException, ErrorCode } from '@core/errors'
@@ -18,8 +16,6 @@ import {
 import { BuilderConfigService } from '@core/modules/configuration/builder-config/builder-config.service'
 import { SettingService } from '@core/modules/configuration/setting/setting.service'
 import type { BuilderStorageProvider } from '@core/modules/configuration/setting/storage-provider.utils'
-import { SystemSettingService } from '@core/modules/configuration/system-setting/system-setting.service'
-import { StoragePlanService } from '@core/modules/platform/billing/plan/storage-plan.service'
 import { injectable } from 'tsyringe'
 
 import { parseRetryMode } from './storage-config-parser.utils'
@@ -29,27 +25,17 @@ type ResolveOverrides = {
   storageConfig?: StorageConfig
 }
 
-const MANAGED_ACTIVE_PROVIDER_ID = 'managed'
-
 @injectable()
 export class PhotoStorageService {
   constructor(
     private readonly settingService: SettingService,
     private readonly builderConfigService: BuilderConfigService,
-    private readonly systemSettingService: SystemSettingService,
-    private readonly storagePlanService: StoragePlanService,
   ) {}
 
   async resolveConfigForTenant(
     tenantId: string,
     overrides: ResolveOverrides = {},
   ): Promise<{ builderConfig: BuilderConfig, storageConfig: StorageConfig }> {
-    const activeProviderIdRaw = await this.settingService.get('builder.storage.activeProvider', { tenantId })
-    const activeProviderId
-      = typeof activeProviderIdRaw === 'string' && activeProviderIdRaw.trim().length > 0
-        ? activeProviderIdRaw.trim()
-        : null
-
     if (overrides.builderConfig) {
       const storageConfig = overrides.storageConfig ?? overrides.builderConfig.user?.storage
       if (!storageConfig) {
@@ -58,16 +44,6 @@ export class PhotoStorageService {
         })
       }
       return { builderConfig: overrides.builderConfig, storageConfig }
-    }
-
-    if (activeProviderId === MANAGED_ACTIVE_PROVIDER_ID) {
-      const managedConfig = await this.tryResolveManagedStorageConfig(tenantId)
-      if (managedConfig) {
-        const builderConfig = await this.builderConfigService.getConfigForTenant(tenantId)
-        const userSettings = this.ensureUserSettings(builderConfig)
-        userSettings.storage = managedConfig
-        return { builderConfig, storageConfig: managedConfig }
-      }
     }
 
     const activeProvider = await this.settingService.getActiveStorageProvider({ tenantId })
@@ -83,33 +59,6 @@ export class PhotoStorageService {
     userSettings.storage = storageConfig
 
     return { builderConfig, storageConfig }
-  }
-
-  private async tryResolveManagedStorageConfig(tenantId: string): Promise<ManagedStorageConfig | null> {
-    const [plan, provider] = await Promise.all([
-      this.storagePlanService.getActivePlanSummaryForTenant(tenantId),
-      this.systemSettingService.getManagedStorageProvider(),
-    ])
-
-    if (!plan) {
-      return null
-    }
-
-    if (!provider) {
-      throw new BizException(ErrorCode.COMMON_BAD_REQUEST, {
-        message: '托管存储尚未启用或未配置 Provider。',
-      })
-    }
-
-    const upstream = this.mapProviderToStorageConfig(provider) as RemoteStorageConfig
-
-    return {
-      provider: 'managed',
-      providerKey: provider.id,
-      tenantId,
-      upstream,
-      basePrefix: null,
-    }
   }
 
   mapProviderToStorageConfig(provider: BuilderStorageProvider): StorageConfig {

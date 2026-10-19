@@ -8,7 +8,7 @@ import {
   DEFAULT_DIRECTORY as DEFAULT_THUMBNAIL_DIRECTORY,
 } from '@afilmory/builder/plugins/thumbnail-storage/shared.js'
 import { StorageManager } from '@afilmory/builder/storage/index.js'
-import type { GitHubConfig, ManagedStorageConfig, S3CompatibleConfig } from '@afilmory/builder/storage/interfaces.js'
+import type { GitHubConfig, S3CompatibleConfig } from '@afilmory/builder/storage/interfaces.js'
 import type { PhotoAssetManifest } from '@afilmory/db'
 import { CURRENT_PHOTO_MANIFEST_VERSION, DATABASE_ONLY_PROVIDER, photoAssets } from '@afilmory/db'
 import { DbAccessor } from '@core/database/database.provider'
@@ -22,14 +22,6 @@ import type {
   DataSyncResultSummary,
   DataSyncStageTotals,
 } from '@core/modules/infrastructure/data-sync/data-sync.types'
-import { BillingPlanService } from '@core/modules/platform/billing/plan/billing-plan.service'
-import { StoragePlanService } from '@core/modules/platform/billing/plan/storage-plan.service'
-import { quotaExceeded } from '@core/modules/platform/billing/quota/billing-quota.error'
-import { BILLING_USAGE_EVENT } from '@core/modules/platform/billing/usage/billing-usage.constants'
-import { BillingUsageService } from '@core/modules/platform/billing/usage/billing-usage.service'
-import { ManagedStorageService } from '@core/modules/platform/managed-storage/managed-storage.service'
-import { selectGalleryPushPreview } from '@core/modules/platform/push-notifications/gallery-push.payload'
-import { GalleryPushQueue } from '@core/modules/platform/push-notifications/gallery-push.queue'
 import { requireTenantContext } from '@core/modules/platform/tenant/tenant.context'
 import { createLogger } from '@tsuki-hono/common'
 import { and, eq, inArray, sql } from 'drizzle-orm'
@@ -39,7 +31,7 @@ import { ManifestSyncService } from '../../manifest-sync/manifest-sync.service'
 import type { PhotoChange } from '../../manifest-sync/manifest-sync.types'
 import { PhotoBuilderService } from '../builder/photo-builder.service'
 import { PhotoStorageService } from '../storage/photo-storage.service'
-import { formatBytesForDisplay, formatBytesToMb, normalizeKeyPath } from '../storage/storage.utils'
+import { formatBytesForDisplay, normalizeKeyPath } from '../storage/storage.utils'
 import type { TransactionalUploadProgressEvent } from '../storage/transactional-storage.manager'
 import { TransactionalStorageManager } from '../storage/transactional-storage.manager'
 import type { PhotoAssetListItem, PhotoAssetRecord, PhotoAssetSummary, UploadAssetInput } from './photo-asset.types'
@@ -79,11 +71,6 @@ export class PhotoAssetService {
     private readonly dbAccessor: DbAccessor,
     private readonly photoBuilderService: PhotoBuilderService,
     private readonly photoStorageService: PhotoStorageService,
-    private readonly billingPlanService: BillingPlanService,
-    private readonly billingUsageService: BillingUsageService,
-    private readonly storagePlanService: StoragePlanService,
-    private readonly managedStorageService: ManagedStorageService,
-    private readonly galleryPushQueue: GalleryPushQueue,
     private readonly manifestSyncService: ManifestSyncService,
   ) {}
 
@@ -156,15 +143,7 @@ export class PhotoAssetService {
   }
 
   async getUploadSizeLimitBytes(): Promise<number | null> {
-    const tenant = requireTenantContext()
-    const planQuota = await this.billingPlanService.getQuotaForTenant(tenant.tenant.id)
-    return this.convertMbToBytes(planQuota.maxUploadSizeMb)
-  }
-
-  async isManagedStorage(): Promise<boolean> {
-    const tenant = requireTenantContext()
-    const { storageConfig } = await this.photoStorageService.resolveConfigForTenant(tenant.tenant.id)
-    return storageConfig.provider === 'managed'
+    return null
   }
 
   async findPhotosByIds(photoIds: string[]): Promise<PhotoManifestItem[]> {
@@ -204,14 +183,9 @@ export class PhotoAssetService {
     }
 
     const shouldDeleteFromStorage = options?.deleteFromStorage === true
-    let storageConfigForDeletion: StorageConfig | null = null
-    let managedProviderKey: string | null = null
-    const managedKeysToDelete = new Set<string>()
 
     if (shouldDeleteFromStorage) {
       const { builderConfig, storageConfig } = await this.photoStorageService.resolveConfigForTenant(tenant.tenant.id)
-      storageConfigForDeletion = storageConfig
-      managedProviderKey = this.resolveManagedProviderKey(storageConfig)
       const storageManager = await this.createStorageManager(builderConfig, storageConfig)
       const thumbnailRemotePrefix = this.resolveThumbnailRemotePrefix(storageConfig)
       const deletedThumbnailKeys = new Set<string>()
@@ -224,9 +198,6 @@ export class PhotoAssetService {
 
         try {
           await storageManager.deleteFile(record.storageKey)
-          if (managedProviderKey) {
-            managedKeysToDelete.add(normalizeKeyPath(record.storageKey))
-          }
         }
         catch (error) {
           throw new BizException(ErrorCode.IMAGE_PROCESSING_FAILED, {
@@ -241,9 +212,6 @@ export class PhotoAssetService {
           try {
             await storageManager.deleteFile(videoKey)
             deletedVideoKeys.add(videoKey)
-            if (managedProviderKey) {
-              managedKeysToDelete.add(normalizeKeyPath(videoKey))
-            }
           }
           catch {
             // 忽略缺失的 Live Photo 视频文件
@@ -287,24 +255,6 @@ export class PhotoAssetService {
     })
     this.manifestSyncService.emitChanged(tenant.tenant.id, changes)
 
-    if (managedProviderKey && storageConfigForDeletion) {
-      const keys = [...managedKeysToDelete].filter(key => key.length > 0)
-      if (keys.length > 0) {
-        await this.managedStorageService.deleteFileReferences(managedProviderKey, keys, tenant.tenant.id)
-      }
-      await this.recordManagedStorageSnapshot(storageConfigForDeletion, tenant.tenant.id, 'delete')
-    }
-
-    if (records.length > 0) {
-      await this.billingUsageService.recordEvent({
-        eventType: BILLING_USAGE_EVENT.PHOTO_ASSET_DELETED,
-        quantity: -records.length,
-        metadata: {
-          count: records.length,
-          mode: shouldDeleteFromStorage ? 'db+storage' : 'db-only',
-        },
-      })
-    }
     return changes
   }
 
@@ -318,9 +268,6 @@ export class PhotoAssetService {
 
     const tenant = requireTenantContext()
     const db = this.dbAccessor.get()
-    const planQuota = await this.billingPlanService.getQuotaForTenant(tenant.tenant.id)
-    const uploadSizeLimit = planQuota.maxUploadSizeMb
-    this.enforceUploadSizeLimit(inputs, uploadSizeLimit)
     const { builderConfig, storageConfig } = await this.photoStorageService.resolveConfigForTenant(tenant.tenant.id)
 
     const builder = this.photoBuilderService.createBuilder(builderConfig)
@@ -389,9 +336,6 @@ export class PhotoAssetService {
       }
 
       const pendingPhotoPlans = photoPlans.filter(plan => !existingPhotoKeySet.has(plan.storageKey))
-      await this.billingPlanService.ensurePhotoProcessingAllowance(tenant.tenant.id, pendingPhotoPlans.length)
-      const libraryLimit = planQuota.libraryItemLimit
-      await this.ensurePhotoLibraryCapacity(tenant.tenant.id, db, pendingPhotoPlans.length, libraryLimit)
       throwIfAborted()
 
       const additionalPhotoPlans = this.createExistingPhotoPlansForVideos(unmatchedVideoBaseNames, existingBaseNameMap)
@@ -418,17 +362,6 @@ export class PhotoAssetService {
         activeVideoPlans,
         storageManager,
       )
-      const { incomingBytes } = this.estimateManagedStorageDelta(
-        storageConfig,
-        allPendingPhotoPlans,
-        activeVideoPlans,
-        existingStorageMap,
-      )
-      await this.ensureManagedStorageCapacity({
-        storageConfig,
-        tenantId: tenant.tenant.id,
-        incomingBytes,
-      })
       const videoBufferMap = new Map<string, Buffer>()
       const videoObjectsByBaseName = await this.prepareVideoObjects(
         activeVideoPlans,
@@ -505,7 +438,6 @@ export class PhotoAssetService {
           })
         }
         shouldRollbackUploads = false
-        await this.recordManagedStorageSnapshot(storageConfig, tenant.tenant.id)
         return existingItemsRaw
       }
 
@@ -590,33 +522,7 @@ export class PhotoAssetService {
         await emitLog('所有文件处理完成。', 'success')
       }
 
-      if (processedItems.length > 0) {
-        await this.billingUsageService.recordEvent({
-          eventType: BILLING_USAGE_EVENT.PHOTO_ASSET_CREATED,
-          quantity: processedItems.length,
-          metadata: {
-            count: processedItems.length,
-            uploadSource: 'manual-upload',
-          },
-        })
-        await this.galleryPushQueue
-          .enqueueGalleryPublished(
-            tenant.tenant.id,
-            processedItems.length,
-            selectGalleryPushPreview(
-              processedItems.map(item => ({
-                photoId: item.photoId,
-                thumbnailUrl: item.manifest?.data?.thumbnailUrl,
-              })),
-            ),
-          )
-          .catch((error) => {
-            this.logger.error('Failed to queue gallery update notifications', error)
-          })
-      }
-
       shouldRollbackUploads = false
-      await this.recordManagedStorageSnapshot(storageConfig, tenant.tenant.id)
       return result
     }
     catch (error) {
@@ -1202,28 +1108,6 @@ export class PhotoAssetService {
         { operation: 'upsert', record: saved, publicUrl },
       ])
 
-      await this.recordManagedStorageReferences(storageConfig, tenantId, [
-        {
-          storageKey: resolvedPhotoKey,
-          size: snapshot.size ?? storageObject.size ?? plan.original.buffer?.byteLength ?? null,
-          contentType: plan.original.contentType ?? null,
-          etag: snapshot.etag ?? storageObject.etag ?? null,
-          referenceType: 'photo.asset',
-          referenceId: item.id,
-        },
-        ...(videoObject?.key
-          ? [
-              {
-                storageKey: videoObject.key,
-                size: videoObject.size ?? videoBufferMap.get(videoObject.key)?.byteLength ?? null,
-                etag: videoObject.etag ?? null,
-                referenceType: 'photo.asset.video',
-                referenceId: item.id,
-              },
-            ]
-          : []),
-      ])
-
       if (onProcessed) {
         await onProcessed({ plan, storageObject, manifestItem: item, change })
       }
@@ -1462,63 +1346,6 @@ export class PhotoAssetService {
       version: CURRENT_PHOTO_MANIFEST_VERSION,
       data: structuredClone(item),
     }
-  }
-
-  private enforceUploadSizeLimit(inputs: readonly UploadAssetInput[], limitMb: number | null): void {
-    const maxBytes = this.convertMbToBytes(limitMb)
-    if (maxBytes === null || inputs.length === 0) {
-      return
-    }
-
-    for (const input of inputs) {
-      const size = input.buffer?.length ?? 0
-      if (size <= maxBytes) {
-        continue
-      }
-
-      const displayLimit = limitMb ?? formatBytesToMb(maxBytes)
-      const actualSize = formatBytesToMb(size)
-      throw quotaExceeded({
-        reason: 'upload_size',
-        message: `文件 ${input.filename} (${actualSize} MB) 超出允许的单张大小 ${displayLimit} MB`,
-        details: { limitMb: limitMb ?? maxBytes / 1024 / 1024, actualMb: size / 1024 / 1024 },
-      })
-    }
-  }
-
-  private convertMbToBytes(value: number | null): number | null {
-    if (value === null) {
-      return null
-    }
-    return value * 1024 * 1024
-  }
-
-  private async ensurePhotoLibraryCapacity(
-    tenantId: string,
-    db: ReturnType<DbAccessor['get']>,
-    newPhotos: number,
-    limit: number | null,
-  ): Promise<void> {
-    if (limit === null || newPhotos === 0) {
-      return
-    }
-
-    const current = await this.countTenantPhotos(tenantId, db)
-    if (current + newPhotos > limit) {
-      throw quotaExceeded({
-        reason: 'library_items',
-        message: `当前图库已有 ${current} 张图片，超过上限 ${limit}，无法继续上传`,
-        details: { limit, current },
-      })
-    }
-  }
-
-  private async countTenantPhotos(tenantId: string, db: ReturnType<DbAccessor['get']>): Promise<number> {
-    const [row] = await db
-      .select({ total: sql<number>`count(*)` })
-      .from(photoAssets)
-      .where(eq(photoAssets.tenantId, tenantId))
-    return typeof row?.total === 'number' ? row.total : Number(row?.total ?? 0)
   }
 
   private splitStorageKey(storageKey: string): { basePath: string, extension: string } {
@@ -1786,173 +1613,6 @@ export class PhotoAssetService {
 
     const prefix = fullKey.slice(0, diffLength).replace(TRAILING_SLASHES_PATTERN, '')
     return prefix.length > 0 ? prefix : null
-  }
-
-  private resolveManagedProviderKey(storageConfig: StorageConfig): string | null {
-    if (storageConfig.provider !== 'managed') {
-      return null
-    }
-    const managedConfig = storageConfig as ManagedStorageConfig
-    const providerKey = managedConfig.providerKey ?? managedConfig.upstream.provider
-    if (typeof providerKey !== 'string') {
-      return null
-    }
-    const normalized = providerKey.trim()
-    return normalized.length > 0 ? normalized : null
-  }
-
-  private estimateManagedStorageDelta(
-    storageConfig: StorageConfig,
-    pendingPhotoPlans: PreparedUploadPlan[],
-    activeVideoPlans: PreparedUploadPlan[],
-    existingStorageMap: Map<string, StorageObject>,
-  ): { providerKey: string | null, incomingBytes: number, incomingFiles: number } {
-    const providerKey = this.resolveManagedProviderKey(storageConfig)
-    if (!providerKey) {
-      return { providerKey: null, incomingBytes: 0, incomingFiles: 0 }
-    }
-
-    let incomingBytes = 0
-    let incomingFiles = 0
-    const seenKeys = new Set<string>()
-
-    const appendPlan = (plan: PreparedUploadPlan) => {
-      const normalizedKey = normalizeKeyPath(plan.storageKey)
-      if (!normalizedKey || plan.isExisting || existingStorageMap.has(normalizedKey) || seenKeys.has(normalizedKey)) {
-        return
-      }
-      seenKeys.add(normalizedKey)
-      incomingFiles += 1
-      incomingBytes += plan.original.buffer?.byteLength ?? 0
-    }
-
-    pendingPhotoPlans.forEach(appendPlan)
-    activeVideoPlans.forEach(appendPlan)
-
-    return { providerKey, incomingBytes, incomingFiles }
-  }
-
-  private async ensureManagedStorageCapacity(params: {
-    storageConfig: StorageConfig
-    tenantId: string
-    incomingBytes: number
-  }): Promise<void> {
-    const providerKey = this.resolveManagedProviderKey(params.storageConfig)
-    if (!providerKey) {
-      return
-    }
-
-    const quota = await this.storagePlanService.getQuotaForTenant(params.tenantId)
-    const capacity = quota.totalBytes
-    if (capacity === null) {
-      return
-    }
-
-    const usage = await this.managedStorageService.getUsageTotals(providerKey, params.tenantId)
-    const projectedBytes = usage.totalBytes + Math.max(0, params.incomingBytes)
-
-    if (usage.totalBytes > capacity) {
-      await this.managedStorageService.recordUsageSnapshot({
-        tenantId: params.tenantId,
-        providerKey,
-        operation: 'over-limit',
-        totalBytes: usage.totalBytes,
-        fileCount: usage.fileCount,
-      })
-      throw quotaExceeded({
-        reason: 'storage',
-        message: `托管存储空间已超出套餐上限：当前已用 ${formatBytesForDisplay(
-          usage.totalBytes,
-        )}，套餐上限 ${formatBytesForDisplay(capacity)}。请清理空间或升级存储方案后再试。`,
-        details: { capacityBytes: capacity, usedBytes: usage.totalBytes, incomingBytes: params.incomingBytes },
-      })
-    }
-
-    if (projectedBytes > capacity) {
-      await this.managedStorageService.recordUsageSnapshot({
-        tenantId: params.tenantId,
-        providerKey,
-        operation: 'over-limit',
-        totalBytes: usage.totalBytes,
-        fileCount: usage.fileCount,
-      })
-      throw quotaExceeded({
-        reason: 'storage',
-        message: `托管存储空间不足：当前已用 ${formatBytesForDisplay(
-          usage.totalBytes,
-        )}，上传后预计 ${formatBytesForDisplay(projectedBytes)}，已超过套餐上限 ${formatBytesForDisplay(
-          capacity,
-        )}。请清理空间或升级存储方案后再试。`,
-        details: { capacityBytes: capacity, usedBytes: usage.totalBytes, incomingBytes: params.incomingBytes },
-      })
-    }
-  }
-
-  private async recordManagedStorageReferences(
-    storageConfig: StorageConfig,
-    tenantId: string,
-    references: Array<{
-      storageKey: string
-      size?: number | null
-      contentType?: string | null
-      etag?: string | null
-      referenceType?: string | null
-      referenceId?: string | null
-    }>,
-  ): Promise<void> {
-    if (storageConfig.provider !== 'managed') {
-      return
-    }
-
-    const managedConfig = storageConfig as ManagedStorageConfig
-    const providerKey = managedConfig.providerKey ?? managedConfig.upstream.provider
-    if (!providerKey || references.length === 0) {
-      return
-    }
-
-    const tasks = references
-      .map(reference => ({
-        ...reference,
-        storageKey: normalizeKeyPath(reference.storageKey),
-      }))
-      .filter(reference => reference.storageKey.length > 0)
-      .map(reference =>
-        this.managedStorageService.upsertFileReference({
-          tenantId,
-          providerKey,
-          storageProvider: managedConfig.upstream.provider,
-          storageKey: reference.storageKey,
-          size: reference.size ?? null,
-          contentType: reference.contentType ?? null,
-          etag: reference.etag ?? null,
-          referenceType: reference.referenceType ?? null,
-          referenceId: reference.referenceId ?? null,
-        }))
-
-    if (tasks.length === 0) {
-      return
-    }
-
-    await Promise.all(tasks)
-  }
-
-  private async recordManagedStorageSnapshot(
-    storageConfig: StorageConfig,
-    tenantId: string,
-    operation?: string | null,
-  ): Promise<void> {
-    const providerKey = this.resolveManagedProviderKey(storageConfig)
-    if (!providerKey) {
-      return
-    }
-    const usage = await this.managedStorageService.getUsageTotals(providerKey, tenantId)
-    await this.managedStorageService.recordUsageSnapshot({
-      tenantId,
-      providerKey,
-      operation: operation ?? 'snapshot',
-      totalBytes: usage.totalBytes,
-      fileCount: usage.fileCount,
-    })
   }
 
   private async relocateLivePhotoVideo(
