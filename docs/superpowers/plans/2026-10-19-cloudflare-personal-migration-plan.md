@@ -28,6 +28,7 @@ Target reader: **执行这个计划的 agent**。本文件不按"人日"编排�
 | T2.3 事务改写 | ✅ | 个人版路径上的 4 处交互式事务已清除：`ManifestSyncService` 改为「单条 `UPDATE ... RETURNING` 分配 revision + batch 内子查询写入 changes + 剪枝」，photo 删除合并为单个 plan，上传/更新改为「单条 upsert + 幂等 change batch」。`node:sqlite` 回归测试 5/5 通过（含双连接并发 revision 唯一性、重复删除不产生重复行） |
 | T2.4 数据迁移/初始化 | ✅ | 新增 `be/apps/core/scripts/migrate-pg-to-d1.ts`：15 表类型转换 + 外键/自引用排序 + 分批 `INSERT ... ON CONFLICT DO UPDATE` + D1 REST batch + 本地 SQLite 传输 + 行数/抽样对账；无历史时幂等 seed tenant/superadmin/owner/manifest state。6/6 测试通过；真实 PG/D1 联调待凭据 |
 | T2.5 租户 shim | ✅ | `TenantContextResolver` 永远返回 root 行（去掉初始化门禁/host 解析），`OnModuleInit` 启动预热；`ensureRootTenant` 用 `ON CONFLICT DO NOTHING` 并发安全创建 **active** root，并自动激活历史 inactive 行。3 files / 10 tests 通过（任意 host/path、并发、重试、middleware 内 `requireTenantContext()`）；Worker 端到端挂载留待 T3.1 |
+| T3.1 better-auth + D1 | ✅ | Worker 内挂载 `EdgeCoreModule`（Database/InProcessEvent/AppState/Setting/SystemSetting/Tenant/Auth）；drizzle adapter 按 `PERSONAL_DEPLOYMENT` 走 sqlite schema；新增 `isoDateText` 解决 better-auth 传 `Date` 而 D1 只接受原始值；Apple 服务构建期替换为禁用 stub；社交登录/邮件验证关闭。`cf dev` 实测：匿名 `/api/auth/session` → `null`；`POST /api/auth/sign-in/email` → 200 + session cookie；带 cookie 的 session 返回 user/session/memberships；`/api/auth/social/providers` → `[]`；`/api/mobile-auth/apple/configuration` → `enabled:false`；`pnpm -C apps/edge build` 通过 |
 | T0.4 裁剪 core | 🚧 模块图完成 | `personal.module.ts` 修正 import 路径、补齐全局 middleware/guard/interceptor；新增 `InProcessEventModule`（§2.6，去掉事件对 Redis 的依赖）。已删除 `activity`、`super-admin`、`featured-galleries`、`gallery-subscriptions`、`mobile`、`user-safety`、`account-deletion`、`static-web`、`mail`、`index.module.ts`；`app.factory` / `openapi` 已切到 `PersonalModule`；`tsc --noEmit` 通过。**仍待**：billing/managed-storage/push/data-sync 与 photo/system-setting 解耦（与 T4 上传重写重叠），以及 billing 本身删除 |
 
 **线上资源（`cf deploy --provision` 创建）**
@@ -434,9 +435,51 @@ T1.6 + T2.5 + T3.3 ────────────────────�
 ### Phase 3 — 认证与后台
 
 **T3.1 better-auth + D1**
-- 动作：auth 的 drizzle adapter 指向 sqlite schema；session cookie 域配置；
-  关闭社交登录 / 邮件验证（个人版不需要）。
-- 验收：`/api/auth/session` 未登录返回 null；登录后返回 user。
+- 状态：**已完成（2026-10-19）**。
+- 实现：
+  - 新增 `apps/edge/src/core-app.ts`：`EdgeCoreModule` 只挂载认证所需模块
+    （`DatabaseModule`、`InProcessEventModule`、`AppStateModule`、`SettingModule`、
+    `SystemSettingModule`、`TenantModule`、`AuthModule`）与全局 middleware/guard/interceptor；
+    `index.ts` 把 `/api/auth/*`、`/api/mobile-auth/*` 交给该 app。
+  - `drizzleAdapter` 按 `env.PERSONAL_DEPLOYMENT` 选择 `provider: 'sqlite'`；
+    `emailAndPassword.requireEmailVerification=false`；`secret` 取
+    `BETTER_AUTH_SECRET`，回退到 `CONFIG_ENCRYPTION_KEY`。
+  - `AuthConfig.getOptions()` 在个人版直接返回空 `socialProviders`、`apple: undefined`、
+    `oauthGatewayUrl: null`，忽略历史 system setting 里的值，杜绝通过设置重新开启 OAuth。
+  - `trustedOrigins` 额外加入当前请求 origin：workers.dev / 自定义域名不一定能从
+    `baseDomain` 推导出来。
+  - `schema.sqlite.ts` 新增 `isoDateText` 自定义列型：better-auth 的 drizzle adapter
+    无视 provider 一律把日期转成 `Date` 再写库，而 D1 只能绑定原始值；该列型在写入前
+    统一 `toISOString()`，表结构仍是 `text`，无需迁移。
+  - Apple 登录与 `tenant_domains` 不在个人版 schema 中：新增
+    `apps/edge/src/personal-apple-authorization.service.ts` 并通过 Vite/tsconfig alias
+    替换 `@core/.../apple-authorization.service`，返回 `enabled:false` 且写操作抛
+    `AUTH_FORBIDDEN`。`TenantDomain*` 类型移到 `tenant-domain.types.ts`（PG-only），
+    使 edge 模块图不再引用 `tenantDomains`。
+  - 新增 `apps/edge/src/env.ts`：以 Proxy 从 `cloudflare:workers` 读取 binding，避免
+    `@afilmory/env` 在 workerd 里执行 `dotenv`/`process.env`；`cloudflare.config.ts`
+    声明 `CONFIG_ENCRYPTION_KEY`、`BETTER_AUTH_SECRET` 两个 secret 以加载 `.dev.vars`。
+- 验证（`cf dev` @ `:5173`，本地 D1）：
+  - 匿名 `GET /api/auth/session` → `200 null`；`GET /api/auth/ok` → `{"ok":true}`。
+  - 本地 seed 用户后 `POST /api/auth/sign-in/email` → `200` +
+    `set-cookie: afilmory-tenant.session_token=...; HttpOnly; SameSite=Lax`。
+  - 带 cookie `GET /api/auth/session` → `user`、`session.active_tenant_id="1"`、
+    root `active_workspace`、`memberships`。
+  - `GET /api/auth/social/providers` → `{"providers":[]}`；
+    `GET /api/mobile-auth/apple/configuration` → `{"enabled":false,"web_enabled":false}`。
+  - `select typeof(expires_at) from auth_session` → `text`（ISO 字符串，不是 epoch）。
+  - `pnpm -C apps/edge exec tsc --noEmit`、`pnpm -C be/apps/core exec tsc --noEmit`、
+    `pnpm exec eslint <changed files>`、`pnpm -C apps/edge build` → 通过（1012 modules，
+    bundle 2.13 MB / gzip 545 KB）。
+  - 回归：tenant/request-context 3 files / 10 tests 通过。
+- 本地测试数据（仅存在于 gitignored 的 `.wrangler`/`.cloudflare` 状态）：
+  `local-admin` / `admin@local.test` / `Password123!`，superadmin + root owner。
+  T3.2 做正式引导时可覆盖或删除。
+- 已知问题（不阻塞）：
+  - `CorsMiddleware` 仍输出 `access-control-allow-origin: *` 且
+    `access-control-allow-credentials: true`；同源 dashboard 不受影响，跨域 cookie
+    客户端会被浏览器拒绝，后续统一 CORS 时修正。
+  - `EdgeCoreModule` 只包含认证切片；settings/photo/feed 等模块待后续任务接入。
 
 **T3.2 单管理员引导**
 - 动作：首次部署用 CLI/一次性脚本创建管理员；关闭注册（或保留但仅允许已存在邮箱）。

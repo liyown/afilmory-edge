@@ -8,9 +8,9 @@ import { requireTenantContext } from '@core/modules/platform/tenant/tenant.conte
 import { injectable } from 'tsyringe'
 
 import { TenantService } from './tenant.service'
-import type { TenantDomainAggregate, TenantDomainRecord } from './tenant.types'
 import { TenantDomainRepository } from './tenant-domain.repository'
 import { mapCloudflareDomainState } from './tenant-domain.state'
+import type { TenantDomainAggregate, TenantDomainRecord } from './tenant-domain.types'
 
 const HTTP_PROTOCOL_PATTERN = /^https?:\/\//
 

@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers'
 
+import { getCoreApp } from './core-app'
 import { getDatabaseHealthApp } from './core-database'
 import { runDecoratorSpike } from './decorator-spike'
 import { loadManifest, serveAppShell, servePhotoShell } from './html'
@@ -81,6 +82,17 @@ export default {
     // T2.2: core DI graph running against the D1 binding.
     if (url.pathname === '/api/health') {
       const app = await getDatabaseHealthApp()
+      return app.getInstance().fetch(request)
+    }
+
+    // T3.1: better-auth (SQLite/D1 adapter) and the local session routes.
+    if (
+      url.pathname === '/api/auth'
+      || url.pathname.startsWith('/api/auth/')
+      || url.pathname === '/api/mobile-auth'
+      || url.pathname.startsWith('/api/mobile-auth/')
+    ) {
+      const app = await getCoreApp()
       return app.getInstance().fetch(request)
     }
 

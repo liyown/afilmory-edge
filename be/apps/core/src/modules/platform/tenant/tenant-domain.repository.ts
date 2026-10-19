@@ -4,7 +4,7 @@ import { BizException, ErrorCode } from '@core/errors'
 import { and, count, desc, eq } from 'drizzle-orm'
 import { injectable } from 'tsyringe'
 
-import type { TenantDomainAggregate, TenantDomainRecord } from './tenant.types'
+import type { TenantDomainAggregate, TenantDomainRecord } from './tenant-domain.types'
 
 @injectable()
 export class TenantDomainRepository {

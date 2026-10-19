@@ -1,0 +1,5 @@
+# Local-only Worker secrets for `cf dev`. Copy to `.dev.vars` and replace values.
+# Production values are set with `cf secret put CONFIG_ENCRYPTION_KEY` (and
+# optionally BETTER_AUTH_SECRET; it falls back to CONFIG_ENCRYPTION_KEY).
+CONFIG_ENCRYPTION_KEY=local-development-encryption-key
+BETTER_AUTH_SECRET=local-development-better-auth-secret

@@ -1,6 +1,6 @@
 import { CURRENT_MANIFEST_VERSION } from '@afilmory/builder/manifest/version.js'
 import { sql } from 'drizzle-orm'
-import { foreignKey, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { customType, foreignKey, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 // `nodejs-snowflake` ships a WASM binary loaded through `__dirname`, which does
 // not exist in workerd. Keep the same 64-bit, time-sortable shape with Web APIs.
@@ -30,12 +30,25 @@ const snowflakeId = text('id')
 // and sorts correctly as text in SQLite.
 const nowIso = sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
 
+// Better Auth passes `Date` objects to the adapter regardless of provider. The
+// PG schema stringifies them through `timestamp({ mode: 'string' })`; SQLite's
+// plain `text()` would hand the Date to D1, which only binds primitives.
+const isoDateText = customType<{ data: string, driverData: string }>({
+  dataType() {
+    return 'text'
+  },
+  toDriver(value) {
+    const candidate: unknown = value
+    return candidate instanceof Date ? candidate.toISOString() : (candidate as string)
+  },
+})
+
 function createdAt(name = 'created_at') {
-  return text(name).notNull().default(nowIso)
+  return isoDateText(name).notNull().default(nowIso)
 }
 
 function updatedAt(name = 'updated_at') {
-  return text(name).notNull().default(nowIso)
+  return isoDateText(name).notNull().default(nowIso)
 }
 
 // The Worker build must not pull the whole builder package just for these
@@ -120,10 +133,10 @@ export const authUsers = sqliteTable(
     displayUsername: text('display_username'),
     banned: integer('banned', { mode: 'boolean' }).notNull().default(false),
     banReason: text('ban_reason'),
-    banExpires: text('ban_expires_at'),
-    deletionRequestedAt: text('deletion_requested_at'),
-    lastSignedInAt: text('last_signed_in_at'),
-    lastActiveAt: text('last_active_at'),
+    banExpires: isoDateText('ban_expires_at'),
+    deletionRequestedAt: isoDateText('deletion_requested_at'),
+    lastSignedInAt: isoDateText('last_signed_in_at'),
+    lastActiveAt: isoDateText('last_active_at'),
     lastActiveSurface: text('last_active_surface'),
   },
   t => [uniqueIndex('uq_auth_user_email_normalized').on(sql`lower(trim(${t.email}))`)],
@@ -156,7 +169,7 @@ export const tenantMemberships = sqliteTable(
 
 export const authSessions = sqliteTable('auth_session', {
   id: text('id').primaryKey(),
-  expiresAt: text('expires_at').notNull(),
+  expiresAt: isoDateText('expires_at').notNull(),
   token: text('token').notNull().unique(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -181,8 +194,8 @@ export const authAccounts = sqliteTable(
     accessToken: text('access_token'),
     refreshToken: text('refresh_token'),
     idToken: text('id_token'),
-    accessTokenExpiresAt: text('access_token_expires_at'),
-    refreshTokenExpiresAt: text('refresh_token_expires_at'),
+    accessTokenExpiresAt: isoDateText('access_token_expires_at'),
+    refreshTokenExpiresAt: isoDateText('refresh_token_expires_at'),
     scope: text('scope'),
     password: text('password'),
     createdAt: createdAt(),
@@ -198,7 +211,7 @@ export const authVerifications = sqliteTable('auth_verification', {
   id: text('id').primaryKey(),
   identifier: text('identifier').notNull(),
   value: text('value').notNull(),
-  expiresAt: text('expires_at').notNull(),
+  expiresAt: isoDateText('expires_at').notNull(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })

@@ -25,6 +25,14 @@ export default defineConfig({
         replacement: `${CORE_SRC}database/database.d1.provider.ts`,
       },
       { find: '@afilmory/db', replacement: `${DB_SRC}schema.sqlite.ts` },
+      // T3.1: `@afilmory/env` parses `process.env` (dotenv) at import time; the
+      // Worker reads the same keys from `cloudflare:workers` env instead.
+      { find: '@afilmory/env', replacement: fileURLToPath(new URL('./src/env.ts', import.meta.url)) },
+      // T3.1: Apple sign-in is disabled and its table is absent from D1.
+      {
+        find: '@core/modules/platform/auth/apple-authorization.service',
+        replacement: fileURLToPath(new URL('./src/personal-apple-authorization.service.ts', import.meta.url)),
+      },
       { find: '@core', replacement: CORE_SRC },
     ],
   },

@@ -32,6 +32,12 @@ export const env = createEnv({
 
     CONFIG_ENCRYPTION_KEY: z.string().min(1),
     AUTH_GATEWAY_STATE_SECRET: z.string().min(1).optional(),
+    // T3.1: single-tenant Worker deployment. Disables multi-tenant auth flows.
+    PERSONAL_DEPLOYMENT: z
+      .enum(['true', 'false'])
+      .transform(value => value === 'true')
+      .default(false),
+    BETTER_AUTH_SECRET: z.string().min(1).optional(),
 
     // Payment
     CREEM_API_KEY: z.string().min(1).optional(),

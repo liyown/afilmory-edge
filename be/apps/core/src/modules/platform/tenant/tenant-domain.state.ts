@@ -1,6 +1,6 @@
 import type { CloudflareCustomHostname } from '@core/modules/infrastructure/cloudflare/cloudflare-custom-hostname.service'
 
-import type { TenantDomainRecord } from './tenant.types'
+import type { TenantDomainRecord } from './tenant-domain.types'
 
 const DISABLED_HOSTNAME_STATUSES = new Set([
   'blocked',

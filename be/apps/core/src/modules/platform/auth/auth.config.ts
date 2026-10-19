@@ -38,6 +38,21 @@ export class AuthConfig {
     const prefix = '/auth'
     const { socialProviders, baseDomain, oauthGatewayUrl } = await this.systemSettings.getAuthModuleConfig()
     const settings = await this.systemSettings.getSettings()
+
+    // T3.1: the personal deployment has a single local account. OAuth
+    // providers, Apple sign-in and the mobile OAuth gateway are not part of
+    // this mode, so ignore any stale values persisted in system settings.
+    if (env.PERSONAL_DEPLOYMENT) {
+      return {
+        prefix,
+        useDrizzle: true,
+        socialProviders: {},
+        apple: undefined,
+        baseDomain,
+        oauthGatewayUrl: null,
+      }
+    }
+
     const appBundleIdentifier = env.APPLE_APP_BUNDLE_ID ?? settings.oauthAppleAppBundleId
     const webClientId = settings.oauthAppleWebClientId ?? env.APPLE_WEB_CLIENT_ID ?? null
     const teamId = settings.oauthAppleTeamId ?? env.APPLE_TEAM_ID ?? null

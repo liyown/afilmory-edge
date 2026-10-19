@@ -2,11 +2,10 @@ import { AllowPlaceholderTenant } from '@core/decorators/allow-placeholder.decor
 import { SkipTenantGuard } from '@core/decorators/skip-tenant.decorator'
 import { BizException, ErrorCode } from '@core/errors'
 import { RequireAuth } from '@core/guards/roles.decorator'
+import type { AppleAuthorizationInput } from '@core/modules/platform/auth/apple-authorization.service'
+import { AppleAuthorizationService } from '@core/modules/platform/auth/apple-authorization.service'
 import { Body, Controller, Get, HttpContext, Post } from '@tsuki-hono/common'
 import { injectable } from 'tsyringe'
-
-import type { AppleAuthorizationInput } from './apple-authorization.service'
-import { AppleAuthorizationService } from './apple-authorization.service'
 
 @injectable()
 // Keep native Apple exchange routes outside Better Auth's `/auth/*` passthrough.

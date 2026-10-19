@@ -3,6 +3,7 @@ import { env } from '@afilmory/env'
 import { DrizzleProvider } from '@core/database/database.provider'
 import { BizException } from '@core/errors'
 import { SystemSettingService } from '@core/modules/configuration/system-setting/system-setting.service'
+import { AppleAuthorizationService } from '@core/modules/platform/auth/apple-authorization.service'
 import type { OnModuleInit } from '@tsuki-hono/common'
 import { createLogger, HttpContext } from '@tsuki-hono/common'
 import type { BetterAuthOptions } from 'better-auth'
@@ -15,7 +16,6 @@ import type { Context } from 'hono'
 import { injectable } from 'tsyringe'
 
 import { extractTenantSlugFromHost } from '../tenant/tenant-host.utils'
-import { AppleAuthorizationService } from './apple-authorization.service'
 import { AppleClientSecretService } from './apple-client-secret.service'
 import type { AuthModuleOptions, SocialProviderOptions, SocialProvidersConfig } from './auth.config'
 import { AuthConfig } from './auth.config'
@@ -160,6 +160,16 @@ export class AuthProvider implements OnModuleInit {
     return `${normalizedBase}${basePath}`
   }
 
+  private resolveRequestOrigin(): string | null {
+    try {
+      const hono = HttpContext.getValue('hono') as Context | undefined
+      return hono ? new URL(hono.req.url).origin : null
+    }
+    catch {
+      return null
+    }
+  }
+
   private async buildTrustedOrigins(): Promise<string[]> {
     const mobileOrigins = ['afilmory://', 'https://appleid.apple.com']
 
@@ -175,13 +185,18 @@ export class AuthProvider implements OnModuleInit {
     }
 
     const settings = await this.systemSettings.getSettings()
-    return [
+    const origins = [
       `https://*.${settings.baseDomain}`,
       `http://*.${settings.baseDomain}`,
       `https://${settings.baseDomain}`,
       `http://${settings.baseDomain}`,
       ...mobileOrigins,
     ]
+
+    // A personal deployment can be reached through the workers.dev host or a
+    // custom domain that is not derived from `baseDomain`.
+    const requestOrigin = this.resolveRequestOrigin()
+    return requestOrigin ? [...new Set([requestOrigin, ...origins])] : origins
   }
 
   private async createAuthForEndpoint(
@@ -199,7 +214,7 @@ export class AuthProvider implements OnModuleInit {
     const requestedTenantId = explicitTenantId ?? this.resolveTenantIdFromContext()
     const auth = betterAuth({
       database: drizzleAdapter(db, {
-        provider: 'pg',
+        provider: env.PERSONAL_DEPLOYMENT ? 'sqlite' : 'pg',
         schema: {
           user: authUsers,
           session: authSessions,
@@ -207,8 +222,13 @@ export class AuthProvider implements OnModuleInit {
           verification: authVerifications,
         },
       }),
+      // Better Auth refuses to start without an explicit secret in production.
+      secret: env.BETTER_AUTH_SECRET ?? env.CONFIG_ENCRYPTION_KEY,
       socialProviders: socialProviders as BetterAuthOptions['socialProviders'],
-      emailAndPassword: { enabled: true },
+      emailAndPassword: {
+        enabled: true,
+        requireEmailVerification: false,
+      },
       trustedOrigins: await this.buildTrustedOrigins(),
       session: {
         freshAge: 0,

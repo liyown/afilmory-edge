@@ -13,6 +13,8 @@ export default defineConfig({
       PHOTOS: bindings.r2({ name: 'afilmory-photos' }),
       CACHE: bindings.kv({}),
       ASSETS: bindings.assets(),
+      CONFIG_ENCRYPTION_KEY: bindings.secret(),
+      BETTER_AUTH_SECRET: bindings.secret(),
     },
     assets: {
       htmlHandling: 'auto-trailing-slash',
