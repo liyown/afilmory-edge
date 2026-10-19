@@ -15,6 +15,7 @@
     "build:edge": "pnpm --filter @afilmory/edge build",
     "build:manifest": "pnpm --filter @afilmory/builder cli",
     "build:manifest:fetch": "node scripts/fetch-prebuilt-manifest.mjs",
+    "bootstrap:admin": "pnpm -C be/apps/core bootstrap:admin",
     "build:update-remote-repo": "sh scripts/build-update-remote-repo.sh",
     "build:variant-report": "pnpm --filter @afilmory/builder cluster",
     "create:doc": "tsx scripts/create-doc.ts",

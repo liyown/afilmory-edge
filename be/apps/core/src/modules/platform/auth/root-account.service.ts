@@ -24,6 +24,12 @@ export class RootAccountProvisioner {
   ) {}
 
   async ensureRootAccount(rootTenantId: string): Promise<void> {
+    // T3.2: personal deployments create the administrator explicitly with
+    // `bootstrap:admin`; there is no generated-password account.
+    if (env.PERSONAL_DEPLOYMENT) {
+      return
+    }
+
     const db = this.dbAccessor.get()
     const email = env.DEFAULT_SUPERADMIN_EMAIL
     const username = env.DEFAULT_SUPERADMIN_USERNAME

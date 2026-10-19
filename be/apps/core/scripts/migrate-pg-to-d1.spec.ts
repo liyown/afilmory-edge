@@ -3,15 +3,10 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { describe, expect, it, vi } from 'vitest'
 
-import type { D1Statement, SourceTables } from './migrate-pg-to-d1'
-import {
-  createHttpD1Target,
-  createSqliteTarget,
-  migrateSourceToTarget,
-  seedPersonalTenant,
-  TABLE_SPECS,
-  verifyMigration,
-} from './migrate-pg-to-d1'
+import type { D1Statement } from './lib/d1-target'
+import { createHttpD1Target, createSqliteTarget, seedPersonalTenant } from './lib/d1-target'
+import type { SourceTables } from './migrate-pg-to-d1'
+import { migrateSourceToTarget, TABLE_SPECS, verifyMigration } from './migrate-pg-to-d1'
 
 const NOW = '2026-10-19T00:00:00.000Z'
 const MIGRATION_SQL = readFileSync(

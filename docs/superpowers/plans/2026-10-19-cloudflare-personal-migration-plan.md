@@ -29,6 +29,7 @@ Target reader: **执行这个计划的 agent**。本文件不按"人日"编排�
 | T2.4 数据迁移/初始化 | ✅ | 新增 `be/apps/core/scripts/migrate-pg-to-d1.ts`：15 表类型转换 + 外键/自引用排序 + 分批 `INSERT ... ON CONFLICT DO UPDATE` + D1 REST batch + 本地 SQLite 传输 + 行数/抽样对账；无历史时幂等 seed tenant/superadmin/owner/manifest state。6/6 测试通过；真实 PG/D1 联调待凭据 |
 | T2.5 租户 shim | ✅ | `TenantContextResolver` 永远返回 root 行（去掉初始化门禁/host 解析），`OnModuleInit` 启动预热；`ensureRootTenant` 用 `ON CONFLICT DO NOTHING` 并发安全创建 **active** root，并自动激活历史 inactive 行。3 files / 10 tests 通过（任意 host/path、并发、重试、middleware 内 `requireTenantContext()`）；Worker 端到端挂载留待 T3.1 |
 | T3.1 better-auth + D1 | ✅ | Worker 内挂载 `EdgeCoreModule`（Database/InProcessEvent/AppState/Setting/SystemSetting/Tenant/Auth）；drizzle adapter 按 `PERSONAL_DEPLOYMENT` 走 sqlite schema；新增 `isoDateText` 解决 better-auth 传 `Date` 而 D1 只接受原始值；Apple 服务构建期替换为禁用 stub；社交登录/邮件验证关闭。`cf dev` 实测：匿名 `/api/auth/session` → `null`；`POST /api/auth/sign-in/email` → 200 + session cookie；带 cookie 的 session 返回 user/session/memberships；`/api/auth/social/providers` → `[]`；`/api/mobile-auth/apple/configuration` → `enabled:false`；`pnpm -C apps/edge build` 通过 |
+| T3.2 单管理员引导 | ✅ | 新增 `bootstrap:admin`（本地 D1 / 远程 D1 REST）：幂等创建 superadmin + root owner + credential account，密码用 `better-auth/crypto` 的 scrypt 哈希；未给密码时随机生成并只打印一次，重跑不改密码。个人模式 `POST /api/auth/sign-up/email` → 403，同时 better-auth `emailAndPassword.disableSignUp=true` 兜底。本地 D1 实测：`auth_user` 1 行、credential 1 行；注册 403 且未新增用户；登录 + session 正常 |
 | T0.4 裁剪 core | 🚧 模块图完成 | `personal.module.ts` 修正 import 路径、补齐全局 middleware/guard/interceptor；新增 `InProcessEventModule`（§2.6，去掉事件对 Redis 的依赖）。已删除 `activity`、`super-admin`、`featured-galleries`、`gallery-subscriptions`、`mobile`、`user-safety`、`account-deletion`、`static-web`、`mail`、`index.module.ts`；`app.factory` / `openapi` 已切到 `PersonalModule`；`tsc --noEmit` 通过。**仍待**：billing/managed-storage/push/data-sync 与 photo/system-setting 解耦（与 T4 上传重写重叠），以及 billing 本身删除 |
 
 **线上资源（`cf deploy --provision` 创建）**
@@ -482,8 +483,33 @@ T1.6 + T2.5 + T3.3 ────────────────────�
   - `EdgeCoreModule` 只包含认证切片；settings/photo/feed 等模块待后续任务接入。
 
 **T3.2 单管理员引导**
-- 动作：首次部署用 CLI/一次性脚本创建管理员；关闭注册（或保留但仅允许已存在邮箱）。
-- 验收：`cf d1 query <db> --command 'select id,email from auth_user'` 能看到 1 条；注册接口返回 403。
+- 状态：**已完成（2026-10-19）**。
+- 实现：
+  - 新增 `be/apps/core/scripts/bootstrap-admin.ts` + `bootstrap:admin` 脚本：
+    `bootstrapPersonalAdmin(target, opts)` 复用 T2.4 的 `seedPersonalTenant` 创建
+    superadmin/root owner，再幂等写入 `auth_account`（`provider_id=credential`），
+    密码用 `hashPassword` 生成（与 better-auth 登录校验一致）。未提供密码时生成
+    随机密码并只打印一次；重跑且未传密码时保留原哈希。
+  - 目标库支持 `--local`（自动发现 `cf dev` 的 `.cloudflare/state` D1 文件）、
+    `--local-file <path>`，以及远程 D1 REST（`--account-id/--database-id/--api-token`）。
+  - 抽出 `scripts/lib/d1-target.ts`（`D1Target`/seed/两种 transport），避免脚本之间
+    因导入触发对方的 CLI。
+  - `AuthController.signUpEmail` 在 `PERSONAL_DEPLOYMENT` 下直接抛
+    `AUTH_FORBIDDEN`（403）；`AuthProvider` 同时设置
+    `emailAndPassword.disableSignUp=true`，挡住 better-auth 自身路由与未来调用方。
+  - `RootAccountProvisioner` 在个人模式下不再自动创建随机密码账号。
+- 验证：
+  - `pnpm -C be/apps/core bootstrap:admin --local --email admin@local.test --password '…'`
+    → `Administrator … is ready (tenant=existing, user=existing, membership=existing, credential=updated)`。
+  - 本地 D1：`auth_user` 1 行（`admin@local.test`, `superadmin`, `email_verified=1`），
+    `auth_account` 1 行（credential，161 字符 scrypt 哈希）。
+  - `POST /api/auth/sign-up/email` → `403 {"ok":false,"code":11,"message":"个人部署已关闭注册。"}`
+    ；`POST /api/auth/sign-up/email/` → 404；两次尝试后 `auth_user` 仍为 1 行。
+  - `POST /api/auth/sign-in/email` → 200 + session cookie；`GET /api/auth/session`
+    返回 `admin@local.test` / `superadmin` / `active_tenant_id="1"`。
+  - `bootstrap-admin.spec.ts` 4 tests：创建、幂等、密码轮换、迁移后补 credential；
+    与 T2.4/T2.5 回归合计 **5 files / 20 tests** 通过。
+  - core/edge `tsc --noEmit`、eslint、`pnpm -C apps/edge build` → 通过。
 
 **T3.3 dashboard 托管（与画廊同一个 Worker，不单独部署）**
 - 动作：`apps/edge/scripts/sync-assets.sh` 把 `apps/web/dist` 与 `be/apps/dashboard/dist` 合并到 `apps/edge/public/`

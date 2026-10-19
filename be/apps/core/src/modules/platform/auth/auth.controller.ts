@@ -496,6 +496,12 @@ export class AuthController {
   @AllowPlaceholderTenant()
   @Post('/sign-up/email')
   async signUpEmail(@ContextParam() context: Context, @Body() body: TenantSignUpRequest) {
+    // T3.2: the personal deployment has exactly one administrator, created by
+    // `bootstrap:admin`. Self-service workspace registration is not available.
+    if (env.PERSONAL_DEPLOYMENT) {
+      throw new BizException(ErrorCode.AUTH_FORBIDDEN, { message: '个人部署已关闭注册。' })
+    }
+
     const useSessionAccount = body?.useSessionAccount ?? false
 
     if (!body?.account && !useSessionAccount) {

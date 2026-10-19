@@ -228,6 +228,9 @@ export class AuthProvider implements OnModuleInit {
       emailAndPassword: {
         enabled: true,
         requireEmailVerification: false,
+        // Defence in depth: the custom route returns a 403 first, but Better
+        // Auth's own `/sign-up/email` must not create users either.
+        disableSignUp: env.PERSONAL_DEPLOYMENT,
       },
       trustedOrigins: await this.buildTrustedOrigins(),
       session: {

@@ -7,6 +7,7 @@
   "author": "Innei",
   "main": "index.ts",
   "scripts": {
+    "bootstrap:admin": "vite-node scripts/bootstrap-admin.ts",
     "build": "vite build",
     "build:web": "AFILMORY_EMBED_MANIFEST=false BUILD_FOR_SERVER_SERVE=1 pnpm --filter @afilmory/web build",
     "db:generate": "pnpm -C ../../packages/db db:generate",
