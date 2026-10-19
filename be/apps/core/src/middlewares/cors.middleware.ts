@@ -8,8 +8,11 @@ import { injectable } from 'tsyringe'
 @injectable()
 export class CorsMiddleware implements HttpMiddleware {
   private readonly corsMiddleware = cors({
-    origin: (origin) => {
-      return origin || '*'
+    // The personal deployment is same-origin. Reflecting arbitrary origins
+    // while allowing credentials adds attack surface with no product benefit.
+    origin: (origin, context) => {
+      const requestOrigin = new URL(context.req.url).origin
+      return origin === requestOrigin ? origin : null
     },
     credentials: true,
     allowMethods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

@@ -116,9 +116,9 @@ const hyobanConfig = defineConfig(
     },
   },
 
-  // viewer-motion runs its tests with `tsx --test`, not vitest.
+  // These packages run their tests with `tsx --test`, not vitest.
   {
-    files: ['packages/viewer-motion/**/*.test.ts'],
+    files: ['packages/viewer-motion/**/*.test.ts', 'apps/edge/**/*.test.ts'],
     rules: {
       'test/no-import-node-test': 'off',
     },

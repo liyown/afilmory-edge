@@ -38,6 +38,6 @@ There is no Node server, PostgreSQL, Redis or task queue to start.
 
 ```bash
 pnpm -C be/apps/core test
-pnpm -C apps/edge typecheck
+pnpm -C apps/edge type-check
 pnpm --filter @afilmory/edge build
 ```

@@ -11,4 +11,6 @@ R2_ACCOUNT_ID=disabled
 R2_ACCESS_KEY_ID=disabled
 R2_SECRET_ACCESS_KEY=disabled
 R2_BUCKET_NAME=afilmory-photos
+# Keep `/media` or use a Worker-controlled hostname. Never use a public bucket
+# or r2.dev URL: the bucket also holds private D1 backups under `backups/d1/`.
 R2_PUBLIC_BASE_URL=/media
