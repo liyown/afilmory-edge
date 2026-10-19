@@ -164,19 +164,30 @@ export async function storageHead(key: string): Promise<StorageObjectInfo | null
     }
   }
 
-  const response = await client().fetch(objectUrl(key).toString(), { method: 'HEAD' })
-  if (response.status === 404) {
-    return null
-  }
-  if (!response.ok) {
+  // OSS can briefly return 403 for a freshly uploaded object. Retry HEAD a
+  // few times before surfacing the failure to the upload client.
+  const retryDelays = [200, 600, 1200]
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await client().fetch(objectUrl(key).toString(), { method: 'HEAD' })
+    if (response.status === 404) {
+      return null
+    }
+    if (response.ok) {
+      return {
+        key,
+        size: Number(response.headers.get('content-length') ?? 0),
+        etag: normalizeEtag(response.headers.get('etag')),
+        uploaded: parseDate(response.headers.get('last-modified')),
+      }
+    }
+    if (
+      (response.status === 403 || response.status === 408 || response.status === 429 || response.status >= 500) &&
+      attempt < retryDelays.length
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, retryDelays[attempt]))
+      continue
+    }
     throw new Error(`S3 HEAD ${key} failed: ${response.status} ${await safeText(response)}`)
-  }
-
-  return {
-    key,
-    size: Number(response.headers.get('content-length') ?? 0),
-    etag: normalizeEtag(response.headers.get('etag')),
-    uploaded: parseDate(response.headers.get('last-modified')),
   }
 }
 
