@@ -3,101 +3,26 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 
-import { generateId } from '@afilmory/db'
+import type { D1Target } from '../../src/modules/platform/setup/personal-admin'
+
+export type {
+  BootstrapOptions,
+  BootstrapResult,
+  D1Statement,
+  D1Target,
+  SeedOptions,
+  SeedResult,
+  SqlValue,
+} from '../../src/modules/platform/setup/personal-admin'
+export { createD1BindingTarget, seedPersonalAdmin } from '../../src/modules/platform/setup/personal-admin'
 
 const SQLITE_MIGRATIONS_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../../../packages/db/migrations',
 )
 
-export type SqlValue = null | number | string
-
-export interface D1Statement {
-  sql: string
-  params: SqlValue[]
-}
-
-export interface D1Target {
-  batch: (statements: readonly D1Statement[]) => Promise<void>
-  query: <T extends Record<string, unknown> = Record<string, unknown>>(
-    sql: string,
-    params?: readonly SqlValue[],
-  ) => Promise<T[]>
-}
-
 export function quoteIdentifier(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`
-}
-
-export interface SeedOptions {
-  adminEmail: string
-  adminName?: string
-  now?: string
-}
-
-export interface SeedResult {
-  userId: string
-  createdUser: boolean
-}
-
-function insertStatement(table: string, values: Record<string, SqlValue>): D1Statement {
-  const columns = Object.keys(values)
-  return {
-    sql: `insert into ${quoteIdentifier(table)} (${columns.map(quoteIdentifier).join(', ')}) values (${columns.map(() => '?').join(', ')})`,
-    params: columns.map(column => values[column] ?? null),
-  }
-}
-
-export async function seedPersonalAdmin(target: D1Target, options: SeedOptions): Promise<SeedResult> {
-  const email = options.adminEmail.trim()
-  if (email.length === 0) {
-    throw new Error('adminEmail must not be empty')
-  }
-
-  const now = options.now ?? new Date().toISOString()
-  const adminName = options.adminName?.trim() || email.split('@')[0] || 'Admin'
-
-  const [existingUser] = await target.query<{ id: string, role: string }>(
-    'select "id", "role" from "auth_user" where lower(trim("email")) = lower(trim(?)) limit 1',
-    [email],
-  )
-  const userId = existingUser?.id ?? generateId()
-
-  const statements: D1Statement[] = []
-
-  if (!existingUser) {
-    statements.push(
-      insertStatement('auth_user', {
-        id: userId,
-        name: adminName,
-        email,
-        email_verified: 1,
-        role: 'superadmin',
-        two_factor_enabled: 0,
-        banned: 0,
-        created_at: now,
-        updated_at: now,
-      }),
-    )
-  }
-  else if (existingUser.role !== 'superadmin') {
-    statements.push({
-      sql: 'update "auth_user" set "role" = ?, "updated_at" = ? where "id" = ?',
-      params: ['superadmin', now, userId],
-    })
-  }
-
-  statements.push({
-    sql: 'insert into "manifest_state" ("id", "revision", "updated_at") values (\'default\', 0, ?) on conflict ("id") do nothing',
-    params: [now],
-  })
-
-  await target.batch(statements)
-
-  return {
-    userId,
-    createdUser: !existingUser,
-  }
 }
 
 export interface HttpD1TargetOptions {
@@ -127,7 +52,7 @@ export function createHttpD1Target(options: HttpD1TargetOptions): D1Target {
     const response = await fetchImpl(endpoint, {
       method: 'POST',
       headers: {
-        'authorization': `Bearer ${options.apiToken}`,
+        authorization: `Bearer ${options.apiToken}`,
         'content-type': 'application/json',
       },
       body: JSON.stringify(body),
@@ -135,7 +60,7 @@ export function createHttpD1Target(options: HttpD1TargetOptions): D1Target {
 
     const payload = (await response.json()) as CloudflareEnvelope<D1QueryResult[]>
     if (!response.ok || !payload.success) {
-      const messages = payload.errors?.map(error => error.message ?? 'unknown error').join('; ')
+      const messages = payload.errors?.map((error) => error.message ?? 'unknown error').join('; ')
       throw new Error(`D1 request failed (${response.status}): ${messages ?? 'unknown error'}`)
     }
     return payload.result ?? []
@@ -147,7 +72,7 @@ export function createHttpD1Target(options: HttpD1TargetOptions): D1Target {
         return
       }
       const results = await request({
-        batch: statements.map(statement => ({ sql: statement.sql, params: statement.params })),
+        batch: statements.map((statement) => ({ sql: statement.sql, params: statement.params })),
       })
       for (const [index, result] of results.entries()) {
         if (!result.success) {
@@ -179,8 +104,7 @@ export function createSqliteTarget(sqlite: DatabaseSync): D1Target {
           sqlite.prepare(statement.sql).run(...statement.params)
         }
         sqlite.exec('commit')
-      }
-      catch (error) {
+      } catch (error) {
         sqlite.exec('rollback')
         throw error
       }
@@ -194,7 +118,7 @@ export function createSqliteTarget(sqlite: DatabaseSync): D1Target {
 
 export function applySqliteMigrations(sqlite: DatabaseSync): void {
   const migrations = readdirSync(SQLITE_MIGRATIONS_DIR)
-    .filter(name => name.endsWith('.sql'))
+    .filter((name) => name.endsWith('.sql'))
     .sort()
   for (const migrationFile of migrations) {
     const migration = readFileSync(path.join(SQLITE_MIGRATIONS_DIR, migrationFile), 'utf8').replaceAll(
@@ -208,7 +132,7 @@ export function applySqliteMigrations(sqlite: DatabaseSync): void {
 export function openLocalTarget(path: string): D1Target {
   const sqlite = new DatabaseSync(path)
   const hasManifestState = sqlite
-    .prepare('select name from sqlite_master where type = \'table\' and name = \'manifest_state\'')
+    .prepare("select name from sqlite_master where type = 'table' and name = 'manifest_state'")
     .get()
   if (!hasManifestState) {
     applySqliteMigrations(sqlite)

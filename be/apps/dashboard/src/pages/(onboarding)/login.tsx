@@ -1,9 +1,12 @@
 import { Button, Input, Label, LinearBorderContainer } from '@afilmory/ui'
 import { Spring } from '@afilmory/utils'
+import { useQuery } from '@tanstack/react-query'
 import { CircleAlert } from 'lucide-react'
 import { m } from 'motion/react'
 import { useState } from 'react'
 
+import { fetchSetupStatus, SETUP_STATUS_QUERY_KEY } from '~/modules/auth/api/setup'
+import { OwnerSetupForm } from '~/modules/auth/components/OwnerSetupForm'
 import { SocialAuthButtons } from '~/modules/auth/components/SocialAuthButtons'
 import { useLogin } from '~/modules/auth/hooks/useLogin'
 
@@ -11,6 +14,10 @@ export function Component() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const { login, isLoading, error, clearError } = useLogin()
+  const { data: setupStatus, isPending: isCheckingSetup } = useQuery({
+    queryKey: SETUP_STATUS_QUERY_KEY,
+    queryFn: fetchSetupStatus,
+  })
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -34,6 +41,38 @@ export function Component() {
     if (error) {
       clearError()
     }
+  }
+
+  if (isCheckingSetup) {
+    return (
+      <div className="relative flex min-h-dvh flex-1 flex-col">
+        <div className="bg-background text-text-secondary flex flex-1 items-center justify-center text-sm">
+          Checking deployment...
+        </div>
+      </div>
+    )
+  }
+
+  if (setupStatus?.needsSetup) {
+    return (
+      <div className="relative flex min-h-dvh flex-1 flex-col">
+        <div className="bg-background flex flex-1 items-center justify-center">
+          <LinearBorderContainer>
+            {setupStatus.setupEnabled ? (
+              <OwnerSetupForm onCreated={setEmail} />
+            ) : (
+              <div className="bg-background-tertiary w-[600px] p-10">
+                <h1 className="text-text mb-2 text-3xl font-bold">Setup required</h1>
+                <p className="text-text-secondary text-sm">
+                  No administrator exists yet. Set the <code className="text-text">SETUP_TOKEN</code> secret for this
+                  Worker and reload this page to create the owner account.
+                </p>
+              </div>
+            )}
+          </LinearBorderContainer>
+        </div>
+      </div>
+    )
   }
 
   return (

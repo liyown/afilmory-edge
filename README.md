@@ -18,13 +18,31 @@
 
 **Afilmory Edge** is a personal photo gallery deployment that runs as one Cloudflare Worker.
 It keeps the name **Afilmory** — **Auto Focus (AF)**, **Aperture** (light control), **Film** (vintage medium), and **Memory** (captured moments) — and adds **Edge** for its Cloudflare-native deployment.
-The Worker serves the gallery SPA, the admin dashboard, and the API from the same origin, backed by D1, KV, and S3-compatible object storage (Aliyun OSS).
+The Worker serves the gallery SPA, the admin dashboard, and the API from the same origin, backed by D1, KV, and object storage: Cloudflare R2 for the one-click deployment, or any S3-compatible bucket (such as Aliyun OSS) for a self-managed setup.
 
 This project is maintained independently from [Afilmory](https://github.com/Afilmory/Afilmory) and has been stripped down for personal use. See [ORIGIN.md](./ORIGIN.md) for what changed.
 
 > **Unofficial derivative.** Afilmory Edge is not affiliated with, sponsored by, or endorsed by the Afilmory team. "Afilmory" is used only to describe the origin of this code; the name and marks belong to their respective owners.
 
 ## 🚀 Quick Start
+
+### Option A: One-click on Cloudflare (R2)
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/liyown/afilmory-edge)
+
+The button copies this repository into your GitHub account, builds the Worker, provisions **D1, KV, and R2** from `wrangler.jsonc`, applies the D1 migrations, and deploys. It prompts for three secrets:
+
+| Secret                  | Purpose                                                                 |
+| ----------------------- | ----------------------------------------------------------------------- |
+| `CONFIG_ENCRYPTION_KEY` | Encrypts settings stored in D1. Generate one with `openssl rand -base64 32` |
+| `BETTER_AUTH_SECRET`    | Signs auth sessions. Falls back to `CONFIG_ENCRYPTION_KEY` when omitted |
+| `SETUP_TOKEN`           | One-time token used to claim the owner account                          |
+
+After the deployment finishes, open `https://<your-worker>.workers.dev/platform/login`. Because the database is empty, the login page asks for the setup token: enter the `SETUP_TOKEN` you chose, then your email and password. That creates the single owner account, and the dashboard takes over from there.
+
+Photos, thumbnails, Live Photo videos, `manifest.json`, the OG cache, and D1 backups all live in the provisioned R2 bucket. Uploads go through the Worker (multipart for files above 80 MiB), so you never need R2 credentials.
+
+### Option B: Manual deployment with Aliyun OSS
 
 ```bash
 # 1. Clone and install
@@ -46,7 +64,7 @@ cf d1 migrations apply <database-id> --dir be/packages/db/migrations
 pnpm build
 pnpm deploy:edge
 
-# 5. Create the owner account
+# 5. Create the owner account (or use SETUP_TOKEN in the dashboard instead)
 pnpm bootstrap:admin --email you@example.com \
   --account-id <account-id> --database-id <database-id> --api-token <api-token>
 ```
@@ -66,7 +84,8 @@ The gallery UI, WebGPU/WebGL viewer, masonry layout, EXIF display, maps, comment
 
 - ☁️ **One Worker, one origin** - The gallery SPA, dashboard, API, OG images, sitemap, RSS feed, and share embeds are all served by the same Worker.
 - 👤 **Personal deployment** - One owner account, registration closed, no platform or multi-user surface to configure.
-- 🪣 **Aliyun OSS over the S3 API** - Direct presigned multipart uploads (no Worker proxying), range reads for EXIF/motion data, and a signed `/media/*` proxy so the bucket stays private.
+- 🪣 **R2 or S3 storage** - The one-click deployment uses the native R2 binding with Worker-proxied multipart uploads; the manual path uses direct presigned multipart uploads to Aliyun OSS over the S3 API. Both support range reads for EXIF/motion data and a private `/media/*` proxy.
+- 🔐 **First-run owner setup** - A `SETUP_TOKEN` lets you create the owner account from the dashboard, with no CLI bootstrap or Cloudflare API token.
 - 🗄️ **D1 + KV only** - D1 for relational data and runtime settings, KV for hot caches; no PostgreSQL or Redis.
 - ⚙️ **D1-backed site settings** - Name, title, author, avatar, social links, and map options are edited in the dashboard and injected into every page shell.
 - 🧾 **Built-in backups** - A daily cron exports D1 into the same private bucket (14 rotating copies) with a restore script.
@@ -129,7 +148,7 @@ afilmory-edge/
 ### Edge Host
 
 - **Cloudflare Workers** - Serves the SPA, injects the manifest from object storage, renders dynamic OG images/SEO metadata, and runs scheduled backup/cleanup
-- **D1 + OSS + KV** - D1 for relational data, Aliyun OSS for photos/manifest/OG cache/backups, KV for hot caches
+- **D1 + object storage + KV** - D1 for relational data, R2 or an S3-compatible bucket for photos/manifest/OG cache/backups, KV for hot caches
 
 ### Backend Stack
 
@@ -138,7 +157,7 @@ afilmory-edge/
 - **Drizzle ORM** - Type-safe database toolkit over D1
 - **D1** - Relational database (SQLite)
 - **KV** - Cache and manifest revision storage
-- **Aliyun OSS** - Photo objects, manifest and backup storage over the S3 API
+- **R2 / Aliyun OSS** - Photo objects, manifest and backup storage through the native R2 binding or the S3 API
 - **Better Auth** - Authentication with the Drizzle SQLite adapter
 - **In-process events** - SSE progress for sync/upload jobs
 - **workers-og** - Dynamic OG image rendering
@@ -146,7 +165,7 @@ afilmory-edge/
 ### Upload Pipeline
 
 - **Dashboard** - Batches up to 128 files, renders thumbnails and ThumbHash placeholders in the browser
-- **Aliyun OSS** - Direct presigned uploads over the S3 API
+- **R2 / Aliyun OSS** - Worker-proxied uploads through the R2 binding, or direct presigned uploads over the S3 API
 - **exifr** - Metadata extraction through bounded range reads
 - **heic-to** - Browser-side HEIC/HEIF decoding for previews and thumbnails
 
@@ -175,9 +194,10 @@ pnpm dev:edge               # Cloudflare Worker only
 pnpm --filter @afilmory/dashboard dev  # Admin dashboard
 
 # Data & deployment
-pnpm bootstrap:admin        # Create the owner account in D1
+pnpm bootstrap:admin        # Create the owner account in D1 (CLI fallback)
 pnpm restore:d1-backup      # Restore D1 from an object-storage backup
-pnpm deploy:edge            # Deploy the Worker
+pnpm deploy                 # Apply D1 migrations and deploy with Wrangler (R2 config)
+pnpm deploy:edge            # Deploy the Worker through the cf CLI (OSS config)
 
 # Build
 pnpm build                  # Build web + dashboard + Cloudflare Worker
@@ -200,15 +220,16 @@ Configuration lives in three layers:
 | --------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | Presentation defaults | `config.json`                                                             | Fallback site identity used before anything is saved from the dashboard |
 | Runtime site settings | D1 (`site.*`)                                                             | Authoritative site identity, edited at `/platform/settings`             |
-| Worker secrets        | `apps/edge/.dev.vars` (local) or `cf workers secrets update` (production) | Encryption keys and object storage credentials                          |
+| Worker secrets        | `.dev.vars` (local) or `wrangler secret put` (production)                 | Encryption keys, setup token, and optional S3 credentials               |
 
-Bindings are declared in `apps/edge/cloudflare.config.ts`:
+The one-click path uses the bindings in the root `wrangler.jsonc`; the OSS path declares them in `apps/edge/cloudflare.config.ts`:
 
 | Binding  | Service            | Purpose                                             |
 | -------- | ------------------ | --------------------------------------------------- |
 | `DB`     | D1 (`afilmory-db`) | Users, photo assets, comments, settings, sync state |
 | `CACHE`  | KV                 | Manifest revisions and hot caches                   |
 | `ASSETS` | Workers Assets     | Built gallery and dashboard files                   |
+| `PHOTOS` | R2 (`afilmory-photos`) | Photos, manifest, OG cache, and backups (R2 only) |
 
 #### Presentation defaults (`config.json`)
 
@@ -238,16 +259,20 @@ Bindings are declared in `apps/edge/cloudflare.config.ts`:
 
 #### Worker secrets
 
-| Secret                  | Required | Purpose                                                     |
-| ----------------------- | -------- | ----------------------------------------------------------- |
-| `CONFIG_ENCRYPTION_KEY` | Yes      | Encrypts sensitive settings stored in D1                    |
-| `BETTER_AUTH_SECRET`    | No       | Signs auth sessions; falls back to `CONFIG_ENCRYPTION_KEY`  |
-| `S3_ENDPOINT`           | Yes      | Virtual-hosted bucket URL (bucket name is part of the host) |
-| `S3_REGION`             | Yes      | OSS region, e.g. `cn-shenzhen`                              |
-| `S3_ACCESS_KEY_ID`      | Yes      | Access key with read/write access to the bucket             |
-| `S3_SECRET_ACCESS_KEY`  | Yes      | Matching secret key                                         |
+| Secret                  | Required          | Purpose                                                     |
+| ----------------------- | ----------------- | ----------------------------------------------------------- |
+| `CONFIG_ENCRYPTION_KEY` | Yes               | Encrypts sensitive settings stored in D1                    |
+| `BETTER_AUTH_SECRET`    | No                | Signs auth sessions; falls back to `CONFIG_ENCRYPTION_KEY`  |
+| `SETUP_TOKEN`           | For first-run setup | Gates creating the owner account from the login page      |
+| `STORAGE_DRIVER`        | No                | `r2` uses the `PHOTOS` binding; `s3` (default) uses the secrets below |
+| `S3_ENDPOINT`           | With `s3` driver  | Virtual-hosted bucket URL (bucket name is part of the host) |
+| `S3_REGION`             | With `s3` driver  | OSS region, e.g. `cn-shenzhen`                              |
+| `S3_ACCESS_KEY_ID`      | With `s3` driver  | Access key with read/write access to the bucket             |
+| `S3_SECRET_ACCESS_KEY`  | With `s3` driver  | Matching secret key                                         |
 
-Object storage uses the S3-compatible API of Aliyun OSS. The endpoint must include the bucket:
+The R2 driver is selected automatically when the `PHOTOS` binding exists; set `STORAGE_DRIVER=r2` only when you want to force it (for example, against a simulation).
+
+For the `s3` driver, object storage uses the S3-compatible API of Aliyun OSS. The endpoint must include the bucket:
 
 ```bash
 S3_ENDPOINT=https://my-gallery.s3.oss-cn-shenzhen.aliyuncs.com
@@ -256,7 +281,7 @@ S3_ACCESS_KEY_ID=<access-key-id>
 S3_SECRET_ACCESS_KEY=<access-key-secret>
 ```
 
-Keep the bucket private. The Worker hands the browser presigned multipart upload URLs, reads originals through range requests, and serves media through the signed `/media/*` proxy. One bucket holds:
+Keep the bucket private. With the `s3` driver the Worker hands the browser presigned multipart upload URLs; with the `r2` driver uploads are proxied through the Worker instead. Both drivers read originals through range requests and serve media through the `/media/*` proxy. One bucket holds:
 
 - `photos/` - originals, thumbnails, and Live Photo/Motion Photo videos
 - `manifest.json` - the rendered gallery manifest
@@ -271,7 +296,9 @@ cf workers secrets update S3_ENDPOINT --type secret_text --worker afilmory-edge
 # ...repeat for S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY
 ```
 
-For local development, copy `apps/edge/.dev.vars.example` to `apps/edge/.dev.vars` and fill in the same values.
+The root `wrangler.jsonc` deployments use `wrangler secret put <NAME>` instead.
+
+For local development, copy `apps/edge/.dev.vars.example` to `apps/edge/.dev.vars` and fill in the same values. Use `STORAGE_DRIVER=r2 pnpm dev` to exercise the R2 driver against the local simulation.
 
 ## 📚 Documentation
 

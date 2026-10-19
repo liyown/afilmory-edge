@@ -15,6 +15,7 @@ import { ShareModule } from '@core/modules/content/share/share.module'
 import { InProcessEventModule } from '@core/modules/infrastructure/event/in-process-event.module'
 import { AuthModule } from '@core/modules/platform/auth/auth.module'
 import { DashboardModule } from '@core/modules/platform/dashboard/dashboard.module'
+import { SetupModule } from '@core/modules/platform/setup/setup.module'
 import { initUiSchemaI18n } from '@core/modules/ui/ui-schema/ui-schema.i18n'
 import { APP_GUARD, APP_MIDDLEWARE, createZodValidationPipe, Module } from '@tsuki-hono/common'
 import type { HonoHttpApplication } from '@tsuki-hono/core'
@@ -31,6 +32,7 @@ import { PersonalPhotoModule } from './modules/photos/personal-photo.module'
     SystemSettingModule,
     AuthModule,
     DashboardModule,
+    SetupModule,
     PersonalPhotoModule,
     CommentModule,
     ReactionModule,

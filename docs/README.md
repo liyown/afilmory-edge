@@ -1,6 +1,6 @@
 # Documentation
 
-Afilmory Edge runs as a personal photo gallery on Cloudflare: one Worker serves the React SPA, the admin dashboard, and the API, backed by D1, KV, and Aliyun OSS.
+Afilmory Edge runs as a personal photo gallery on Cloudflare: one Worker serves the React SPA, the admin dashboard, and the API, backed by D1, KV, and object storage (Cloudflare R2 or Aliyun OSS).
 Photos are uploaded from the dashboard; the Worker extracts metadata, stores thumbnails, and publishes the manifest.
 
 - Architecture overview: `architecture.md`

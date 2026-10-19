@@ -8,12 +8,12 @@ import { ManifestSyncService } from '@core/modules/content/manifest-sync/manifes
 import type { PhotoChange } from '@core/modules/content/manifest-sync/manifest-sync.types'
 import { injectable } from 'tsyringe'
 
+import { storageDriver, storageProvider, storageProxyPut, storageProxyUploadPart } from '../../storage'
 import { ExifMetadataService } from './exif-metadata.service'
 import { ManifestPublisher } from './manifest-publisher.service'
-import type { MultipartPart, UploadIntentResult } from './s3-storage.service'
-import { S3StorageService } from './s3-storage.service'
+import type { MultipartPart, UploadIntentResult } from './photo-storage.service'
+import { PhotoStorageService } from './photo-storage.service'
 
-const STORAGE_PROVIDER = 'oss'
 const KEY_PREFIX = 'photos'
 export const MAX_UPLOAD_FILE_BYTES = 1024 * 1024 * 1024
 
@@ -164,7 +164,7 @@ function normalizeToneAnalysis(value: unknown): ToneAnalysis | null {
 export class PersonalPhotoService {
   constructor(
     private readonly dbAccessor: DbAccessor,
-    private readonly storage: S3StorageService,
+    private readonly storage: PhotoStorageService,
     private readonly exif: ExifMetadataService,
     private readonly publisher: ManifestPublisher,
     private readonly manifestSync: ManifestSyncService,
@@ -200,6 +200,55 @@ export class PersonalPhotoService {
       contentType: input.contentType ?? contentTypeForFilename(input.filename),
     })
     return { ...intent, photoId }
+  }
+
+  /**
+   * R2 bindings cannot issue presigned URLs, so upload intents point the
+   * browser at this same-origin route. The controller guard has already
+   * checked the admin session; the body is streamed straight into R2.
+   */
+  async proxyUpload(request: Request): Promise<Response> {
+    if (storageDriver() !== 'r2') {
+      return new Response('Not Found', { status: 404 })
+    }
+    if (request.method !== 'PUT' || !request.body) {
+      return new Response('Method Not Allowed', { status: 405 })
+    }
+
+    const url = new URL(request.url)
+    const prefix = '/api/photos/upload/'
+    if (!url.pathname.startsWith(prefix)) {
+      return new Response('Not Found', { status: 404 })
+    }
+
+    let key: string
+    try {
+      key = url.pathname
+        .slice(prefix.length)
+        .split('/')
+        .map((segment) => decodeURIComponent(segment))
+        .join('/')
+    } catch {
+      throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: 'Invalid storage key' })
+    }
+    this.assertStorageKey(key)
+
+    const uploadId = url.searchParams.get('uploadId')
+    if (uploadId) {
+      const partNumber = Number(url.searchParams.get('partNumber'))
+      if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10_000) {
+        throw new BizException(ErrorCode.COMMON_BAD_REQUEST, {
+          message: 'partNumber is required for multipart uploads',
+        })
+      }
+      const etag = await storageProxyUploadPart(key, uploadId, partNumber, request.body)
+      return new Response(null, { status: 200, headers: { etag } })
+    }
+
+    await storageProxyPut(key, request.body, {
+      contentType: request.headers.get('content-type'),
+    })
+    return new Response(null, { status: 200 })
   }
 
   async completeUpload(input: UploadCompleteInput): Promise<PhotoAssetListItem & { change: PhotoChange | null }> {
@@ -312,7 +361,7 @@ export class PersonalPhotoService {
       .values({
         photoId,
         storageKey: input.key,
-        storageProvider: STORAGE_PROVIDER,
+        storageProvider: storageProvider(),
         size: object.size,
         etag: object.etag ?? null,
         lastModified,

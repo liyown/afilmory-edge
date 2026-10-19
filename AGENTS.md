@@ -71,13 +71,13 @@ Afilmory Edge is a photo gallery composed of several deployable layers, all serv
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │  be/apps/dashboard (admin SPA, /platform/)                           │
-│    upload intents → OSS → thumbnails/ThumbHash → upload-complete     │
+│    upload intents → R2/S3 → thumbnails/ThumbHash → upload-complete   │
 └────────────────────────────────┬─────────────────────────────────────┘
                                  │
 ┌────────────────────────────────▼─────────────────────────────────────┐
 │  apps/edge (Cloudflare Worker)                                       │
 │    be/apps/core API graph + dashboard API + upload/EXIF pipeline     │
-│    D1 · OSS · KV · manifest publication · OG/SEO · cron · assets     │
+│    D1 · R2/S3 · KV · manifest publication · OG/SEO · cron · assets   │
 └────────────────────────────────▲─────────────────────────────────────┘
                                  │ injects __MANIFEST__ / __SITE_CONFIG__
 ┌────────────────────────────────┴─────────────────────────────────────┐
@@ -93,12 +93,12 @@ Key implications when changing things:
 - **`packages/data`** owns `PhotoLoader` (the singleton that wraps the manifest into lookup maps).
   Anything photo-related goes through it.
   Shared types live in `packages/typing`.
-- **The upload pipeline lives in `apps/edge/src/modules/photos`.** It is the only code that talks to object storage (through `apps/edge/src/storage.ts`): upload intents, presigned writes, EXIF/XMP range reads, thumbnail lookup, and manifest publication.
+- **The upload pipeline lives in `apps/edge/src/modules/photos`.** It is the only code that talks to object storage (through `apps/edge/src/storage.ts`): upload intents, presigned (S3) or proxied (R2) writes, EXIF/XMP range reads, thumbnail lookup, and manifest publication.
   Dashboard-side work (HEIC decode, thumbnail rendering, ThumbHash, tone analysis) lives in `be/apps/dashboard/src/modules/photos`.
 - **`be/`** uses a NestJS-inspired Hono framework (`@tsuki-hono/core`): `@Module`, `@Controller`, `@Get/@Post/...`, `@injectable()`, request context via `AsyncLocalStorage`.
   Don't reach for raw Hono primitives in feature code — use the framework decorators (see `be/AGENTS.md`).
 - **`apps/edge` is the production host**, not a separate backend.
-  It serves the SPA/dashboard, injects the manifest, renders OG/SEO, and runs scheduled jobs; the API graph comes from `be/apps/core` with D1/SQLite and S3 storage access.
+  It serves the SPA/dashboard, injects the manifest, renders OG/SEO, and runs scheduled jobs; the API graph comes from `be/apps/core` with D1/SQLite and R2/S3 storage access.
   Heavy domain logic belongs in `be/apps/core`.
 - **Two separate design systems**: `apps/web` + `packages/ui` follow the dark, material-and-blur system specified in root `DESIGN.md`; `be/apps/dashboard` is a linear, data-first admin UI.
   Don't mix the two.

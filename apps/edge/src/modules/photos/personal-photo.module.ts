@@ -6,11 +6,11 @@ import { ExifMetadataService } from './exif-metadata.service'
 import { ManifestPublisher } from './manifest-publisher.service'
 import { PersonalPhotoController } from './personal-photo.controller'
 import { PersonalPhotoService } from './personal-photo.service'
-import { S3StorageService } from './s3-storage.service'
+import { PhotoStorageService } from './photo-storage.service'
 
 @Module({
   imports: [DatabaseModule, ManifestSyncModule],
   controllers: [PersonalPhotoController],
-  providers: [PersonalPhotoService, ExifMetadataService, ManifestPublisher, S3StorageService],
+  providers: [PersonalPhotoService, ExifMetadataService, ManifestPublisher, PhotoStorageService],
 })
 export class PersonalPhotoModule {}

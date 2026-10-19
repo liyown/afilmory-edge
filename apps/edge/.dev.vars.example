@@ -5,6 +5,14 @@
 CONFIG_ENCRYPTION_KEY=local-development-encryption-key
 BETTER_AUTH_SECRET=local-development-better-auth-secret
 
+# First-run owner setup token; shown in the dashboard login page when the D1
+# database has no user yet.
+SETUP_TOKEN=local-development-setup-token
+
+# Object storage. The S3-compatible credentials below are used by default.
+# For the one-click R2 driver, start the dev server with
+# `STORAGE_DRIVER=r2 pnpm dev` so the config declares the PHOTOS binding.
+
 # S3-compatible object storage (Aliyun OSS). The endpoint is the virtual-hosted
 # bucket URL, so the bucket name is part of the host. Media is always served
 # through the Worker's `/media/*` proxy; the bucket stays private because it

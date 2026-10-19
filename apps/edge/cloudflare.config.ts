@@ -1,3 +1,5 @@
+import process from 'node:process'
+
 import { bindings, defineConfig, triggers } from 'cf/config'
 
 import * as entrypoint from './src/index.ts' with { type: 'cf-worker' }
@@ -6,6 +8,10 @@ import * as entrypoint from './src/index.ts' with { type: 'cf-worker' }
 // from the config module).
 const HOURLY_CRON = '0 * * * *'
 const DAILY_BACKUP_CRON = '30 2 * * *'
+
+// The OSS deployment leaves this unset; the one-click R2 deployment (or local
+// R2 development) opts in with STORAGE_DRIVER=r2.
+const STORAGE_DRIVER = process.env.STORAGE_DRIVER
 
 export default defineConfig({
   worker: {
@@ -16,8 +22,10 @@ export default defineConfig({
       DB: bindings.d1({ name: 'afilmory-db' }),
       CACHE: bindings.kv({}),
       ASSETS: bindings.assets(),
+      PHOTOS: STORAGE_DRIVER === 'r2' ? bindings.r2({ name: 'afilmory-photos' }) : false,
       CONFIG_ENCRYPTION_KEY: bindings.secret(),
       BETTER_AUTH_SECRET: bindings.secret(),
+      SETUP_TOKEN: bindings.secret(),
       // S3-compatible object storage (Aliyun OSS). Set these with
       // `cf workers secrets update <NAME> --type secret_text --worker afilmory-edge`.
       S3_ENDPOINT: bindings.secret(),

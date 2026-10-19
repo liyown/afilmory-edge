@@ -15,6 +15,8 @@
     "bootstrap:admin": "pnpm -C be/apps/core bootstrap:admin",
     "restore:d1-backup": "pnpm -C be/apps/core restore:d1-backup",
     "create:doc": "tsx scripts/create-doc.ts",
+    "db:migrate:d1": "wrangler d1 migrations apply DB --remote",
+    "deploy": "pnpm db:migrate:d1 && wrangler deploy",
     "deploy:edge": "pnpm --filter @afilmory/edge run deploy",
     "dev": "pnpm --filter @afilmory/edge dev",
     "dev:edge": "pnpm --filter @afilmory/edge dev",
@@ -52,7 +54,8 @@
     "vite-bundle-analyzer": "1.3.9",
     "vite-plugin-babel": "1.7.3",
     "vite-plugin-checker": "0.14.5",
-    "vite-tsconfig-paths": "6.1.1"
+    "vite-tsconfig-paths": "6.1.1",
+    "wrangler": "4.151.2"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm exec lint-staged"

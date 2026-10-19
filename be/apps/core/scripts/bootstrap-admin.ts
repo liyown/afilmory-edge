@@ -1,93 +1,17 @@
-import { randomBytes, randomUUID } from 'node:crypto'
 import { readdirSync } from 'node:fs'
 import process, { stderr, stdout } from 'node:process'
 
-import { hashPassword } from 'better-auth/crypto'
+import { bootstrapPersonalAdmin } from '../src/modules/platform/setup/personal-admin'
+import type { D1Target } from './lib/d1-target'
+import { createHttpD1Target, openLocalTarget } from './lib/d1-target'
 
-import type { D1Statement, D1Target, SeedResult } from './lib/d1-target'
-import { createHttpD1Target, openLocalTarget, seedPersonalAdmin } from './lib/d1-target'
+export type { BootstrapOptions, BootstrapResult } from '../src/modules/platform/setup/personal-admin'
+export { bootstrapPersonalAdmin } from '../src/modules/platform/setup/personal-admin'
 
 const LOCAL_D1_DIRECTORIES = [
   new URL('../../../../apps/edge/.cloudflare/state/v3/d1/miniflare-D1DatabaseObject/', import.meta.url),
   new URL('../../../../apps/edge/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/', import.meta.url),
 ]
-
-export interface BootstrapOptions {
-  email: string
-  name?: string
-  now?: string
-  password?: string
-}
-
-export interface BootstrapResult {
-  accountCreated: boolean
-  passwordChanged: boolean
-  passwordGenerated: boolean
-  password?: string
-  seed: SeedResult
-}
-
-/**
- * Creates the single personal administrator: a superadmin user and a
- * credential account. Every step is idempotent so the script can be rerun to
- * repair or rotate a password.
- */
-export async function bootstrapPersonalAdmin(target: D1Target, options: BootstrapOptions): Promise<BootstrapResult> {
-  const email = options.email.trim().toLowerCase()
-  if (email.length === 0) {
-    throw new Error('Admin email must not be empty')
-  }
-
-  const now = options.now ?? new Date().toISOString()
-  const seed = await seedPersonalAdmin(target, {
-    adminEmail: email,
-    adminName: options.name,
-    now,
-  })
-
-  const [existingAccount] = await target.query<{ id: string }>(
-    'select "id" from "auth_account" where "user_id" = ? and "provider_id" = ? limit 1',
-    [seed.userId, 'credential'],
-  )
-
-  // Without an explicit password, reruns only repair the account and leave the
-  // existing credential untouched; otherwise every rerun would lock the admin
-  // out with a fresh random password.
-  const shouldWritePassword = options.password !== undefined || !existingAccount
-  const password = shouldWritePassword ? (options.password ?? randomBytes(16).toString('base64url')) : undefined
-
-  const statements: D1Statement[] = [
-    {
-      sql: 'update "auth_user" set "role" = ?, "email_verified" = ?, "updated_at" = ? where "id" = ?',
-      params: ['superadmin', 1, now, seed.userId],
-    },
-  ]
-
-  if (password !== undefined) {
-    const passwordHash = await hashPassword(password)
-    statements.push(
-      existingAccount
-        ? {
-            sql: 'update "auth_account" set "password" = ?, "updated_at" = ? where "id" = ?',
-            params: [passwordHash, now, existingAccount.id],
-          }
-        : {
-            sql: 'insert into "auth_account" ("id", "account_id", "provider_id", "user_id", "password", "created_at", "updated_at") values (?, ?, ?, ?, ?, ?, ?)',
-            params: [randomUUID(), seed.userId, 'credential', seed.userId, passwordHash, now, now],
-          },
-    )
-  }
-
-  await target.batch(statements)
-
-  return {
-    accountCreated: !existingAccount,
-    password,
-    passwordChanged: password !== undefined,
-    passwordGenerated: shouldWritePassword && options.password === undefined,
-    seed,
-  }
-}
 
 interface BootstrapCliOptions {
   accountId: string | null
@@ -209,8 +133,8 @@ function parseCliArgs(argv: readonly string[]): BootstrapCliOptions {
 function resolveLocalDatabaseFile(): string {
   for (const directory of LOCAL_D1_DIRECTORIES) {
     const candidates = readdirSync(directory)
-      .filter(name => name.endsWith('.sqlite') && !name.includes('metadata'))
-      .map(name => new URL(name, directory))
+      .filter((name) => name.endsWith('.sqlite') && !name.includes('metadata'))
+      .map((name) => new URL(name, directory))
 
     if (candidates.length === 1) {
       return candidates[0].pathname
@@ -218,13 +142,13 @@ function resolveLocalDatabaseFile(): string {
     if (candidates.length > 1) {
       throw new Error(
         `Multiple D1 files found in ${directory.pathname}; pass --local-file explicitly: ${candidates
-          .map(candidate => candidate.pathname)
+          .map((candidate) => candidate.pathname)
           .join(', ')}`,
       )
     }
   }
 
-  throw new Error('No local D1 file found; run `cf dev` once or pass --local-file')
+  throw new Error('No local D1 file found; run \`cf dev\` once or pass --local-file')
 }
 
 function requireOption(value: string | null, name: string): string {
@@ -242,7 +166,7 @@ export async function runBootstrapCli(argv: readonly string[]): Promise<void> {
   }
 
   const email = requireOption(options.email, '--email / BOOTSTRAP_ADMIN_EMAIL')
-  const target = options.localFile
+  const target: D1Target = options.localFile
     ? openLocalTarget(options.localFile)
     : options.local
       ? openLocalTarget(resolveLocalDatabaseFile())
@@ -275,8 +199,7 @@ export async function runBootstrapCli(argv: readonly string[]): Promise<void> {
 if (!process.env.VITEST) {
   try {
     await runBootstrapCli(process.argv.slice(2))
-  }
-  catch (error) {
+  } catch (error) {
     stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
     process.exitCode = 1
   }

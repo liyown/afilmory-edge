@@ -1,0 +1,14 @@
+# Secrets collected by the "Deploy to Cloudflare" flow.
+# Local development uses apps/edge/.dev.vars instead.
+
+# Encrypts stored settings. Generate one with:
+#   openssl rand -base64 32
+CONFIG_ENCRYPTION_KEY=replace-with-a-random-32-byte-base64-key
+
+# Signing secret for Better Auth sessions. Falls back to
+# CONFIG_ENCRYPTION_KEY when omitted.
+BETTER_AUTH_SECRET=replace-with-a-random-secret
+
+# One-time token for claiming the owner account at /platform/login.
+# Setup stays disabled until this is set.
+SETUP_TOKEN=replace-with-a-setup-token

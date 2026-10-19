@@ -1,11 +1,12 @@
 import { BizException, ErrorCode } from '@core/errors'
 import { PlatformRoles } from '@core/guards/roles.decorator'
 import { BypassResponseTransform } from '@core/interceptors/response-transform.decorator'
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@tsuki-hono/common'
+import { Body, ContextParam, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@tsuki-hono/common'
+import type { Context } from 'hono'
 
 import type { UploadCompleteInput, UploadIntentInput } from './personal-photo.service'
 import { PersonalPhotoService } from './personal-photo.service'
-import type { MultipartPart } from './s3-storage.service'
+import type { MultipartPart } from './photo-storage.service'
 
 interface UpdateTagsBody {
   tags?: string[]
@@ -40,6 +41,12 @@ export class PersonalPhotoController {
   @BypassResponseTransform()
   async createUploadIntent(@Body() body: UploadIntentInput) {
     return await this.photos.createUploadIntent(body)
+  }
+
+  @Put('upload/*')
+  @BypassResponseTransform()
+  async proxyUpload(@ContextParam() context: Context): Promise<Response> {
+    return await this.photos.proxyUpload(context.req.raw)
   }
 
   @Post('upload-complete')

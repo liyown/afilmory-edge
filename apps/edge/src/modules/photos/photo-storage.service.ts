@@ -1,19 +1,25 @@
 import { BizException, ErrorCode } from '@core/errors'
 import { injectable } from 'tsyringe'
 
-import type {StorageObjectInfo} from '../../storage';
+import type { StorageObjectInfo } from '../../storage'
 import {
   isStorageConfigured,
   mediaUrl,
   presignStorageUrl,
   signedStorageFetch,
+  storageCreateMultipartUpload,
   storageDelete,
+  storageDriver,
   storageGet,
   storageHead,
-  storagePut
+  storageProxyCompleteMultipart,
+  storagePut,
 } from '../../storage'
 
-const MULTIPART_THRESHOLD_BYTES = 100 * 1024 * 1024
+const S3_MULTIPART_THRESHOLD_BYTES = 100 * 1024 * 1024
+// Workers cap request bodies (100 MB on the Free plan). Stay below that and
+// switch to multipart well before the limit is reached.
+const R2_PROXY_SINGLE_MAX_BYTES = 80 * 1024 * 1024
 const MIN_PART_SIZE_BYTES = 8 * 1024 * 1024
 
 export interface UploadIntentResult {
@@ -33,12 +39,16 @@ export interface MultipartPart {
 
 function storageUnavailable(): BizException {
   return new BizException(ErrorCode.COMMON_INTERNAL_SERVER_ERROR, {
-    message: 'S3 storage is not configured',
+    message: 'Object storage is not configured',
   })
 }
 
+function usesR2(): boolean {
+  return storageDriver() === 'r2'
+}
+
 @injectable()
-export class S3StorageService {
+export class PhotoStorageService {
   isDirectUploadConfigured(): boolean {
     return isStorageConfigured()
   }
@@ -57,7 +67,8 @@ export class S3StorageService {
       headers['content-type'] = input.contentType
     }
 
-    if (input.size > MULTIPART_THRESHOLD_BYTES) {
+    const threshold = usesR2() ? R2_PROXY_SINGLE_MAX_BYTES : S3_MULTIPART_THRESHOLD_BYTES
+    if (input.size > threshold) {
       return await this.createMultipartIntent(input.key, input.size, headers)
     }
 
@@ -66,7 +77,7 @@ export class S3StorageService {
       key: input.key,
       headers,
       url: await presignStorageUrl('PUT', input.key),
-      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      expiresAt: usesR2() ? undefined : new Date(Date.now() + 3600_000).toISOString(),
     }
   }
 
@@ -75,6 +86,31 @@ export class S3StorageService {
     size: number,
     headers: Record<string, string>,
   ): Promise<UploadIntentResult> {
+    const uploadId = usesR2()
+      ? await storageCreateMultipartUpload(key, { contentType: headers['content-type'] })
+      : await this.createS3MultipartUpload(key)
+
+    const partSize = Math.max(MIN_PART_SIZE_BYTES, Math.ceil(size / 10_000 / MIN_PART_SIZE_BYTES) * MIN_PART_SIZE_BYTES)
+    const partCount = Math.max(1, Math.ceil(size / partSize))
+    const parts = await Promise.all(
+      Array.from({ length: partCount }, async (_, index) => {
+        const partNumber = index + 1
+        const url = await presignStorageUrl('PUT', key, { partNumber: String(partNumber), uploadId })
+        return { partNumber, url }
+      }),
+    )
+
+    return {
+      mode: 'multipart',
+      key,
+      headers,
+      uploadId,
+      parts,
+      expiresAt: usesR2() ? undefined : new Date(Date.now() + 3600_000).toISOString(),
+    }
+  }
+
+  private async createS3MultipartUpload(key: string): Promise<string> {
     let response: Response
     try {
       response = await signedStorageFetch(key, { method: 'POST' }, { uploads: '' })
@@ -97,28 +133,15 @@ export class S3StorageService {
         message: 'S3 multipart upload response did not include an upload id',
       })
     }
-
-    const partSize = Math.max(MIN_PART_SIZE_BYTES, Math.ceil(size / 10_000 / MIN_PART_SIZE_BYTES) * MIN_PART_SIZE_BYTES)
-    const partCount = Math.max(1, Math.ceil(size / partSize))
-    const parts = await Promise.all(
-      Array.from({ length: partCount }, async (_, index) => {
-        const partNumber = index + 1
-        const url = await presignStorageUrl('PUT', key, { partNumber: String(partNumber), uploadId })
-        return { partNumber, url }
-      }),
-    )
-
-    return {
-      mode: 'multipart',
-      key,
-      headers,
-      uploadId,
-      parts,
-      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
-    }
+    return uploadId
   }
 
   async completeMultipartUpload(key: string, uploadId: string, parts: MultipartPart[]): Promise<void> {
+    if (usesR2()) {
+      await storageProxyCompleteMultipart(key, uploadId, parts)
+      return
+    }
+
     const body = [
       '<CompleteMultipartUpload>',
       ...parts

@@ -14,6 +14,12 @@ export interface AppEnv {
   S3_REGION?: string
   S3_ACCESS_KEY_ID?: string
   S3_SECRET_ACCESS_KEY?: string
+  // Native R2 binding used by the one-click deployment.
+  PHOTOS?: unknown
+  STORAGE_DRIVER?: 's3' | 'r2'
+  // Required for the first-run owner setup flow; absent on existing installs.
+  SETUP_TOKEN?: string
+  DB?: unknown
 }
 
 const DEFAULTS: Partial<Record<keyof AppEnv, unknown>> = {

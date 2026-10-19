@@ -14,6 +14,9 @@ thomas-x2d-xcd-25v-1.webp
 
 config.json
 .env
+.dev.vars*
+!.dev.vars.example
+.wrangler/
 
 .vercel
 */*/.next

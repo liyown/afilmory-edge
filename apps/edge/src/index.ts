@@ -8,7 +8,7 @@ import { decodeMediaKey, isPublicMediaKey } from './media-key'
 import { renderHomepageOgImage, renderPhotoOgImage } from './og'
 import { loadOgSiteConfig } from './og-site'
 import type { OgPhoto } from './og-template'
-import { storageGet, storagePut } from './storage'
+import { storageGet, storageHead, storagePut } from './storage'
 
 const DASHBOARD_BASENAME = '/platform'
 const DASHBOARD_ALIAS = '/dashboard'
@@ -104,6 +104,27 @@ function writeLog(payload: Record<string, unknown>): void {
   console.log(JSON.stringify(payload))
 }
 
+function parseByteRange(header: string | null): { offset: number; length: number } | undefined {
+  if (!header) {
+    return undefined
+  }
+  const match = /^bytes=(\d+)-(\d*)$/.exec(header.trim())
+  if (!match) {
+    return undefined
+  }
+
+  const offset = Number(match[1])
+  const end = match[2] === '' ? undefined : Number(match[2])
+  if (!Number.isSafeInteger(offset) || offset < 0) {
+    return undefined
+  }
+  if (end !== undefined && (!Number.isSafeInteger(end) || end < offset)) {
+    return undefined
+  }
+
+  return { offset, length: end === undefined ? Number.MAX_SAFE_INTEGER : end - offset + 1 }
+}
+
 /** Structured access log for HTML/API traffic (skip bytes and assets). */
 function shouldLogRequest(pathname: string): boolean {
   return (
@@ -192,7 +213,26 @@ async function handleRequest(request: Request): Promise<Response> {
     if (!key || !isPublicMediaKey(key)) {
       return new Response('Not Found', { status: 404 })
     }
-    const object = await storageGet(key)
+    // Video and Live Photo playback needs byte ranges; a ranged read also
+    // avoids downloading the whole original for a seek.
+    const requestedRange = parseByteRange(request.headers.get('range'))
+    if (requestedRange) {
+      const info = await storageHead(key)
+      if (!info) {
+        return new Response('Not Found', { status: 404 })
+      }
+      if (requestedRange.offset >= info.size) {
+        return new Response(null, {
+          status: 416,
+          headers: { 'content-range': `bytes */${info.size}` },
+        })
+      }
+    }
+
+    const object = await storageGet(
+      key,
+      requestedRange ? { offset: requestedRange.offset, length: requestedRange.length } : undefined,
+    )
     if (!object) {
       return new Response('Not Found', { status: 404 })
     }
@@ -205,8 +245,18 @@ async function handleRequest(request: Request): Promise<Response> {
     if (etag) {
       headers.set('etag', etag)
     }
+    for (const name of ['content-range', 'content-length'] as const) {
+      const value = object.response.headers.get(name)
+      if (value) {
+        headers.set(name, value)
+      }
+    }
+    headers.set('accept-ranges', 'bytes')
     headers.set('cache-control', 'public, max-age=31536000, immutable')
-    return new Response(object.response.body, { headers })
+    return new Response(object.response.body, {
+      status: requestedRange && headers.has('content-range') ? 206 : 200,
+      headers,
+    })
   }
 
   // Homepage card. Kept separate from the photo route so `/og/` is a valid

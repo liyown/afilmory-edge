@@ -1,6 +1,10 @@
-// S3-compatible object storage (Aliyun OSS). Photo bytes, the rendered
-// manifest, OG cards, and D1 backups all live in one private bucket; media is
-// served to visitors through the Worker's `/media/*` proxy.
+// Object storage facade. Two drivers share one API:
+// - `s3`: any S3-compatible service (Aliyun OSS for the manual deployment),
+//   using presigned uploads.
+// - `r2`: the native R2 binding from the one-click Cloudflare deployment.
+//   Bindings cannot presign, so uploads are proxied through the Worker.
+// Photos, the rendered manifest, OG cards, and D1 backups all live in one
+// private bucket; media is served through the Worker's `/media/*` proxy.
 
 import { env } from '@afilmory/env'
 import { AwsClient } from 'aws4fetch'
@@ -8,6 +12,10 @@ import { AwsClient } from 'aws4fetch'
 const LIST_PAGE_SIZE = 1000
 const DELETE_CONCURRENCY = 8
 const PUBLIC_MEDIA_PREFIX = '/media'
+const UPLOAD_PROXY_PREFIX = '/api/photos/upload'
+
+export type StorageDriverKind = 's3' | 'r2'
+export type StorageProvider = 'oss' | 'r2'
 
 export interface StorageObjectInfo {
   key: string
@@ -19,6 +27,11 @@ export interface StorageObjectInfo {
 export interface StorageObject {
   response: Response
   size: number
+}
+
+export interface MultipartPart {
+  partNumber: number
+  etag: string
 }
 
 function configured(value: string | undefined): string | undefined {
@@ -33,7 +46,36 @@ function requireSetting(name: string, value: string | undefined): string {
   return normalized
 }
 
+function r2Bucket(): R2Bucket | undefined {
+  return (env.PHOTOS as R2Bucket | undefined) ?? undefined
+}
+
+function requireR2(): R2Bucket {
+  const bucket = r2Bucket()
+  if (!bucket) {
+    throw new Error('R2 storage is not configured: the PHOTOS binding is missing')
+  }
+  return bucket
+}
+
+export function storageDriver(): StorageDriverKind {
+  if (env.STORAGE_DRIVER === 'r2') {
+    return 'r2'
+  }
+  if (env.STORAGE_DRIVER === 's3') {
+    return 's3'
+  }
+  return r2Bucket() ? 'r2' : 's3'
+}
+
+export function storageProvider(): StorageProvider {
+  return storageDriver() === 'r2' ? 'r2' : 'oss'
+}
+
 export function isStorageConfigured(): boolean {
+  if (storageDriver() === 'r2') {
+    return Boolean(r2Bucket())
+  }
   return Boolean(
     configured(env.S3_ENDPOINT) &&
     configured(env.S3_REGION) &&
@@ -71,7 +113,17 @@ export function mediaUrl(key: string): string {
   return `${PUBLIC_MEDIA_PREFIX}/${encodeKeyPath(key)}`
 }
 
+/**
+ * S3: a signed bucket URL. R2: a same-origin Worker route; the browser uploads
+ * with its session cookie and the Worker streams the body into the binding.
+ */
 export async function presignStorageUrl(method: string, key: string, query?: Record<string, string>): Promise<string> {
+  if (storageDriver() === 'r2') {
+    const params = new URLSearchParams(query ?? {})
+    const search = params.size > 0 ? `?${params.toString()}` : ''
+    return `${UPLOAD_PROXY_PREFIX}/${encodeKeyPath(key)}${search}`
+  }
+
   const url = objectUrl(key)
   url.searchParams.set('X-Amz-Expires', '3600')
   for (const [name, value] of Object.entries(query ?? {})) {
@@ -87,6 +139,10 @@ export async function signedStorageFetch(
   init: RequestInit = {},
   query?: Record<string, string>,
 ): Promise<Response> {
+  if (storageDriver() === 'r2') {
+    throw new Error('signedStorageFetch is only available for S3 storage')
+  }
+
   const url = objectUrl(key)
   for (const [name, value] of Object.entries(query ?? {})) {
     url.searchParams.set(name, value)
@@ -95,6 +151,19 @@ export async function signedStorageFetch(
 }
 
 export async function storageHead(key: string): Promise<StorageObjectInfo | null> {
+  if (storageDriver() === 'r2') {
+    const object = await requireR2().head(key)
+    if (!object) {
+      return null
+    }
+    return {
+      key,
+      size: object.size,
+      etag: normalizeEtag(object.etag),
+      uploaded: object.uploaded,
+    }
+  }
+
   const response = await client().fetch(objectUrl(key).toString(), { method: 'HEAD' })
   if (response.status === 404) {
     return null
@@ -115,6 +184,38 @@ export async function storageGet(
   key: string,
   range?: { offset: number; length: number },
 ): Promise<StorageObject | null> {
+  if (storageDriver() === 'r2') {
+    const object = await requireR2().get(
+      key,
+      range ? { range: { offset: range.offset, length: range.length } } : undefined,
+    )
+    if (!object) {
+      return null
+    }
+
+    const headers = new Headers()
+    if (object.httpMetadata?.contentType) {
+      headers.set('content-type', object.httpMetadata.contentType)
+    }
+    if (object.httpMetadata?.cacheControl) {
+      headers.set('cache-control', object.httpMetadata.cacheControl)
+    }
+    if (object.etag) {
+      headers.set('etag', object.httpEtag)
+    }
+    headers.set('accept-ranges', 'bytes')
+    if (range) {
+      const end = range.offset + Math.min(range.length, object.size - range.offset) - 1
+      headers.set('content-range', `bytes ${range.offset}-${end}/${object.size}`)
+      headers.set('content-length', String(end - range.offset + 1))
+    }
+
+    return {
+      response: new Response(object.body, { headers }),
+      size: object.size,
+    }
+  }
+
   const headers: Record<string, string> = {}
   if (range) {
     headers.range = `bytes=${range.offset}-${range.offset + range.length - 1}`
@@ -145,6 +246,17 @@ export async function storagePut(
   body: string | ArrayBuffer | Uint8Array,
   options?: PutObjectOptions,
 ): Promise<void> {
+  if (storageDriver() === 'r2') {
+    await requireR2().put(key, body, {
+      httpMetadata: {
+        contentType: options?.contentType ?? undefined,
+        cacheControl: options?.cacheControl ?? undefined,
+      },
+      customMetadata: options?.metadata,
+    })
+    return
+  }
+
   const headers: Record<string, string> = {}
   if (options?.contentType) {
     headers['content-type'] = options.contentType
@@ -162,7 +274,57 @@ export async function storagePut(
   }
 }
 
+/** Streams a proxied upload body into R2 without buffering it in memory. */
+export async function storageProxyPut(key: string, body: ReadableStream, options?: PutObjectOptions): Promise<void> {
+  await requireR2().put(key, body, {
+    httpMetadata: {
+      contentType: options?.contentType ?? undefined,
+      cacheControl: options?.cacheControl ?? undefined,
+    },
+    customMetadata: options?.metadata,
+  })
+}
+
+export async function storageCreateMultipartUpload(key: string, options?: PutObjectOptions): Promise<string> {
+  const upload = await requireR2().createMultipartUpload(key, {
+    httpMetadata: { contentType: options?.contentType ?? undefined },
+  })
+  return upload.uploadId
+}
+
+export async function storageProxyUploadPart(
+  key: string,
+  uploadId: string,
+  partNumber: number,
+  body: ReadableStream,
+): Promise<string> {
+  const part = await requireR2().resumeMultipartUpload(key, uploadId).uploadPart(partNumber, body)
+  return part.etag
+}
+
+export async function storageProxyCompleteMultipart(
+  key: string,
+  uploadId: string,
+  parts: MultipartPart[],
+): Promise<void> {
+  await requireR2()
+    .resumeMultipartUpload(key, uploadId)
+    .complete(
+      parts
+        .slice()
+        .sort((left, right) => left.partNumber - right.partNumber)
+        .map((part) => ({ partNumber: part.partNumber, etag: part.etag })),
+    )
+}
+
 export async function storageDelete(keys: string[]): Promise<void> {
+  if (storageDriver() === 'r2') {
+    if (keys.length > 0) {
+      await requireR2().delete(keys)
+    }
+    return
+  }
+
   for (let index = 0; index < keys.length; index += DELETE_CONCURRENCY) {
     await Promise.all(
       keys.slice(index, index + DELETE_CONCURRENCY).map(async (key) => {
@@ -185,6 +347,19 @@ export async function storageListPage(
   limit = LIST_PAGE_SIZE,
   continuationToken?: string,
 ): Promise<StorageListPage> {
+  if (storageDriver() === 'r2') {
+    const page = await requireR2().list({ prefix, limit, cursor: continuationToken })
+    return {
+      objects: page.objects.map((object) => ({
+        key: object.key,
+        size: object.size,
+        etag: normalizeEtag(object.etag),
+        uploaded: object.uploaded,
+      })),
+      nextToken: page.truncated ? page.cursor : undefined,
+    }
+  }
+
   const url = new URL(endpoint())
   url.searchParams.set('list-type', '2')
   url.searchParams.set('prefix', prefix)
