@@ -7,7 +7,7 @@ import { injectable } from 'tsyringe'
 import { aiIndexEnabled } from './photo-ai-indexer'
 
 const DEFAULT_EMBEDDING_MODEL = '@cf/baai/bge-m3'
-const MIN_SCORE = 0.3
+const MIN_SCORE = 0.45
 
 export interface PhotoSearchResult {
   photoId: string

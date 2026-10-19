@@ -77,8 +77,16 @@ export function useSemanticSearch(query: string): SemanticSearchState {
     return { ids: null, isPending: false, degraded: false }
   }
 
+  const localIds = localSearch(normalized)
+
+  // Text/tag matches are more precise than broad semantic neighbors. Use them
+  // first; only fall back to embeddings when nothing matches locally.
+  if (localIds.size > 0) {
+    return { ids: localIds, isPending: false, degraded: false }
+  }
+
   if (normalized.length < 2) {
-    return { ids: localSearch(normalized), isPending: false, degraded: false }
+    return { ids: localIds, isPending: false, degraded: false }
   }
 
   if (request.isPending) {
@@ -86,7 +94,7 @@ export function useSemanticSearch(query: string): SemanticSearchState {
   }
 
   if (request.isError || !request.data?.enabled) {
-    return { ids: localSearch(normalized), isPending: false, degraded: true }
+    return { ids: localIds, isPending: false, degraded: true }
   }
 
   return {
