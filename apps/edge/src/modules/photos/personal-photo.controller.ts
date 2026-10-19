@@ -51,11 +51,26 @@ export class PersonalPhotoController {
 
   @Post('upload-complete')
   @BypassResponseTransform()
-  async completeUpload(@Body() body: UploadCompleteBody) {
+  async completeUpload(@Body() body: UploadCompleteBody, @ContextParam() context: Context) {
     if (!body?.photoId) {
       throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: 'photoId is required' })
     }
-    return await this.photos.completeUpload({ ...body, parts: body.parts ?? null, uploadId: body.uploadId ?? null })
+    let waitUntil: ((promise: Promise<unknown>) => void) | undefined
+    try {
+      waitUntil = context.executionCtx.waitUntil.bind(context.executionCtx)
+    } catch {
+      // Local dev contexts do not always expose an ExecutionContext.
+    }
+    return await this.photos.completeUpload(
+      { ...body, parts: body.parts ?? null, uploadId: body.uploadId ?? null },
+      waitUntil,
+    )
+  }
+
+  @Post('ai/reindex')
+  async reindexAi(@Body() body: { limit?: number }) {
+    const limit = Number.isFinite(body?.limit) ? Math.min(Math.max(Number(body?.limit), 1), 50) : 10
+    return await this.photos.reindexAi(limit)
   }
 
   @Get('storage-url')

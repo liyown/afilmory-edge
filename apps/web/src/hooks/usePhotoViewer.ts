@@ -6,6 +6,7 @@ import { useLocation, useNavigate, useParams } from 'react-router'
 import type { DateRangeFilter } from '~/atoms/app'
 import { gallerySettingAtom } from '~/atoms/app'
 import { setViewer, viewerAtom } from '~/atoms/viewer'
+import { useSemanticSearch } from '~/hooks/useSemanticSearch'
 import { jotaiStore } from '~/lib/jotai'
 import { trackView } from '~/lib/tracker'
 import { getPhotoDateMs, getRangeEndMs, getRangeStartMs } from '~/modules/gallery/dateRangeUtils'
@@ -26,20 +27,20 @@ const filterAndSortPhotos = (
   selectedDateRange: DateRangeFilter | null,
   sortOrder: 'asc' | 'desc',
   tagFilterMode: 'union' | 'intersection' = 'union',
+  semanticIds: Set<string> | null = null,
 ) => {
-  // 根据 tags、cameras、lenses 和 ratings 筛选
-  let filteredPhotos = data
+  // 语义搜索结果先过滤，再走现有筛选和排序
+  let filteredPhotos = semanticIds ? data.filter((photo) => semanticIds.has(photo.id)) : data
 
   // Tags 筛选：根据模式进行并集或交集筛选
   if (selectedTags.length > 0) {
     filteredPhotos = filteredPhotos.filter((photo) => {
       if (tagFilterMode === 'intersection') {
         // 交集模式：照片必须包含所有选中的标签
-        return selectedTags.every(tag => photo.tags.includes(tag))
-      }
-      else {
+        return selectedTags.every((tag) => photo.tags.includes(tag))
+      } else {
         // 并集模式：照片必须包含至少一个选中的标签
-        return selectedTags.some(tag => photo.tags.includes(tag))
+        return selectedTags.some((tag) => photo.tags.includes(tag))
       }
     })
   }
@@ -98,15 +99,13 @@ const filterAndSortPhotos = (
 
     if (a.exif && a.exif.DateTimeOriginal) {
       aDateStr = a.exif.DateTimeOriginal as unknown as string
-    }
-    else {
+    } else {
       aDateStr = a.lastModified
     }
 
     if (b.exif && b.exif.DateTimeOriginal) {
       bDateStr = b.exif.DateTimeOriginal as unknown as string
-    }
-    else {
+    } else {
       bDateStr = b.lastModified
     }
 
@@ -140,7 +139,9 @@ export const usePhotos = () => {
     selectedRatings,
     selectedDateRange,
     tagFilterMode,
+    searchQuery,
   } = useAtomValue(gallerySettingAtom)
+  const semanticSearch = useSemanticSearch(searchQuery)
 
   const masonryItems = useMemo(() => {
     return filterAndSortPhotos(
@@ -151,8 +152,18 @@ export const usePhotos = () => {
       selectedDateRange,
       sortOrder,
       tagFilterMode,
+      semanticSearch.ids,
     )
-  }, [sortOrder, selectedTags, selectedCameras, selectedLenses, selectedRatings, selectedDateRange, tagFilterMode])
+  }, [
+    sortOrder,
+    selectedTags,
+    selectedCameras,
+    selectedLenses,
+    selectedRatings,
+    selectedDateRange,
+    tagFilterMode,
+    semanticSearch.ids,
+  ])
 
   return masonryItems
 }
@@ -178,9 +189,9 @@ export const usePhotoViewer = () => {
   // Derive currentIndex from URL photo ID
   const currentIndex = useMemo(() => {
     if (!urlPhotoId) {
-      return viewerState.photoId ? photos.findIndex(p => p.id === viewerState.photoId) : 0
+      return viewerState.photoId ? photos.findIndex((p) => p.id === viewerState.photoId) : 0
     }
-    const index = photos.findIndex(p => p.id === urlPhotoId)
+    const index = photos.findIndex((p) => p.id === urlPhotoId)
     return index !== -1 ? index : 0
   }, [urlPhotoId, photos, viewerState.photoId])
 
@@ -191,7 +202,7 @@ export const usePhotoViewer = () => {
         return
       }
 
-      setViewer(prev => ({
+      setViewer((prev) => ({
         ...prev,
         isOpen: true,
         openInstanceId: prev.openInstanceId + 1,
@@ -212,7 +223,7 @@ export const usePhotoViewer = () => {
   )
 
   const closeViewer = useCallback(() => {
-    setViewer(prev => ({
+    setViewer((prev) => ({
       ...prev,
       isOpen: false,
       pendingCloseInstanceId: null,
@@ -224,8 +235,7 @@ export const usePhotoViewer = () => {
     const isMapPath = location.pathname.includes('/map')
     if (isMapPath) {
       navigate(`/map${location.search}`)
-    }
-    else {
+    } else {
       navigate(`/${location.search}`)
     }
 
@@ -243,7 +253,7 @@ export const usePhotoViewer = () => {
           return
         }
 
-        setViewer(prev => ({
+        setViewer((prev) => ({
           ...prev,
           photoId: photo.id,
         }))

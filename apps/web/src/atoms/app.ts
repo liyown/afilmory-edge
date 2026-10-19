@@ -18,6 +18,7 @@ export const gallerySettingAtom = atom({
   selectedRatings: null as number | null, // Selected minimum rating threshold
   selectedDateRange: null as DateRangeFilter | null,
   tagFilterMode: 'union' as 'union' | 'intersection', // Tag filtering logic mode
+  searchQuery: '',
 
   columns: 'auto' as number | 'auto', // 自定义列数，auto 表示自动计算
   viewMode: 'masonry' as GalleryViewMode, // 视图模式：瀑布流或列表详情

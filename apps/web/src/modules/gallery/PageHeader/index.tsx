@@ -3,6 +3,7 @@ import { LinearBlur } from '@afilmory/ui'
 import { PageHeaderCenter } from './PageHeaderCenter'
 import { PageHeaderLeft } from './PageHeaderLeft'
 import { PageHeaderRight } from './PageHeaderRight'
+import { PageHeaderSearch } from './PageHeaderSearch'
 import { ViewModeSegment } from './ViewModeSegment'
 
 interface PageHeaderProps {
@@ -22,6 +23,7 @@ export const PageHeader = ({ dateRange, location, showDateRange }: PageHeaderPro
       />
       <div className="flex h-12 items-center justify-between gap-2 px-3 lg:h-12 lg:gap-3 lg:px-4">
         <PageHeaderLeft />
+        <PageHeaderSearch />
         <PageHeaderCenter dateRange={dateRange} location={location} showDateRange={showDateRange} />
         <div className="flex items-center gap-1.5 lg:gap-2">
           <ViewModeSegment />

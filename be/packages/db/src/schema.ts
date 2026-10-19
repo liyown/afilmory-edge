@@ -330,6 +330,40 @@ export type ManifestChangePayload = {
   } | null
 }
 
+export const photoAiIndex = sqliteTable(
+  'photo_ai_index',
+  {
+    id: snowflakeId,
+    assetId: text('asset_id')
+      .notNull()
+      .references(() => photoAssets.id, { onDelete: 'cascade' }),
+    photoId: text('photo_id').notNull(),
+    status: text('status')
+      .$type<'pending' | 'processing' | 'ready' | 'failed' | 'skipped'>()
+      .notNull()
+      .default('pending'),
+    aiTags: text('ai_tags', { mode: 'json' }).$type<string[]>().notNull().default([]),
+    caption: text('caption'),
+    searchText: text('search_text'),
+    sourceHash: text('source_hash'),
+    modelVision: text('model_vision'),
+    modelEmbedding: text('model_embedding'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: isoDateText('next_attempt_at'),
+    lastError: text('last_error'),
+    leaseOwner: text('lease_owner'),
+    leaseExpiresAt: isoDateText('lease_expires_at'),
+    indexedAt: isoDateText('indexed_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('uq_photo_ai_asset').on(t.assetId),
+    uniqueIndex('uq_photo_ai_photo').on(t.photoId),
+    index('idx_photo_ai_backfill').on(t.status, t.nextAttemptAt, t.leaseExpiresAt),
+  ],
+)
+
 export const manifestStates = sqliteTable('manifest_state', {
   id: text('id').primaryKey().default('default'),
   revision: integer('revision').notNull().default(0),
@@ -359,6 +393,7 @@ export const dbSchema = {
   comments,
   commentReactions,
   photoAssets,
+  photoAiIndex,
   manifestStates,
   manifestChanges,
 }

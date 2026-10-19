@@ -22,6 +22,7 @@ import type { HonoHttpApplication } from '@tsuki-hono/core'
 import { createApplication } from '@tsuki-hono/core'
 
 import { PersonalPhotoModule } from './modules/photos/personal-photo.module'
+import { PhotoSearchModule } from './modules/photos/photo-search.module'
 
 /** The core graph that runs in the Worker. */
 @Module({
@@ -34,6 +35,7 @@ import { PersonalPhotoModule } from './modules/photos/personal-photo.module'
     DashboardModule,
     SetupModule,
     PersonalPhotoModule,
+    PhotoSearchModule,
     CommentModule,
     ReactionModule,
     FeedModule,

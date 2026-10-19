@@ -29,6 +29,20 @@
       "bucket_name": "afilmory-photos"
     }
   ],
+  "ai": {
+    "binding": "AI"
+  },
+  "vectorize": [
+    {
+      "binding": "VECTORIZE",
+      "index_name": "afilmory-photo-embeddings"
+    }
+  ],
+  "vars": {
+    "AI_VISION_MODEL": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+    "AI_EMBEDDING_MODEL": "@cf/baai/bge-m3",
+    "AI_INDEX_ENABLED": "true"
+  },
   "triggers": {
     "crons": ["0 * * * *", "30 2 * * *"]
   },

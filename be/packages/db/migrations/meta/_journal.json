@@ -15,6 +15,13 @@
       "when": 1792416119832,
       "tag": "0001_wooden_gamora",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792422132692,
+      "tag": "0002_aberrant_human_robot",
+      "breakpoints": true
     }
   ]
 }

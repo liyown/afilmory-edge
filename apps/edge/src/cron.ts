@@ -8,6 +8,7 @@
 import type { CronEnv } from './cron-maintenance'
 import { backupD1, cleanupOrphanUploads, deleteKeys, listAll } from './cron-maintenance'
 import { loadManifest } from './html'
+import { runPhotoAiBackfill } from './modules/photos/photo-ai-backfill'
 import { renderHomepageOgImage, renderPhotoOgImage } from './og'
 import type { OgSiteConfig } from './og-site'
 import { loadOgSiteConfig } from './og-site'
@@ -150,7 +151,13 @@ export async function prewarmOgImages(env: CronEnv): Promise<OgResult> {
 
 export async function runHourlyMaintenance(env: CronEnv): Promise<void> {
   const [cleanup, og] = await Promise.all([cleanupOrphanUploads(env), prewarmOgImages(env)])
-  log('cron.hourly', { cleanup, og })
+  let aiIndexed = 0
+  try {
+    aiIndexed = await runPhotoAiBackfill(10)
+  } catch (error) {
+    log('cron.ai.failed', { message: errorMessage(error) })
+  }
+  log('cron.hourly', { cleanup, og, aiIndexed })
 }
 
 export async function runDailyBackup(env: CronEnv): Promise<void> {

@@ -8,5 +8,6 @@ Photos are uploaded from the dashboard or the `afi` folder-sync CLI; the Worker 
 - Deployment and hosting: `deployment.md`
 - Local folder sync CLI: `../apps/sync/README.md`
 - Netdisk sync research: `netdisk-sync-research.md`
+- AI semantic search and auto-tagging: `ai-photo-search.md`
 
 For day-to-day development commands, see the root `README.md`.

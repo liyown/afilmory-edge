@@ -1,7 +1,10 @@
 import { Spring } from '@afilmory/utils'
+import { useAtomValue } from 'jotai'
 import { AnimatePresence, m } from 'motion/react'
 import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+
+import { gallerySettingAtom } from '~/atoms/app'
 
 interface PageHeaderCenterProps {
   dateRange?: string
@@ -11,6 +14,7 @@ interface PageHeaderCenterProps {
 
 export const PageHeaderCenter = ({ dateRange, location, showDateRange }: PageHeaderCenterProps) => {
   const { t } = useTranslation()
+  const { searchQuery } = useAtomValue(gallerySettingAtom)
 
   const translateDay = useCallback((day: string | number) => t(`date.day.${day}` as any), [t])
   const translateMonth = useCallback((month: string | number) => t(`date.month.${month}` as any), [t])
@@ -54,7 +58,7 @@ export const PageHeaderCenter = ({ dateRange, location, showDateRange }: PageHea
 
   const formattedDate = useMemo(() => (dateRange ? parseMainDate(dateRange) : undefined), [dateRange, parseMainDate])
 
-  const visible = showDateRange && formattedDate
+  const visible = showDateRange && formattedDate && !searchQuery.trim()
 
   return (
     <AnimatePresence>

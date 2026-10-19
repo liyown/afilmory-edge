@@ -20,6 +20,33 @@ export interface AppEnv {
   // Required for the first-run owner setup flow; absent on existing installs.
   SETUP_TOKEN?: string
   DB?: unknown
+  AI?: AiBinding
+  VECTORIZE?: VectorizeBinding
+  AI_VISION_MODEL?: string
+  AI_EMBEDDING_MODEL?: string
+  AI_INDEX_ENABLED?: string
+}
+
+export interface AiBinding {
+  run: (model: string, input: unknown) => Promise<unknown>
+}
+
+export interface VectorizeVector {
+  id: string
+  values: number[]
+  metadata?: Record<string, unknown>
+}
+
+export interface VectorizeQueryMatch {
+  id: string
+  score: number
+  metadata?: Record<string, unknown>
+}
+
+export interface VectorizeBinding {
+  upsert: (vectors: VectorizeVector[]) => Promise<unknown>
+  query: (values: number[], options?: Record<string, unknown>) => Promise<{ matches: VectorizeQueryMatch[] }>
+  deleteByIds: (ids: string[]) => Promise<unknown>
 }
 
 const DEFAULTS: Partial<Record<keyof AppEnv, unknown>> = {

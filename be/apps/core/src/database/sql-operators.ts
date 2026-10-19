@@ -1,3 +1,3 @@
 // Re-exported so edge-only modules can build Drizzle queries without adding a
 // second copy of drizzle-orm to the Worker package.
-export { and, asc, eq, inArray } from 'drizzle-orm'
+export { and, asc, eq, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm'

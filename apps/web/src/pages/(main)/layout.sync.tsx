@@ -62,8 +62,15 @@ export const Component = () => {
  */
 const useSyncGallerySettingsWithUrl = () => {
   const setGallerySetting = useSetAtom(gallerySettingAtom)
-  const { selectedTags, selectedCameras, selectedLenses, selectedRatings, selectedDateRange, tagFilterMode }
-    = useAtomValue(gallerySettingAtom)
+  const {
+    selectedTags,
+    selectedCameras,
+    selectedLenses,
+    selectedRatings,
+    selectedDateRange,
+    tagFilterMode,
+    searchQuery,
+  } = useAtomValue(gallerySettingAtom)
   const [searchParams, setSearchParams] = useSearchParams()
 
   // Track if initial restore is done
@@ -96,9 +103,10 @@ const useSyncGallerySettingsWithUrl = () => {
     const ratingsFromSearchParams = searchParams.get('rating') ? Number(searchParams.get('rating')) : null
     const tagModeFromSearchParams = searchParams.get('tag_mode') as 'union' | 'intersection' | null
     const dateRangeFromSearchParams = normalizeDateRange(searchParams.get('from'), searchParams.get('to'))
+    const searchQueryFromParams = searchParams.get('q') ?? ''
 
     // Always update state from URL (URL is source of truth for filters)
-    setGallerySetting(prev => ({
+    setGallerySetting((prev) => ({
       ...prev,
       selectedTags: tagsFromSearchParams || [],
       selectedCameras: camerasFromSearchParams || [],
@@ -106,6 +114,7 @@ const useSyncGallerySettingsWithUrl = () => {
       selectedRatings: ratingsFromSearchParams,
       selectedDateRange: dateRangeFromSearchParams,
       tagFilterMode: tagModeFromSearchParams || 'union',
+      searchQuery: searchQueryFromParams,
     }))
 
     isInitializedRef.current = true
@@ -125,6 +134,7 @@ const useSyncGallerySettingsWithUrl = () => {
     const tagMode = tagFilterMode === 'union' ? '' : tagFilterMode
     const fromParam = selectedDateRange?.from ?? ''
     const toParam = selectedDateRange?.to ?? ''
+    const queryParam = searchQuery.trim()
 
     setSearchParams(
       (currentParams) => {
@@ -135,16 +145,18 @@ const useSyncGallerySettingsWithUrl = () => {
         const currentTagMode = currentParams.get('tag_mode') || ''
         const currentFrom = currentParams.get('from') || ''
         const currentTo = currentParams.get('to') || ''
+        const currentQuery = currentParams.get('q') || ''
 
         // Check if anything has changed
         if (
-          currentTags === tags
-          && currentCameras === cameras
-          && currentLenses === lenses
-          && currentRating === rating
-          && currentTagMode === tagMode
-          && currentFrom === fromParam
-          && currentTo === toParam
+          currentTags === tags &&
+          currentCameras === cameras &&
+          currentLenses === lenses &&
+          currentRating === rating &&
+          currentTagMode === tagMode &&
+          currentFrom === fromParam &&
+          currentTo === toParam &&
+          currentQuery === queryParam
         ) {
           return currentParams
         }
@@ -156,51 +168,50 @@ const useSyncGallerySettingsWithUrl = () => {
 
         if (tags) {
           newer.set('tags', tags)
-        }
-        else {
+        } else {
           newer.delete('tags')
         }
 
         if (cameras) {
           newer.set('cameras', cameras)
-        }
-        else {
+        } else {
           newer.delete('cameras')
         }
 
         if (lenses) {
           newer.set('lenses', lenses)
-        }
-        else {
+        } else {
           newer.delete('lenses')
         }
 
         if (rating) {
           newer.set('rating', rating)
-        }
-        else {
+        } else {
           newer.delete('rating')
         }
 
         if (tagMode) {
           newer.set('tag_mode', tagMode)
-        }
-        else {
+        } else {
           newer.delete('tag_mode')
         }
 
         if (fromParam) {
           newer.set('from', fromParam)
-        }
-        else {
+        } else {
           newer.delete('from')
         }
 
         if (toParam) {
           newer.set('to', toParam)
-        }
-        else {
+        } else {
           newer.delete('to')
+        }
+
+        if (queryParam) {
+          newer.set('q', queryParam)
+        } else {
+          newer.delete('q')
         }
 
         // Update last synced URL
@@ -217,6 +228,7 @@ const useSyncGallerySettingsWithUrl = () => {
     selectedRatings,
     selectedDateRange,
     tagFilterMode,
+    searchQuery,
     setSearchParams,
   ])
 }
@@ -252,13 +264,13 @@ const useSyncViewerWithUrl = () => {
 
     if (isPhotoRoute && photoId) {
       // URL says viewer should be open
-      const targetIndex = photos.findIndex(p => p.id === photoId)
+      const targetIndex = photos.findIndex((p) => p.id === photoId)
 
       if (
-        targetIndex !== -1 // Open viewer if closed, or update photo if different
-        && (!currentViewer.isOpen || currentViewer.photoId !== photoId)
+        targetIndex !== -1 && // Open viewer if closed, or update photo if different
+        (!currentViewer.isOpen || currentViewer.photoId !== photoId)
       ) {
-        setViewer(prev => ({
+        setViewer((prev) => ({
           ...prev,
           isOpen: true,
           openInstanceId: prev.isOpen ? prev.openInstanceId : prev.openInstanceId + 1,
@@ -271,11 +283,10 @@ const useSyncViewerWithUrl = () => {
         // Prevent background scroll
         document.body.style.overflow = 'hidden'
       }
-    }
-    else {
+    } else {
       // URL says viewer should be closed
       if (currentViewer.isOpen) {
-        setViewer(prev => ({
+        setViewer((prev) => ({
           ...prev,
           isOpen: false,
           pendingCloseInstanceId: null,

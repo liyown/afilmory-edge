@@ -118,6 +118,7 @@ The gallery UI, WebGPU/WebGL viewer, masonry layout, EXIF display, maps, comment
 - 🧱 **Fresh baseline** - A single D1 baseline migration with no legacy history or compatibility shims.
 - 🚀 **Single build and deploy** - `pnpm build` assembles both SPAs and the Worker; `pnpm deploy:edge` ships it.
 - **Local folder sync** - A Rust `afi` CLI watches camera/import folders and uploads through the same API, with browser OAuth and a revocable token.
+- **AI semantic search** - Uploads are captioned and tagged with Workers AI; Vectorize powers natural-language search in the gallery header. See [AI photo search](./docs/ai-photo-search.md).
 
 ## 🏗️ Architecture
 

@@ -12,6 +12,9 @@ const DAILY_BACKUP_CRON = '30 2 * * *'
 // The OSS deployment leaves this unset; the one-click R2 deployment (or local
 // R2 development) opts in with STORAGE_DRIVER=r2.
 const STORAGE_DRIVER = process.env.STORAGE_DRIVER
+const AI_INDEX_ENABLED = process.env.AI_INDEX_ENABLED ?? 'true'
+const AI_VISION_MODEL = process.env.AI_VISION_MODEL ?? '@cf/mistralai/mistral-small-3.1-24b-instruct'
+const AI_EMBEDDING_MODEL = process.env.AI_EMBEDDING_MODEL ?? '@cf/baai/bge-m3'
 
 export default defineConfig({
   worker: {
@@ -23,6 +26,15 @@ export default defineConfig({
       CACHE: bindings.kv({}),
       ASSETS: bindings.assets(),
       PHOTOS: STORAGE_DRIVER === 'r2' ? bindings.r2({ name: 'afilmory-photos' }) : false,
+      ...(AI_INDEX_ENABLED === 'false'
+        ? {}
+        : {
+            AI: bindings.ai({ dev: { remote: true } }),
+            VECTORIZE: bindings.vectorize({ name: 'afilmory-photo-embeddings', dev: { remote: true } }),
+          }),
+      AI_VISION_MODEL: bindings.text(AI_VISION_MODEL),
+      AI_EMBEDDING_MODEL: bindings.text(AI_EMBEDDING_MODEL),
+      AI_INDEX_ENABLED: bindings.text(AI_INDEX_ENABLED),
       CONFIG_ENCRYPTION_KEY: bindings.secret(),
       BETTER_AUTH_SECRET: bindings.secret(),
       SETUP_TOKEN: bindings.secret(),

@@ -2,10 +2,12 @@ import { useScrollViewElement } from '@afilmory/ui'
 import clsx from 'clsx'
 import { useAtomValue } from 'jotai'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { gallerySettingAtom } from '~/atoms/app'
 import { useHasActiveFilters } from '~/hooks/useHasActiveFilters'
 import { useContextPhotos } from '~/hooks/usePhotoViewer'
+import { useSemanticSearch } from '~/hooks/useSemanticSearch'
 import { useVisiblePhotosDateRange } from '~/hooks/useVisiblePhotosDateRange'
 
 import type { PanelType } from './ActionPanel'
@@ -17,7 +19,9 @@ import { PageFooter } from './PageFooter'
 import { PageHeader } from './PageHeader'
 
 export const PhotosRoot = () => {
-  const { viewMode } = useAtomValue(gallerySettingAtom)
+  const { t } = useTranslation()
+  const { viewMode, searchQuery } = useAtomValue(gallerySettingAtom)
+  const search = useSemanticSearch(searchQuery)
   const [showFloatingActions, setShowFloatingActions] = useState(false)
 
   const photos = useContextPhotos()
@@ -52,6 +56,18 @@ export const PhotosRoot = () => {
       />
 
       {hasActiveFilters && <ActiveFiltersHero />}
+
+      {searchQuery.trim() && (
+        <div className="px-4 pt-14 text-center text-xs text-white/45 lg:pt-14">
+          {search.isPending
+            ? t('search.loading')
+            : photos.length === 0
+              ? t('search.empty')
+              : search.degraded
+                ? t('search.aiUnavailable')
+                : null}
+        </div>
+      )}
 
       <div className={clsx('p-1 **:select-none! lg:px-0', 'pb-20 lg:pb-24', !hasActiveFilters && 'mt-12')}>
         {viewMode === 'list' ? <ListView photos={photos} /> : <MasonryView photos={photos} onRender={handleRender} />}

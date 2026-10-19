@@ -1,5 +1,5 @@
 import type { PhotoAssetManifest } from '@afilmory/db'
-import { CURRENT_PHOTO_MANIFEST_VERSION, generateId, photoAssets } from '@afilmory/db'
+import { CURRENT_PHOTO_MANIFEST_VERSION, generateId, photoAiIndex, photoAssets } from '@afilmory/db'
 import type { ToneAnalysis, ToneType, VideoSource } from '@afilmory/typing'
 import { DbAccessor } from '@core/database/database.provider'
 import { asc, eq, inArray } from '@core/database/sql-operators'
@@ -11,6 +11,7 @@ import { injectable } from 'tsyringe'
 import { storageDriver, storageProvider, storageProxyPut, storageProxyUploadPart } from '../../storage'
 import { ExifMetadataService } from './exif-metadata.service'
 import { ManifestPublisher } from './manifest-publisher.service'
+import { PhotoAiIndexer } from './photo-ai-indexer'
 import type { MultipartPart, UploadIntentResult } from './photo-storage.service'
 import { PhotoStorageService } from './photo-storage.service'
 
@@ -168,6 +169,7 @@ export class PersonalPhotoService {
     private readonly exif: ExifMetadataService,
     private readonly publisher: ManifestPublisher,
     private readonly manifestSync: ManifestSyncService,
+    private readonly aiIndexer: PhotoAiIndexer,
   ) {}
 
   async createUploadIntent(input: UploadIntentInput): Promise<UploadIntentResult & { photoId: string }> {
@@ -251,7 +253,10 @@ export class PersonalPhotoService {
     return new Response(null, { status: 200 })
   }
 
-  async completeUpload(input: UploadCompleteInput): Promise<PhotoAssetListItem & { change: PhotoChange | null }> {
+  async completeUpload(
+    input: UploadCompleteInput,
+    waitUntil?: (promise: Promise<unknown>) => void,
+  ): Promise<PhotoAssetListItem & { change: PhotoChange | null }> {
     if (!input?.key || !input.key.startsWith(`${KEY_PREFIX}/`)) {
       throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: 'key is required' })
     }
@@ -268,7 +273,7 @@ export class PersonalPhotoService {
     const db = this.dbAccessor.get()
     const existing = await db.select().from(photoAssets).where(eq(photoAssets.storageKey, input.key)).limit(1)
     if (existing[0]) {
-      return await this.finalizeAsset(db, existing[0])
+      return await this.finalizeAsset(db, existing[0], waitUntil)
     }
 
     const object = await this.storage.head(input.key)
@@ -374,19 +379,20 @@ export class PersonalPhotoService {
       .returning()
 
     if (inserted[0]) {
-      return await this.finalizeAsset(db, inserted[0])
+      return await this.finalizeAsset(db, inserted[0], waitUntil)
     }
 
     const raced = await db.select().from(photoAssets).where(eq(photoAssets.storageKey, input.key)).limit(1)
     if (!raced[0]) {
       throw new BizException(ErrorCode.COMMON_CONFLICT, { message: 'Unable to record the uploaded asset' })
     }
-    return await this.finalizeAsset(db, raced[0])
+    return await this.finalizeAsset(db, raced[0], waitUntil)
   }
 
   private async finalizeAsset(
     db: ReturnType<DbAccessor['get']>,
     record: typeof photoAssets.$inferSelect,
+    waitUntil?: (promise: Promise<unknown>) => void,
   ): Promise<PhotoAssetListItem & { change: PhotoChange | null }> {
     await this.publisher.publish()
 
@@ -401,7 +407,22 @@ export class PersonalPhotoService {
     }
 
     const change = await this.manifestSync.recordUpsert(finalRecord, this.storage.publicUrl(finalRecord.storageKey))
+    const indexing = this.aiIndexer.enqueueAndIndex(finalRecord.id)
+    if (waitUntil) {
+      waitUntil(indexing)
+    } else {
+      void indexing
+    }
     return { ...this.toListItem(finalRecord), change }
+  }
+
+  async reindexAi(limit = 10): Promise<{ queued: number; indexed: number }> {
+    const db = this.dbAccessor.get()
+    const assets = await db.select({ id: photoAssets.id }).from(photoAssets)
+    for (const asset of assets) {
+      await this.aiIndexer.ensure(asset.id)
+    }
+    return { queued: assets.length, indexed: await this.aiIndexer.backfill(limit) }
   }
 
   async listAssets(): Promise<PhotoAssetListItem[]> {
@@ -435,9 +456,20 @@ export class PersonalPhotoService {
       throw new BizException(ErrorCode.COMMON_NOT_FOUND, { message: 'Photo asset not found' })
     }
 
+    const [ai] = await db
+      .select({ tags: photoAiIndex.aiTags })
+      .from(photoAiIndex)
+      .where(eq(photoAiIndex.photoId, record.photoId))
+      .limit(1)
+    const aiTags = ai?.tags ?? []
+    const aiSet = new Set(aiTags.map((tag) => tag.toLowerCase()))
+    const manualTags = normalized.filter((tag) => !aiSet.has(tag.toLowerCase()))
+    const mergedTags = Array.from(
+      new Map([...manualTags, ...aiTags].map((tag) => [tag.toLowerCase(), tag] as const)).values(),
+    )
     const manifest = {
       ...record.manifest,
-      data: { ...record.manifest.data, tags: normalized },
+      data: { ...record.manifest.data, tags: mergedTags },
     }
     const [updated] = await db
       .update(photoAssets)
@@ -486,6 +518,13 @@ export class PersonalPhotoService {
         targets.map((target) => target.id),
       ),
     )
+    await db.delete(photoAiIndex).where(
+      inArray(
+        photoAiIndex.photoId,
+        targets.map((target) => target.photoId),
+      ),
+    )
+    await this.aiIndexer.deleteVectors(targets.map((target) => target.photoId))
     await this.publisher.publish()
 
     return await this.manifestSync.recordDeletes(targets.map((target) => ({ id: target.id, photoId: target.photoId })))
