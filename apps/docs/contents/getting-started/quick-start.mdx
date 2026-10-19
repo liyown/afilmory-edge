@@ -23,18 +23,16 @@ Edit `config.json` with your gallery name, author, accent color, and map setting
 ## Step 2: Provision Cloudflare resources
 
 ```bash
-cf d1 create afilmory-db
-cf r2 bucket create afilmory-photos
-cf kv namespace create AFILMORY_CACHE
+cf d1 create --name afilmory-db
 ```
 
-Update the IDs in `apps/edge/cloudflare.config.ts` if you chose different names, then apply the D1 schema:
+Create a private OSS bucket in the Aliyun console. The KV namespace is provisioned automatically by `bindings.kv({})` on first deploy. Update the names in `apps/edge/cloudflare.config.ts` if you chose different ones, then apply the D1 schema (remote by default; find the ID with `cf d1 list`):
 
 ```bash
-cf d1 migrations apply afilmory-db --remote
+cf d1 migrations apply <database-id> --dir be/packages/db/migrations
 ```
 
-Set the Worker secrets (`CONFIG_ENCRYPTION_KEY`, R2 credentials, and so on). See [Deployment](/deployment) for the full list.
+Set the Worker secrets (`CONFIG_ENCRYPTION_KEY`, the `S3_*` OSS credentials, and so on). See [Deployment](/deployment) for the full list.
 
 ## Step 3: Build and deploy
 
@@ -56,9 +54,9 @@ Registration is disabled. Sign in at `/platform/` with the account you just crea
 
 ## Step 5: Upload photos
 
-Open the dashboard and drop photos into the upload area. The dashboard uploads originals to R2, renders a 600px thumbnail and ThumbHash in the browser, then asks the Worker to extract metadata and publish the manifest. HEIC/HEIF files and Live Photo pairs are supported directly.
+Open the dashboard and drop photos into the upload area. The dashboard uploads originals directly to OSS with a presigned URL, renders a 600px thumbnail and ThumbHash in the browser, then asks the Worker to extract metadata and publish the manifest. HEIC/HEIF files and Live Photo pairs are supported directly.
 
 ## Next Steps
 
 - [Deployment](/deployment) — secrets, backups, and production checklist
-- [Architecture](/architecture) — Worker, D1, R2, and KV design
+- [Architecture](/architecture) — Worker, D1, OSS, and KV design

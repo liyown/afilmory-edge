@@ -55,6 +55,8 @@ export class AuthProvider implements OnModuleInit {
       acc[key] = {
         clientId: value.clientId,
         clientSecret: value.clientSecret,
+        // Social sign-in may only attach to the pre-existing owner account.
+        disableSignUp: true,
         ...(redirectUri ? { redirectURI: redirectUri } : {}),
       }
       return acc
@@ -96,8 +98,7 @@ export class AuthProvider implements OnModuleInit {
     try {
       const hono = HttpContext.getValue('hono') as Context | undefined
       return hono ? new URL(hono.req.url).origin : null
-    }
-    catch {
+    } catch {
       return null
     }
   }
@@ -205,8 +206,7 @@ export class AuthProvider implements OnModuleInit {
 
           try {
             await this.systemSettings.ensureRegistrationAllowed()
-          }
-          catch (error) {
+          } catch (error) {
             if (error instanceof BizException) {
               throw new APIError('FORBIDDEN', {
                 message: error.message,

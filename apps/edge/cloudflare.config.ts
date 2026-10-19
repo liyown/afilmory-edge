@@ -14,19 +14,16 @@ export default defineConfig({
     entrypoint,
     env: {
       DB: bindings.d1({ name: 'afilmory-db' }),
-      PHOTOS: bindings.r2({ name: 'afilmory-photos' }),
       CACHE: bindings.kv({}),
       ASSETS: bindings.assets(),
       CONFIG_ENCRYPTION_KEY: bindings.secret(),
       BETTER_AUTH_SECRET: bindings.secret(),
-      // Direct-to-R2 uploads. Set these with `cf secret put <NAME>` in
-      // production; local dev may use `disabled` to exercise the Worker-proxied
-      // fallback path.
-      R2_ACCOUNT_ID: bindings.secret(),
-      R2_ACCESS_KEY_ID: bindings.secret(),
-      R2_SECRET_ACCESS_KEY: bindings.secret(),
-      R2_BUCKET_NAME: bindings.secret(),
-      R2_PUBLIC_BASE_URL: bindings.secret(),
+      // S3-compatible object storage (Aliyun OSS). Set these with
+      // `cf workers secrets update <NAME> --type secret_text --worker afilmory-edge`.
+      S3_ENDPOINT: bindings.secret(),
+      S3_REGION: bindings.secret(),
+      S3_ACCESS_KEY_ID: bindings.secret(),
+      S3_SECRET_ACCESS_KEY: bindings.secret(),
     },
     assets: {
       htmlHandling: 'auto-trailing-slash',

@@ -1,12 +1,11 @@
 import { BizException, ErrorCode } from '@core/errors'
 import { PlatformRoles } from '@core/guards/roles.decorator'
 import { BypassResponseTransform } from '@core/interceptors/response-transform.decorator'
-import { Body, ContextParam, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@tsuki-hono/common'
-import type { Context } from 'hono'
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@tsuki-hono/common'
 
 import type { UploadCompleteInput, UploadIntentInput } from './personal-photo.service'
 import { PersonalPhotoService } from './personal-photo.service'
-import type { MultipartPart } from './r2-upload.service'
+import type { MultipartPart } from './s3-storage.service'
 
 interface UpdateTagsBody {
   tags?: string[]
@@ -50,21 +49,6 @@ export class PersonalPhotoController {
       throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: 'photoId is required' })
     }
     return await this.photos.completeUpload({ ...body, parts: body.parts ?? null, uploadId: body.uploadId ?? null })
-  }
-
-  // Fallback used when R2 S3 credentials are absent: the browser PUTs the
-  // bytes to the Worker, which forwards them to the R2 binding.
-  @Put('upload-content')
-  @BypassResponseTransform()
-  async uploadContent(@ContextParam() context: Context): Promise<Response> {
-    const key = context.req.query('key')
-    if (!key) {
-      throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: 'key is required' })
-    }
-
-    const body = await context.req.arrayBuffer()
-    await this.photos.putUploadedObject(key, body, context.req.header('content-type'))
-    return new Response(null, { status: 204 })
   }
 
   @Get('storage-url')

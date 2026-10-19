@@ -1,7 +1,8 @@
 import type { PhotoRegion, PickedExif } from '@afilmory/typing'
-import { env as workerEnv } from 'cloudflare:workers'
 import exifr from 'exifr'
 import { injectable } from 'tsyringe'
+
+import { storageGet } from '../../storage'
 
 // EXIF/XMP lives near the start of JPEG/HEIC/TIFF files. Reading a bounded
 // range keeps the Worker from pulling multi-megabyte originals into memory.
@@ -134,8 +135,8 @@ export function parseRegions(tags: Record<string, unknown>): PhotoRegion[] {
   const width = dimensions ? readNumber(dimensions, ['W', 'w']) : null
   const height = dimensions ? readNumber(dimensions, ['H', 'h']) : null
   const unit = dimensions && typeof dimensions.Unit === 'string' ? dimensions.Unit : dimensions?.unit
-  const appliedToDimensions
-    = width !== null && height !== null && typeof unit === 'string' ? { width, height, unit } : null
+  const appliedToDimensions =
+    width !== null && height !== null && typeof unit === 'string' ? { width, height, unit } : null
 
   return asArray(source.RegionList)
     .map((region) => {
@@ -150,8 +151,8 @@ export function parseRegions(tags: Record<string, unknown>): PhotoRegion[] {
       const y = areaRecord ? readNumber(areaRecord, ['Y', 'y']) : null
       const areaWidth = areaRecord ? readNumber(areaRecord, ['W', 'w']) : null
       const areaHeight = areaRecord ? readNumber(areaRecord, ['H', 'h']) : null
-      const area
-        = x !== null && y !== null && areaWidth !== null && areaHeight !== null
+      const area =
+        x !== null && y !== null && areaWidth !== null && areaHeight !== null
           ? {
               x,
               y,
@@ -298,14 +299,12 @@ export class ExifMetadataService {
     }
 
     try {
-      const object = await workerEnv.PHOTOS.get(key, {
-        range: { offset: 0, length: MAX_METADATA_BYTES },
-      })
+      const object = await storageGet(key, { offset: 0, length: MAX_METADATA_BYTES })
       if (!object) {
         return EMPTY_METADATA
       }
 
-      const buffer = await object.arrayBuffer()
+      const buffer = await object.response.arrayBuffer()
       const tags = (await exifr.parse(buffer, {
         tiff: true,
         exif: true,
@@ -331,8 +330,7 @@ export class ExifMetadataService {
         width: positiveDimension(tags.ExifImageWidth ?? tags.ImageWidth),
         height: positiveDimension(tags.ExifImageHeight ?? tags.ImageHeight),
       }
-    }
-    catch {
+    } catch {
       // Unsupported/corrupt metadata must never block an upload.
       return EMPTY_METADATA
     }

@@ -37,7 +37,7 @@ export function PhotoLibraryActionBar() {
     selectedIds,
     assets,
   } = usePhotoLibraryStore(
-    useShallow(state => ({
+    useShallow((state) => ({
       selectionCount: state.selectedIds.length,
       totalCount: state.libraryTotalCount,
       isUploading: state.isUploading,
@@ -65,7 +65,7 @@ export function PhotoLibraryActionBar() {
       return emptyArray
     }
     const idSet = new Set(selectedIds)
-    return assets.filter(asset => idSet.has(asset.id))
+    return assets.filter((asset) => idSet.has(asset.id))
   }, [assets, selectedIds])
 
   const handleUploadClick = () => {
@@ -108,36 +108,29 @@ export function PhotoLibraryActionBar() {
   }
 
   return (
-    <div className="flex w-full relative flex-col gap-2 sm:gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-2 sm:gap-3">
-        <input
-          ref={fileInputRef}
-          type="file"
-          className="hidden"
-          multiple
-          accept="image/*,.heic,.HEIC,.heif,.HEIF,.hif,.HIF,.mov,.MOV"
-          onChange={handleFileChange}
-        />
-        <Button
-          type="button"
-          variant="primary"
-          size="sm"
-          disabled={isUploading}
-          onClick={handleUploadClick}
-          className="flex items-center gap-1 text-xs sm:text-sm"
-        >
-          <span className="hidden sm:inline">{t(photoLibraryActionKeys.upload)}</span>
-          <span className="sm:hidden">{t(photoLibraryActionKeys.uploadShort)}</span>
-        </Button>
-      </div>
+    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        multiple
+        accept="image/*,.heic,.HEIC,.heif,.HEIF,.hif,.HIF,.mov,.MOV"
+        onChange={handleFileChange}
+      />
+      <Button
+        type="button"
+        variant="primary"
+        size="sm"
+        disabled={isUploading}
+        onClick={handleUploadClick}
+        className="flex items-center gap-1 text-xs sm:text-sm"
+      >
+        <span className="hidden sm:inline">{t(photoLibraryActionKeys.upload)}</span>
+        <span className="sm:hidden">{t(photoLibraryActionKeys.uploadShort)}</span>
+      </Button>
 
-      <div className="flex min-h-10 absolute right-0 translate-y-25 lg:translate-y-16 items-center justify-end gap-1.5 sm:gap-2 lg:flex-wrap w-full flex-nowrap">
-        <div
-          className={clsxm(
-            'flex items-center gap-2 transition-opacity duration-200',
-            hasSelection ? 'opacity-100' : 'pointer-events-none opacity-0',
-          )}
-        >
+      {hasSelection && (
+        <>
           <span
             className={clsxm(
               'inline-flex items-center shape-squircle whitespace-nowrap px-2.5 py-1 text-xs font-medium',
@@ -172,19 +165,20 @@ export function PhotoLibraryActionBar() {
             <X className="h-3.5 w-3.5" />
             {t(photoLibraryActionKeys.clear)}
           </Button>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={!canSelectAll}
-          onClick={selectAll}
-          className="flex items-center gap-1 text-text-secondary hover:text-text"
-        >
-          {canSelectAll ? <Square className="size-4" /> : <CheckSquare className="size-4" />}
-          {selectAllLabel}
-        </Button>
-      </div>
+        </>
+      )}
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={!canSelectAll}
+        onClick={selectAll}
+        className="flex items-center gap-1 text-text-secondary hover:text-text"
+      >
+        {canSelectAll ? <Square className="size-4" /> : <CheckSquare className="size-4" />}
+        {selectAllLabel}
+      </Button>
     </div>
   )
 }

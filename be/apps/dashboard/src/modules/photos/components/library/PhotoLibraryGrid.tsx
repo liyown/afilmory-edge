@@ -116,8 +116,8 @@ function PhotoGridItem({
   const previewUrl = manifest?.thumbnailUrl ?? manifest?.originalUrl ?? asset.publicUrl
   const deviceLabel = manifest?.exif?.Model || manifest?.exif?.Make || t(photoLibraryGridKeys.card.deviceUnknown)
   const updatedAtLabel = new Date(asset.updatedAt).toLocaleString(locale)
-  const fileSizeLabel
-    = asset.size !== null && asset.size !== undefined
+  const fileSizeLabel =
+    asset.size !== null && asset.size !== undefined
       ? `${(asset.size / (1024 * 1024)).toLocaleString(locale, { maximumFractionDigits: 2 })} MB`
       : manifest?.size
         ? `${(manifest.size / (1024 * 1024)).toLocaleString(locale, { maximumFractionDigits: 2 })} MB`
@@ -273,13 +273,13 @@ function PhotoGridItem({
 export function PhotoLibraryGrid() {
   const { t } = useTranslation()
   const viewport = useAtomValue(viewportAtom)
-  const columnWidth = viewport.sm ? 320 : 160
+  const columnWidth = viewport.sm ? 240 : 160
   const [sortBy, setSortBy] = useState<PhotoLibrarySortBy>('uploadedAt')
   const [sortOrder, setSortOrder] = useState<PhotoLibrarySortOrder>('desc')
 
-  const { assets, isLoading, selectedIds, toggleSelect, openAsset, deleteAsset, availableTags, isDeleting }
-    = usePhotoLibraryStore(
-      useShallow(state => ({
+  const { assets, isLoading, selectedIds, toggleSelect, openAsset, deleteAsset, availableTags, isDeleting } =
+    usePhotoLibraryStore(
+      useShallow((state) => ({
         assets: state.assets,
         isLoading: state.isLoading,
         selectedIds: state.selectedIds,
@@ -315,53 +315,49 @@ export function PhotoLibraryGrid() {
 
   if (isLoading) {
     content = (
-      <div className="columns-1 gap-4 sm:columns-2 lg:columns-3">
-        {Array.from({ length: 6 }, (_, i) => `photo-skeleton-${i + 1}`).map(key => (
+      <div className="columns-1 gap-4 sm:columns-2 lg:columns-5">
+        {Array.from({ length: 6 }, (_, i) => `photo-skeleton-${i + 1}`).map((key) => (
           <div key={key} className="mb-4 break-inside-avoid">
             <div className="bg-fill/30 h-48 w-full animate-pulse rounded-xl" />
           </div>
         ))}
       </div>
     )
-  }
-  else if (!sortedAssets || sortedAssets.length === 0) {
+  } else if (!sortedAssets || sortedAssets.length === 0) {
     content = (
       <LinearBorderPanel className="bg-background-tertiary relative overflow-hidden p-4 sm:p-8 text-center">
         <p className="text-text text-sm sm:text-base font-semibold">{t('photos.library.empty.title')}</p>
         <p className="text-text-tertiary mt-2 text-xs sm:text-sm">{t('photos.library.empty.description')}</p>
       </LinearBorderPanel>
     )
-  }
-  else {
+  } else {
     content = (
-      <div className="lg:mx-[calc(calc((3rem+100vw)-(var(--container-7xl)))*-1/2)] -mx-2 lg:mt-0 mt-12 p-1">
-        <Masonry
-          items={sortedAssets}
-          columnGutter={8}
-          columnWidth={columnWidth}
-          itemKey={asset => asset.id}
-          render={({ data }) => (
-            <PhotoGridItem
-              asset={data}
-              isSelected={selectedSet.has(data.id)}
-              onToggleSelect={toggleSelect}
-              onOpenAsset={openAsset}
-              onDeleteAsset={deleteAsset}
-              onEditTags={handleEditTags}
-              isDeleting={isDeleting}
-            />
-          )}
-        />
-      </div>
+      <Masonry
+        items={sortedAssets}
+        columnGutter={8}
+        columnWidth={columnWidth}
+        itemKey={(asset) => asset.id}
+        render={({ data }) => (
+          <PhotoGridItem
+            asset={data}
+            isSelected={selectedSet.has(data.id)}
+            onToggleSelect={toggleSelect}
+            onOpenAsset={openAsset}
+            onDeleteAsset={deleteAsset}
+            onEditTags={handleEditTags}
+            isDeleting={isDeleting}
+          />
+        )}
+      />
     )
   }
 
-  const currentSortBy = SORT_BY_OPTIONS.find(option => option.value === sortBy) ?? SORT_BY_OPTIONS[0]
-  const currentSortOrder = SORT_ORDER_OPTIONS.find(option => option.value === sortOrder) ?? SORT_ORDER_OPTIONS[0]
+  const currentSortBy = SORT_BY_OPTIONS.find((option) => option.value === sortBy) ?? SORT_BY_OPTIONS[0]
+  const currentSortOrder = SORT_ORDER_OPTIONS.find((option) => option.value === sortOrder) ?? SORT_ORDER_OPTIONS[0]
 
   return (
-    <div className="space-y-3 relative">
-      <div className="flex flex-wrap items-center justify-end gap-2 text-xs absolute lg:translate-y-[-50px] -translate-y-10 -translate-x-2 lg:translate-x-0 lg:right-30">
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -376,7 +372,7 @@ export function PhotoLibraryGrid() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-[180px]">
-            {SORT_BY_OPTIONS.map(option => (
+            {SORT_BY_OPTIONS.map((option) => (
               <DropdownMenuItem
                 key={option.value}
                 active={option.value === sortBy}
@@ -403,7 +399,7 @@ export function PhotoLibraryGrid() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-[180px]">
-            {SORT_ORDER_OPTIONS.map(option => (
+            {SORT_ORDER_OPTIONS.map((option) => (
               <DropdownMenuItem
                 key={option.value}
                 active={option.value === sortOrder}

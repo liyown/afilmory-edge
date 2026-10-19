@@ -15,15 +15,15 @@ Build-time defaults merged into `site.config.ts`:
 
 Values saved from the dashboard are stored in D1 under `site.*` and injected into every shell request; they take precedence over `config.json`.
 
-## Worker Secrets (`apps/edge/.dev.vars` / `cf secret put`)
+## Worker Secrets (`apps/edge/.dev.vars` / `cf workers secrets update`)
 
 - `CONFIG_ENCRYPTION_KEY` — encrypts sensitive settings in D1 (required).
 - `BETTER_AUTH_SECRET` — optional; falls back to `CONFIG_ENCRYPTION_KEY`.
-- `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_BASE_URL` — presigned uploads.
-  Omit them to proxy uploads through the Worker.
-- `OG_THUMBNAIL_ORIGIN` — optional origin override for OG images.
+- `S3_ENDPOINT` — virtual-hosted bucket URL, e.g. `https://<bucket>.s3.oss-<region>.aliyuncs.com`.
+- `S3_REGION` — OSS region, e.g. `cn-shenzhen`.
+- `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` — credentials with read/write access to the bucket.
 
-Bindings (`DB`, `PHOTOS`, `CACHE`, `ASSETS`) are declared in `apps/edge/cloudflare.config.ts`.
+Bindings (`DB`, `CACHE`, `ASSETS`) are declared in `apps/edge/cloudflare.config.ts`; the S3 values are Worker secrets.
 
 ## App Commands (common)
 

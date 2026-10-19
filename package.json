@@ -15,7 +15,7 @@
     "bootstrap:admin": "pnpm -C be/apps/core bootstrap:admin",
     "restore:d1-backup": "pnpm -C be/apps/core restore:d1-backup",
     "create:doc": "tsx scripts/create-doc.ts",
-    "deploy:edge": "pnpm --filter @afilmory/edge deploy",
+    "deploy:edge": "pnpm --filter @afilmory/edge run deploy",
     "dev": "pnpm --filter @afilmory/edge dev",
     "dev:edge": "pnpm --filter @afilmory/edge dev",
     "docs:build": "pnpm --filter @afilmory/docs build",

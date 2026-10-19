@@ -88,9 +88,9 @@ export const tocData: FileToc[] = [
                 children: [],
               },
               {
-                id: 'heading-r2',
+                id: 'heading-oss',
                 level: 3,
-                text: 'R2',
+                text: 'OSS',
                 children: [],
               },
               {
@@ -383,13 +383,13 @@ export const tocData: FileToc[] = [
 
 // Helper function to find TOC data by file path
 export function getTocByFile(filePath: string): TocItem[] | undefined {
-  const item = tocData.find(item => item.file === filePath)
+  const item = tocData.find((item) => item.file === filePath)
   return item?.toc
 }
 
 // Helper function to find TOC data by route path
 export function getTocByPath(routePath: string): TocItem[] | undefined {
-  const item = tocData.find(item => item.path === routePath)
+  const item = tocData.find((item) => item.path === routePath)
   return item?.toc
 }
 

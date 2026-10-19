@@ -4,6 +4,7 @@ import { GEIST_MEDIUM_B64 } from './assets/geist-medium.b64'
 import type { OgSiteConfig } from './og-site'
 import type { OgExif, OgExifInfo, OgPhoto } from './og-template'
 import { buildHomepageOgHtml, buildPhotoOgHtml, OG_HEIGHT, OG_WIDTH } from './og-template'
+import { storageGet } from './storage'
 
 const CJK_FONT_PATH = '/fonts/HarmonyOS_Sans_SC_Medium.ttf'
 // Satori embeds the picture into the SVG it renders; keeping the source image
@@ -21,7 +22,7 @@ const CONTENT_TYPES: Record<string, string> = {
   GIF: 'image/gif',
 }
 
-export type OgEnv = Pick<Env, 'ASSETS' | 'PHOTOS'>
+export type OgEnv = Pick<Env, 'ASSETS'>
 
 interface ImageBudget {
   remaining: number
@@ -98,38 +99,19 @@ async function resolvePhotoImage(env: OgEnv, photo: OgPhoto, budget: ImageBudget
   }
 
   const contentType = CONTENT_TYPES[format] ?? 'image/jpeg'
-  const thumbnailUrl = photo.thumbnailUrl
-  const isResizedCdnUrl
-    = typeof thumbnailUrl === 'string' && /^https?:\/\//i.test(thumbnailUrl) && thumbnailUrl.includes('/cdn-cgi/image/')
-
-  if (isResizedCdnUrl) {
-    try {
-      const response = await fetch(thumbnailUrl)
-      if (response.ok) {
-        const buffer = await response.arrayBuffer()
-        if (buffer.byteLength <= budget.remaining) {
-          budget.remaining -= buffer.byteLength
-          return toDataUrl(buffer, response.headers.get('content-type') ?? contentType)
-        }
-      }
-    }
-    catch {
-      // Fall through to the R2 object.
-    }
-  }
 
   if (!photo.s3Key) {
     return null
   }
 
-  const object = await env.PHOTOS.get(photo.s3Key)
+  const object = await storageGet(photo.s3Key)
   if (!object || object.size > budget.remaining) {
     return null
   }
 
-  const buffer = await object.arrayBuffer()
+  const buffer = await object.response.arrayBuffer()
   budget.remaining -= buffer.byteLength
-  return toDataUrl(buffer, object.httpMetadata?.contentType ?? contentType)
+  return toDataUrl(buffer, object.response.headers.get('content-type') ?? contentType)
 }
 
 async function resolveAvatar(avatarUrl: string | null | undefined): Promise<string | null> {
@@ -153,8 +135,7 @@ async function resolveAvatar(avatarUrl: string | null | undefined): Promise<stri
       return null
     }
     return toDataUrl(buffer, response.headers.get('content-type') ?? 'image/png')
-  }
-  catch {
+  } catch {
     return null
   }
 }
@@ -182,8 +163,8 @@ function buildExifInfo(exif: OgExif | null | undefined): OgExifInfo | null {
   const aperture = exif.FNumber ? `f/${exif.FNumber}` : null
   const iso = exif.ISO ?? null
   const shutterSpeed = exif.ExposureTime ? `${exif.ExposureTime}s` : null
-  const camera
-    = exif.Make && exif.Model
+  const camera =
+    exif.Make && exif.Model
       ? `${String(exif.Make).trim()} ${String(exif.Model).trim()}`.trim()
       : (exif.Model ?? exif.Make ?? null)
 

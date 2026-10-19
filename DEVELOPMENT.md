@@ -33,12 +33,14 @@ cp apps/edge/.dev.vars.example apps/edge/.dev.vars
 
 3. Create local Cloudflare resources
 
-`cf dev` provisions local D1, R2, and KV automatically.
+`cf dev` provisions local D1 and KV automatically; object storage uses the S3 credentials from `.dev.vars`.
 To apply the schema manually:
 
 ```bash
-cf d1 migrations apply afilmory-db --local
+cf d1 migrations apply <database-id> --local --dir be/packages/db/migrations
 ```
+
+Get the ID from `cf d1 list`; local state is keyed by the same database ID.
 
 4. Run the app
 
@@ -51,10 +53,10 @@ Uploads, metadata extraction, thumbnail storage, and manifest publication all ru
 
 ## How Photos Flow
 
-1. The dashboard requests an upload intent, then uploads the original to R2 (presigned or proxied through the Worker).
+1. The dashboard requests an upload intent, then uploads the original directly to OSS with a presigned URL.
 2. The dashboard renders a 600px JPEG thumbnail, a ThumbHash placeholder, and a tone analysis in the browser, then posts them to `upload-complete`.
-3. The Worker verifies the object size, extracts EXIF/XMP with bounded R2 range reads, detects Live Photos and Motion Photos, and inserts a `photo_asset` row in D1.
-4. `ManifestPublisher` rebuilds `manifest.json` in R2 from D1 and clears the KV cache.
+3. The Worker verifies the object size, extracts EXIF/XMP with bounded range reads, detects Live Photos and Motion Photos, and inserts a `photo_asset` row in D1.
+4. `ManifestPublisher` rebuilds `manifest.json` in OSS from D1 and clears the KV cache.
 5. The next shell request injects the new manifest; feed, sitemap, and share routes read D1 directly.
 
 ## Site Presentation Config (`config.json`)

@@ -2,6 +2,7 @@ import { authUsers } from '@afilmory/db'
 import { DbAccessor } from '@core/database/database.provider'
 import { BizException, ErrorCode } from '@core/errors'
 import { normalizeStringToUndefined } from '@core/helpers/normalize.helper'
+import { CacheService } from '@core/modules/infrastructure/cache/cache.service'
 import { asc, eq, sql } from 'drizzle-orm'
 import { injectable } from 'tsyringe'
 
@@ -10,7 +11,7 @@ import type { UiNode } from '../../ui/ui-schema/ui-schema.type'
 import type { SettingEntryInput } from '../setting/setting.service'
 import { SettingService } from '../setting/setting.service'
 import type { SiteSettingEntryInput, SiteSettingKey, SiteSettingUiSchemaResponse } from './site-setting.type'
-import { ONBOARDING_SITE_SETTING_KEYS, SITE_SETTING_KEYS } from './site-setting.type'
+import { ONBOARDING_SITE_SETTING_KEYS, SITE_CONFIG_CACHE_KEY, SITE_SETTING_KEYS } from './site-setting.type'
 import { createSiteSettingUiSchema, SITE_SETTING_UI_SCHEMA_KEYS } from './site-setting.ui-schema'
 
 const DEFAULT_SITE_CONFIG: SiteConfig = {
@@ -29,6 +30,7 @@ export class SiteSettingService {
   constructor(
     private readonly settingService: SettingService,
     private readonly dbAccessor: DbAccessor,
+    private readonly cacheService: CacheService,
   ) {}
 
   async getUiSchema(): Promise<SiteSettingUiSchemaResponse> {
@@ -64,12 +66,13 @@ export class SiteSettingService {
       return
     }
 
-    const normalizedEntries = entries.map(entry => ({
+    const normalizedEntries = entries.map((entry) => ({
       ...entry,
       value: typeof entry.value === 'string' ? entry.value : String(entry.value),
     })) as readonly SettingEntryInput[]
 
     await this.settingService.setMany(normalizedEntries)
+    await this.cacheService.delete(SITE_CONFIG_CACHE_KEY)
   }
 
   async get(key: SiteSettingKey) {
@@ -84,11 +87,11 @@ export class SiteSettingService {
       author: { ...DEFAULT_SITE_CONFIG.author },
     }
 
-    assignString(values['site.name'], value => (config.name = value))
-    assignString(values['site.title'], value => (config.title = value))
-    assignString(values['site.description'], value => (config.description = value))
-    assignString(values['site.url'], value => (config.url = value))
-    assignString(values['site.accentColor'], value => (config.accentColor = value))
+    assignString(values['site.name'], (value) => (config.name = value))
+    assignString(values['site.title'], (value) => (config.title = value))
+    assignString(values['site.description'], (value) => (config.description = value))
+    assignString(values['site.url'], (value) => (config.url = value))
+    assignString(values['site.accentColor'], (value) => (config.accentColor = value))
 
     const viewer = buildViewerConfig(values)
     if (viewer) {
@@ -98,8 +101,7 @@ export class SiteSettingService {
     const resolvedAuthor = await this.resolveAuthor(config.name)
     if (resolvedAuthor) {
       config.author = resolvedAuthor
-    }
-    else if (!config.author.name) {
+    } else if (!config.author.name) {
       config.author.name = config.name
     }
 
@@ -118,7 +120,7 @@ export class SiteSettingService {
       config.map = mapProviders
     }
 
-    assignString(values['site.mapStyle'], value => (config.mapStyle = value))
+    assignString(values['site.mapStyle'], (value) => (config.mapStyle = value))
 
     const projection = normalizeMapProjection(values['site.mapProjection'])
     if (projection) {
@@ -169,6 +171,8 @@ export class SiteSettingService {
       })
       .where(eq(authUsers.id, user.id))
 
+    await this.cacheService.delete(SITE_CONFIG_CACHE_KEY)
+
     return toSiteAuthorProfile({
       ...user,
       name,
@@ -186,11 +190,11 @@ export class SiteSettingService {
     }
 
     const fallbackName = normalizeStringToUndefined(siteName) ?? siteName
-    const normalizedName
-      = normalizeStringToUndefined(user.displayUsername)
-        ?? normalizeStringToUndefined(user.username)
-        ?? normalizeStringToUndefined(user.name)
-        ?? fallbackName
+    const normalizedName =
+      normalizeStringToUndefined(user.displayUsername) ??
+      normalizeStringToUndefined(user.username) ??
+      normalizeStringToUndefined(user.name) ??
+      fallbackName
 
     const author: SiteConfigAuthor = {
       name: normalizedName,
@@ -241,8 +245,7 @@ export class SiteSettingService {
         throw new Error('Invalid protocol')
       }
       return url.toString()
-    }
-    catch {
+    } catch {
       throw new BizException(ErrorCode.COMMON_VALIDATION, {
         message: '头像链接必须是以 http(s) 或 // 开头的有效 URL',
       })
@@ -397,10 +400,9 @@ function parseJsonStringArray(value: string | null | undefined): string[] | unde
       return undefined
     }
 
-    const result = parsed.filter((entry): entry is string => typeof entry === 'string').map(entry => entry.trim())
+    const result = parsed.filter((entry): entry is string => typeof entry === 'string').map((entry) => entry.trim())
     return result.length > 0 ? result : undefined
-  }
-  catch {
+  } catch {
     return undefined
   }
 }

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { NavLink } from 'react-router'
 
 import { useAuthUserValue } from '~/atoms/auth'
+import { dashboardSiteName } from '~/config/site'
 
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { UserMenu } from './UserMenu'
@@ -13,7 +14,7 @@ const navigationTabs = [
   { labelKey: 'nav.comments', path: '/comments' },
   { labelKey: 'nav.analytics', path: '/analytics' },
   { labelKey: 'nav.settings', path: '/settings' },
-] as const satisfies readonly { labelKey: I18nKeys, path: string }[]
+] as const satisfies readonly { labelKey: I18nKeys; path: string }[]
 
 export function Header() {
   const user = useAuthUserValue()
@@ -24,12 +25,12 @@ export function Header() {
       <div className="flex h-14 items-center px-3 sm:px-6">
         {/* Logo/Brand */}
         <a href="/" className="text-text mr-2 sm:mr-8 text-sm sm:text-base font-semibold tracking-tight">
-          Afilmory
+          {dashboardSiteName}
         </a>
 
         {/* Navigation Tabs */}
         <nav className="flex flex-1 items-center gap-0.5 sm:gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          {navigationTabs.map(tab => (
+          {navigationTabs.map((tab) => (
             <NavLink key={tab.path} to={tab.path} end={tab.path === '/'}>
               {({ isActive }) => (
                 <div

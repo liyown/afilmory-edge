@@ -84,7 +84,7 @@ function MainPageLayoutBase({ title, description, actions, footer, children }: M
           </div>
 
           {showHeaderActions ? (
-            <div className="flex flex-wrap items-center gap-2 md:justify-end absolute md:translate-y-0 -translate-y-1 right-0 md:relative">
+            <div className="flex flex-wrap items-center gap-2 md:justify-end">
               {actions}
               <div ref={assignActionsContainer} className="flex flex-wrap items-center gap-2" />
             </div>

@@ -24,4 +24,13 @@ const getInjectedSiteConfig = (): Partial<SiteConfig> | undefined => {
 
 const runtimeSiteConfig = getInjectedSiteConfig() ?? {}
 
-export const siteConfig: SiteConfig = merge(defaultSiteConfig, runtimeSiteConfig)
+const mergedSiteConfig: SiteConfig = merge(defaultSiteConfig, runtimeSiteConfig)
+
+// The Worker injects the live author profile on every shell request. Replace
+// the whole object instead of deep-merging so a cleared avatar or URL does not
+// fall back to the build-time identity from config.json.
+if (runtimeSiteConfig.author) {
+  mergedSiteConfig.author = { ...runtimeSiteConfig.author, url: runtimeSiteConfig.author.url ?? '' }
+}
+
+export const siteConfig = mergedSiteConfig

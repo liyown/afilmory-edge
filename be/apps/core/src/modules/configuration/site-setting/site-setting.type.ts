@@ -2,6 +2,9 @@ import type { UiSchema } from '../../ui/ui-schema/ui-schema.type'
 import type { SettingEntryInput } from '../setting/setting.service'
 import type { SettingKeyType } from '../setting/setting.type'
 
+/** Shared with the Worker shell cache in `apps/edge/src/og-site.ts`. */
+export const SITE_CONFIG_CACHE_KEY = 'site-config:v1'
+
 export const SITE_SETTING_KEYS = [
   'site.name',
   'site.title',

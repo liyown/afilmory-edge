@@ -1,7 +1,7 @@
-// Phase 7 scheduled work:
-// - hourly: delete R2 objects left behind by interrupted uploads, refresh the
+// Scheduled work:
+// - hourly: delete OSS objects left behind by interrupted uploads, refresh the
 //   OG image cache, and drop OG entries for photos that no longer exist;
-// - daily: export every D1 table into a gzipped JSON document in R2.
+// - daily: export every D1 table into a gzipped JSON document in the bucket.
 //
 // Both tasks are idempotent, so a retried cron invocation is safe.
 
@@ -12,6 +12,7 @@ import { renderHomepageOgImage, renderPhotoOgImage } from './og'
 import type { OgSiteConfig } from './og-site'
 import { loadOgSiteConfig } from './og-site'
 import type { OgPhoto } from './og-template'
+import { storagePut } from './storage'
 
 // Keep both literals in sync with cloudflare.config.ts (the dev server cannot
 // import Worker source from the config module).
@@ -80,7 +81,7 @@ export function homepageOgCacheKey(site: OgSiteConfig, photos: OgPhoto[]): strin
         accentColor: site.accentColor,
         avatar: site.authorAvatar,
       },
-      featured: photos.slice(0, 6).map(photo => `${photo.s3Key ?? ''}:${photo.lastModified ?? ''}`),
+      featured: photos.slice(0, 6).map((photo) => `${photo.s3Key ?? ''}:${photo.lastModified ?? ''}`),
     }),
   )
   return `${OG_PREFIX}homepage-${OG_TEMPLATE_VERSION}-${fingerprint}.png`
@@ -92,13 +93,13 @@ export function homepageOgCacheKey(site: OgSiteConfig, photos: OgPhoto[]): strin
  */
 export async function prewarmOgImages(env: CronEnv): Promise<OgResult> {
   const manifest = await loadManifest(env)
-  const photos = ((manifest.data ?? []) as OgPhoto[]).filter(photo => typeof photo?.id === 'string')
+  const photos = ((manifest.data ?? []) as OgPhoto[]).filter((photo) => typeof photo?.id === 'string')
   const cameras = Array.isArray(manifest.cameras) ? manifest.cameras.length : 0
   const site = await loadOgSiteConfig(env)
 
   const homepageKey = homepageOgCacheKey(site, photos)
-  const expected = new Set([homepageKey, ...photos.map(photo => photoOgCacheKey(photo, site))])
-  const existing = new Set((await listAll(env.PHOTOS, OG_PREFIX)).map(object => object.key))
+  const expected = new Set([homepageKey, ...photos.map((photo) => photoOgCacheKey(photo, site))])
+  const existing = new Set((await listAll(OG_PREFIX)).map((object) => object.key))
 
   let rendered = 0
   let skipped = 0
@@ -113,12 +114,12 @@ export async function prewarmOgImages(env: CronEnv): Promise<OgResult> {
     }
     try {
       const image = await renderPhotoOgImage(env, photo, site, OG_ASSETS_ORIGIN)
-      await env.PHOTOS.put(key, image, {
-        httpMetadata: { contentType: 'image/png', cacheControl: OG_CACHE_CONTROL },
+      await storagePut(key, image, {
+        contentType: 'image/png',
+        cacheControl: OG_CACHE_CONTROL,
       })
       rendered++
-    }
-    catch (error) {
+    } catch (error) {
       log('cron.og.photo.failed', { photoId: photo.id, message: errorMessage(error) })
       skipped++
     }
@@ -127,24 +128,23 @@ export async function prewarmOgImages(env: CronEnv): Promise<OgResult> {
   if (!existing.has(homepageKey)) {
     if (rendered >= MAX_OG_PER_RUN) {
       skipped++
-    }
-    else {
+    } else {
       try {
         const image = await renderHomepageOgImage(env, site, photos, cameras, OG_ASSETS_ORIGIN)
-        await env.PHOTOS.put(homepageKey, image, {
-          httpMetadata: { contentType: 'image/png', cacheControl: OG_CACHE_CONTROL },
+        await storagePut(homepageKey, image, {
+          contentType: 'image/png',
+          cacheControl: OG_CACHE_CONTROL,
         })
         rendered++
-      }
-      catch (error) {
+      } catch (error) {
         log('cron.og.homepage.failed', { message: errorMessage(error) })
         skipped++
       }
     }
   }
 
-  const stale = [...existing].filter(key => !expected.has(key))
-  await deleteKeys(env.PHOTOS, stale)
+  const stale = [...existing].filter((key) => !expected.has(key))
+  await deleteKeys(stale)
   return { rendered, removed: stale.length, skipped }
 }
 

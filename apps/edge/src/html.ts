@@ -7,6 +7,7 @@
 
 import type { OgSiteConfig } from './og-site'
 import { loadOgSiteConfig } from './og-site'
+import { storageGet } from './storage'
 
 const MANIFEST_KEY = 'manifest.json'
 const MANIFEST_CACHE_KEY = 'manifest:cache'
@@ -26,18 +27,18 @@ const EMPTY_MANIFEST: ManifestPayload = {
   lenses: [],
 }
 
-export async function loadManifest(env: Pick<Env, 'CACHE' | 'PHOTOS'>): Promise<ManifestPayload> {
+export async function loadManifest(env: Pick<Env, 'CACHE'>): Promise<ManifestPayload> {
   const cached = await env.CACHE.get(MANIFEST_CACHE_KEY)
   if (cached) {
     return JSON.parse(cached) as ManifestPayload
   }
 
-  const object = await env.PHOTOS.get(MANIFEST_KEY)
+  const object = await storageGet(MANIFEST_KEY)
   if (!object) {
     return EMPTY_MANIFEST
   }
 
-  const text = await object.text()
+  const text = await object.response.text()
   await env.CACHE.put(MANIFEST_CACHE_KEY, text, { expirationTtl: MANIFEST_CACHE_TTL_SECONDS })
 
   return JSON.parse(text) as ManifestPayload
@@ -72,6 +73,11 @@ export async function serveWebManifest(env: Env): Promise<Response> {
   })
 }
 
+/** JSON safe to embed inside a `<script>` element. */
+export function toInlineJson(value: unknown): string {
+  return JSON.stringify(value).replaceAll('<', '\\u003c')
+}
+
 interface ShellMeta {
   title: string
   description: string
@@ -94,7 +100,7 @@ async function renderShell(request: Request, env: Env, options: ShellOptions): P
 
   const { title, description, image, url, site, manifest, status } = options
 
-  const configScript = `window.__CONFIG__ = ${JSON.stringify(RUNTIME_CONFIG)}; window.__SITE_CONFIG__ = ${JSON.stringify(site.siteConfig)};`
+  const configScript = `window.__CONFIG__ = ${toInlineJson(RUNTIME_CONFIG)}; window.__SITE_CONFIG__ = ${toInlineJson(site.siteConfig)};`
   const head = [
     `<meta property="og:type" content="website">`,
     `<meta property="og:title" content="${escapeHtml(title)}">`,
@@ -216,7 +222,7 @@ function escapeHtml(value: string): string {
 export async function servePhotoShell(request: Request, env: Env, photoId: string): Promise<Response> {
   const [manifest, site] = await Promise.all([loadManifest(env), loadOgSiteConfig(env)])
   const photos = (manifest.data ?? []) as ManifestPhoto[]
-  const photo = photos.find(item => item.id === photoId)
+  const photo = photos.find((item) => item.id === photoId)
   const origin = new URL(request.url).origin
 
   if (!photo) {

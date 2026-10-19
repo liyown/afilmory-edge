@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: A single-tenant photo gallery running on Cloudflare Workers, D1, R2, and KV.
+description: A single-tenant photo gallery running on Cloudflare Workers, D1, KV, and Aliyun OSS.
 createdAt: 2025-07-20T22:35:03+08:00
 lastModified: 2026-10-19T15:10:06+08:00
 order: 1
@@ -8,11 +8,11 @@ order: 1
 
 # Overview
 
-Afilmory is a personal, single-tenant photo gallery. One owner account manages one gallery on one domain, deployed as a single Cloudflare Worker with D1, R2, and KV bindings.
+Afilmory is a personal, single-tenant photo gallery. One owner account manages one gallery on one domain, deployed as a single Cloudflare Worker with D1 and KV bindings plus an Aliyun OSS bucket.
 
 ## What is Afilmory?
 
-Afilmory turns a photo collection into a fast, modern gallery. Photos live in R2, metadata lives in D1, and the Worker serves the gallery SPA, the admin dashboard, and the API from the same origin.
+Afilmory turns a photo collection into a fast, modern gallery. Photos live in Aliyun OSS, metadata lives in D1, and the Worker serves the gallery SPA, the admin dashboard, and the API from the same origin.
 
 ## Key Features
 
@@ -20,13 +20,13 @@ Afilmory turns a photo collection into a fast, modern gallery. Photos live in R2
 - **Masonry grid** — Responsive layout with ThumbHash placeholders
 - **Rich metadata** — EXIF, GPS, Live Photos, Motion Photos, and XMP regions
 - **Map view** — Geotagged photos on an interactive map
-- **Live uploads** — Dashboard uploads land in R2 and update the D1-backed manifest immediately
+- **Live uploads** — Dashboard uploads land in OSS and update the D1-backed manifest immediately
 - **SEO and social** — Dynamic OG images and per-photo metadata rendered by the Worker
 - **Single-tenant auth** — Better Auth with registration closed; the owner account is bootstrapped from the CLI
 
 ## Prerequisites
 
-- A Cloudflare account with Workers, D1, R2, and KV enabled
+- A Cloudflare account with Workers, D1, and KV enabled, plus an Aliyun OSS bucket
 - Node.js 20+
 - pnpm
 - The `cf` CLI
@@ -34,7 +34,7 @@ Afilmory turns a photo collection into a fast, modern gallery. Photos live in R2
 ## Quick Start
 
 1. **Configure** — copy `config.example.json` and `apps/edge/.dev.vars.example`, then fill in your values
-2. **Provision** — create D1, R2, and KV resources and apply the D1 migration
+2. **Provision** — create the D1 database, KV namespace, and OSS bucket, then apply the D1 migration
 3. **Deploy** — run `pnpm build` and `pnpm deploy:edge`
 4. **Bootstrap** — create the owner account with `pnpm bootstrap:admin`
 5. **Upload** — sign in at `/platform/` and upload photos from the dashboard

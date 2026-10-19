@@ -5,21 +5,22 @@ import { customType, foreignKey, index, integer, sqliteTable, text, uniqueIndex 
 // `nodejs-snowflake` ships a WASM binary loaded through `__dirname`, which does
 // not exist in workerd. Keep the same 64-bit, time-sortable shape with Web APIs.
 const SNOWFLAKE_EPOCH_MS = 1_759_572_127_000
-const WORKER_ID = crypto.getRandomValues(new Uint16Array(1))[0] % 1024
+// Initialized on first use: workerd forbids random-value generation in global scope.
+let workerId: number | undefined
 let lastTimestamp = 0
 let sequence = 0
 
 export function generateId(): string {
+  workerId ??= crypto.getRandomValues(new Uint16Array(1))[0] % 1024
   const now = Date.now()
   if (now === lastTimestamp) {
     sequence = (sequence + 1) % 4096
-  }
-  else {
+  } else {
     lastTimestamp = now
     sequence = 0
   }
 
-  return ((BigInt(now - SNOWFLAKE_EPOCH_MS) << 22n) | (BigInt(WORKER_ID) << 12n) | BigInt(sequence)).toString()
+  return ((BigInt(now - SNOWFLAKE_EPOCH_MS) << 22n) | (BigInt(workerId) << 12n) | BigInt(sequence)).toString()
 }
 
 const snowflakeId = text('id')
@@ -33,7 +34,7 @@ const nowIso = sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
 // Better Auth passes `Date` objects to the adapter regardless of provider. The
 // PG schema stringifies them through `timestamp({ mode: 'string' })`; SQLite's
 // plain `text()` would hand the Date to D1, which only binds primitives.
-const isoDateText = customType<{ data: string, driverData: string }>({
+const isoDateText = customType<{ data: string; driverData: string }>({
   dataType() {
     return 'text'
   },
@@ -106,7 +107,7 @@ export const authUsers = sqliteTable(
     lastSignedInAt: isoDateText('last_signed_in_at'),
     lastActiveAt: isoDateText('last_active_at'),
   },
-  t => [uniqueIndex('uq_auth_user_email_normalized').on(sql`lower(trim(${t.email}))`)],
+  (t) => [uniqueIndex('uq_auth_user_email_normalized').on(sql`lower(trim(${t.email}))`)],
 )
 
 export const authSessions = sqliteTable('auth_session', {
@@ -142,7 +143,7 @@ export const authAccounts = sqliteTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  t => [
+  (t) => [
     uniqueIndex('uq_auth_account_provider').on(t.providerId, t.accountId),
     index('idx_auth_account_user').on(t.userId),
   ],
@@ -167,7 +168,7 @@ export const settings = sqliteTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  t => [uniqueIndex('uq_settings_key').on(t.key)],
+  (t) => [uniqueIndex('uq_settings_key').on(t.key)],
 )
 
 export const systemSettings = sqliteTable(
@@ -181,7 +182,7 @@ export const systemSettings = sqliteTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  t => [uniqueIndex('uq_system_setting_key').on(t.key)],
+  (t) => [uniqueIndex('uq_system_setting_key').on(t.key)],
 )
 
 export const reactions = sqliteTable(
@@ -192,7 +193,7 @@ export const reactions = sqliteTable(
     refKey: text('ref_key').notNull(),
     reaction: text('reaction').notNull(),
   },
-  t => [index('idx_reactions_ref_key').on(t.refKey)],
+  (t) => [index('idx_reactions_ref_key').on(t.refKey)],
 )
 
 export const comments = sqliteTable(
@@ -212,7 +213,7 @@ export const comments = sqliteTable(
     updatedAt: updatedAt(),
     deletedAt: text('deleted_at'),
   },
-  t => [
+  (t) => [
     foreignKey({
       name: 'fk_comment_parent',
       columns: [t.parentId],
@@ -237,7 +238,7 @@ export const commentReactions = sqliteTable(
     reaction: text('reaction').notNull(),
     createdAt: createdAt(),
   },
-  t => [
+  (t) => [
     uniqueIndex('uq_comment_reaction_user').on(t.commentId, t.userId, t.reaction),
     index('idx_comment_reaction_comment').on(t.commentId),
   ],
@@ -263,7 +264,7 @@ export const photoAssets = sqliteTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  t => [
+  (t) => [
     uniqueIndex('uq_photo_asset_storage_key').on(t.storageKey),
     uniqueIndex('uq_photo_asset_photo_id').on(t.photoId),
     index('idx_photo_asset_synced').on(t.syncedAt),
@@ -307,7 +308,7 @@ export const manifestChanges = sqliteTable(
     payload: text('payload', { mode: 'json' }).$type<ManifestChangePayload>().notNull(),
     createdAt: createdAt(),
   },
-  t => [index('idx_manifest_change_photo').on(t.photoId)],
+  (t) => [index('idx_manifest_change_photo').on(t.photoId)],
 )
 
 export const dbSchema = {

@@ -2,7 +2,9 @@
 // Reading the `settings` table directly avoids booting the DI graph for what
 // is a handful of non-sensitive string values.
 
-const CACHE_KEY = 'site-config:v1'
+import { SITE_CONFIG_CACHE_KEY } from '@core/modules/configuration/site-setting/site-setting.type'
+
+const CACHE_KEY = SITE_CONFIG_CACHE_KEY
 const CACHE_TTL_SECONDS = 60
 const DEFAULT_SITE_NAME = 'Afilmory'
 const DEFAULT_ACCENT_COLOR = '#007bff'
@@ -59,7 +61,7 @@ export interface OgSiteConfig {
   siteConfig: SiteConfigPayload
 }
 
-type SettingRow = { key: string, value: string }
+type SettingRow = { key: string; value: string }
 
 type AuthorRow = {
   name: string | null
@@ -91,10 +93,9 @@ function parseStringArray(value: string | null | undefined): string[] | undefine
     if (!Array.isArray(parsed)) {
       return undefined
     }
-    const result = parsed.filter((entry): entry is string => typeof entry === 'string').map(entry => entry.trim())
+    const result = parsed.filter((entry): entry is string => typeof entry === 'string').map((entry) => entry.trim())
     return result.length > 0 ? result : undefined
-  }
-  catch {
+  } catch {
     return undefined
   }
 }
@@ -109,7 +110,7 @@ export async function loadOgSiteConfig(env: Pick<Env, 'CACHE' | 'DB'>): Promise<
     `select "key", "value" from "settings" where "key" like 'site.%'`,
   ).all<SettingRow>()
   const values = new Map(
-    (results ?? []).filter(row => typeof row.value === 'string').map(row => [row.key, row.value]),
+    (results ?? []).filter((row) => typeof row.value === 'string').map((row) => [row.key, row.value]),
   )
 
   const author = await env.DB.prepare(
@@ -120,8 +121,8 @@ export async function loadOgSiteConfig(env: Pick<Env, 'CACHE' | 'DB'>): Promise<
   const title = normalize(values.get('site.title')) ?? name
   const description = normalize(values.get('site.description')) ?? ''
   const accentColor = normalize(values.get('site.accentColor')) ?? DEFAULT_ACCENT_COLOR
-  const authorName
-    = normalize(author?.display_username) ?? normalize(author?.username) ?? normalize(author?.name) ?? name
+  const authorName =
+    normalize(author?.display_username) ?? normalize(author?.username) ?? normalize(author?.name) ?? name
   const authorAvatar = normalize(author?.image)
 
   const siteConfig: SiteConfigPayload = {

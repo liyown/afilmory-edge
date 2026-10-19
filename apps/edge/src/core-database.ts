@@ -8,6 +8,8 @@ import type { HonoHttpApplication } from '@tsuki-hono/core'
 import { createApplication } from '@tsuki-hono/core'
 import { env as workerEnv } from 'cloudflare:workers'
 
+import { storageListPage } from './storage'
+
 interface ServiceProbe {
   status: 'ok' | 'error'
   latencyMs: number
@@ -20,8 +22,7 @@ async function probe(check: () => Promise<Record<string, unknown>>): Promise<Ser
   try {
     const detail = await check()
     return { status: 'ok', latencyMs: elapsed(started), ...detail }
-  }
-  catch (error) {
+  } catch (error) {
     return {
       status: 'error',
       latencyMs: elapsed(started),
@@ -38,7 +39,7 @@ function elapsed(started: number): number {
 export class DatabaseHealthController {
   constructor(private readonly dbAccessor: DbAccessor) {}
 
-  // Liveness probe covering every storage binding the Worker depends on.
+  // Liveness probe covering every backing service the Worker depends on.
   @Get('/')
   async check() {
     const db = this.dbAccessor.get()
@@ -52,8 +53,8 @@ export class DatabaseHealthController {
         return { manifest: state ?? null }
       }),
       probe(async () => {
-        const listed = await workerEnv.PHOTOS.list({ limit: 1 })
-        return { objects: listed.objects.length }
+        const page = await storageListPage('', 1)
+        return { objects: page.objects.length, truncated: Boolean(page.nextToken) }
       }),
       probe(async () => {
         await workerEnv.CACHE.get('health:probe')
@@ -62,7 +63,7 @@ export class DatabaseHealthController {
     ])
 
     const services = { database, storage, cache }
-    const healthy = Object.values(services).every(service => service.status === 'ok')
+    const healthy = Object.values(services).every((service) => service.status === 'ok')
 
     return {
       status: healthy ? 'ok' : 'degraded',

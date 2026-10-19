@@ -18,7 +18,7 @@
 
 **Afilmory** (/əˈfɪlməri/, "uh-FIL-muh-ree") is a personal, single-tenant photo gallery that deploys as one Cloudflare Worker.
 It combines **Auto Focus (AF)**, **Aperture** (light control), **Film** (vintage medium), and **Memory** (captured moments).
-The Worker serves the gallery SPA, the admin dashboard, and the API from the same origin, backed by D1, R2, and KV.
+The Worker serves the gallery SPA, the admin dashboard, and the API from the same origin, backed by D1, KV, and S3-compatible object storage (Aliyun OSS).
 
 ## 🚀 Quick Start
 
@@ -34,10 +34,9 @@ cp apps/edge/.dev.vars.example apps/edge/.dev.vars
 # Edit config.json and apps/edge/.dev.vars.
 
 # 3. Create the Cloudflare resources and apply the baseline migration
-cf d1 create afilmory-db
-cf r2 bucket create afilmory-photos
-cf kv namespace create AFILMORY_CACHE
-cf d1 migrations apply afilmory-db --remote
+cf d1 create --name afilmory-db
+# Create a private OSS bucket in the Aliyun console and note its region
+cf d1 migrations apply <database-id> --dir be/packages/db/migrations
 
 # 4. Build and deploy
 pnpm build
@@ -74,11 +73,11 @@ See Afilmory in action:
 ### Upload and Processing
 
 - 🖼️ **Dashboard Uploads** - Drag and drop batches of photos; HEIC/HEIF files are converted in the browser for previews and thumbnails
-- 🧵 **Generated Thumbnails** - A 600px JPEG is rendered client-side and stored beside the original in R2
+- 🧵 **Generated Thumbnails** - A 600px JPEG is rendered client-side and stored beside the original in object storage
 - 📊 **Complete EXIF Display** - Camera, lens, focal length, aperture, ISO, GPS, timezone, white-balance shifts, and more (via `exifr` range reads)
 - 🌈 **ThumbHash Placeholders** - Compact placeholders for a smooth progressive loading experience
 - 📱 **Live Photos** - Pair an iPhone `.MOV` companion with its image; the dashboard matches them by base name
-- 🎬 **Motion Photos** - Android motion photos are detected from EXIF and extracted with R2 range requests
+- 🎬 **Motion Photos** - Android motion photos are detected from EXIF and extracted with range requests
 - ☀️ **HDR Gain Maps** - Renders JPEG gain-map HDR (including Apple HDR photos) on HDR-capable displays
 - 🗺️ **Interactive Map** - Geographic visualization with GPS coordinates using MapLibre
 - 💬 **Comments & Reactions** - Visitor engagement backed by D1
@@ -139,8 +138,8 @@ afilmory/
 
 ### Edge Host
 
-- **Cloudflare Workers** - Serves the SPA, injects the manifest from R2, renders dynamic OG images/SEO metadata, and runs scheduled backup/cleanup
-- **D1 + R2 + KV** - D1 for relational data, R2 for photos/manifest/OG cache/backups, KV for hot caches
+- **Cloudflare Workers** - Serves the SPA, injects the manifest from object storage, renders dynamic OG images/SEO metadata, and runs scheduled backup/cleanup
+- **D1 + OSS + KV** - D1 for relational data, Aliyun OSS for photos/manifest/OG cache/backups, KV for hot caches
 
 ### Backend Stack
 
@@ -149,7 +148,7 @@ afilmory/
 - **Drizzle ORM** - Type-safe database toolkit over D1
 - **D1** - Relational database (SQLite)
 - **KV** - Cache and manifest revision storage
-- **R2** - Photo objects, manifest and backup storage
+- **Aliyun OSS** - Photo objects, manifest and backup storage over the S3 API
 - **Better Auth** - Authentication with the Drizzle SQLite adapter
 - **In-process events** - SSE progress for sync/upload jobs
 - **workers-og** - Dynamic OG image rendering
@@ -157,8 +156,8 @@ afilmory/
 ### Upload Pipeline
 
 - **Dashboard** - Batches up to 128 files, renders thumbnails and ThumbHash placeholders in the browser
-- **R2** - Presigned uploads when S3 credentials are configured, otherwise a Worker proxy
-- **exifr** - Metadata extraction through bounded R2 range reads
+- **Aliyun OSS** - Direct presigned uploads over the S3 API
+- **exifr** - Metadata extraction through bounded range reads
 - **heic-to** - Browser-side HEIC/HEIF decoding for previews and thumbnails
 
 ## 🛠️ Development
@@ -187,7 +186,7 @@ pnpm --filter @afilmory/dashboard dev  # Admin dashboard
 
 # Data & deployment
 pnpm bootstrap:admin        # Create the owner account in D1
-pnpm restore:d1-backup      # Restore D1 from an R2 backup
+pnpm restore:d1-backup      # Restore D1 from an object-storage backup
 pnpm deploy:edge            # Deploy the Worker
 
 # Build
@@ -232,11 +231,11 @@ pnpm type-check             # Type checking
 Site settings stored in D1 are authoritative at runtime: the Worker injects them into every page shell, and the owner edits them from the dashboard. `config.json` only supplies the defaults used when a setting has not been saved yet.
 
 **`apps/edge/.dev.vars`** - Local Worker secrets (see `.dev.vars.example`).
-Production values are set with `cf secret put`.
+Production values are set with `cf workers secrets update <NAME> --type secret_text --worker afilmory-edge`.
 
 ## 📚 Documentation
 
-- **[Architecture](./docs/architecture.md)** - Worker, D1, R2, and KV design
+- **[Architecture](./docs/architecture.md)** - Worker, D1, OSS, and KV design
 - **[Deployment](./docs/deployment.md)** - Provision Cloudflare resources and deploy
 - **[Configuration](./docs/configuration.md)** - Worker secrets and runtime settings
 - **[Backend](./be/README.md)** - API graph, database access, and testing

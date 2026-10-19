@@ -1,5 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
+import { getAuthUser, setAuthUser } from '~/atoms/auth'
+import { AUTH_SESSION_QUERY_KEY } from '~/modules/auth/api/session'
+
 import { getSiteAuthorProfile, getSiteSettingUiSchema, updateSiteAuthorProfile, updateSiteSettings } from './api'
 import type { SiteSettingEntryInput, UpdateSiteAuthorPayload } from './types'
 
@@ -42,8 +45,14 @@ export function useUpdateSiteAuthorProfileMutation() {
     mutationFn: async (payload: UpdateSiteAuthorPayload) => {
       return await updateSiteAuthorProfile(payload)
     },
-    onSuccess: () => {
+    onSuccess: (profile) => {
       void queryClient.invalidateQueries({ queryKey: SITE_AUTHOR_PROFILE_QUERY_KEY })
+      void queryClient.invalidateQueries({ queryKey: AUTH_SESSION_QUERY_KEY })
+
+      const current = getAuthUser()
+      if (current) {
+        setAuthUser({ ...current, name: profile.name, image: profile.avatar ?? null })
+      }
     },
   })
 }

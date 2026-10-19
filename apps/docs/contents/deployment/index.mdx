@@ -8,37 +8,38 @@ order: 50
 
 # Deployment
 
-Afilmory deploys as one Cloudflare Worker with D1, R2, and KV bindings. The same Worker serves the gallery, the dashboard, and the API.
+Afilmory deploys as one Cloudflare Worker with D1 and KV bindings, plus an Aliyun OSS bucket. The same Worker serves the gallery, the dashboard, and the API.
 
 ## 1. Create resources
 
 ```bash
-cf d1 create afilmory-db
-cf r2 bucket create afilmory-photos
-cf kv namespace create AFILMORY_CACHE
+cf d1 create --name afilmory-db
 ```
 
-Bindings are declared in `apps/edge/cloudflare.config.ts` (`DB`, `PHOTOS`, `CACHE`, `ASSETS`).
+Create a private OSS bucket in the Aliyun console and note its region. Bindings are declared in `apps/edge/cloudflare.config.ts` (`DB`, `CACHE`, `ASSETS`). The KV namespace is provisioned automatically by the `bindings.kv({})` declaration on first deploy.
 
 ## 2. Configure secrets
 
 ```bash
-cf secret put CONFIG_ENCRYPTION_KEY
-cf secret put BETTER_AUTH_SECRET          # optional; falls back to CONFIG_ENCRYPTION_KEY
-cf secret put R2_ACCOUNT_ID
-cf secret put R2_ACCESS_KEY_ID
-cf secret put R2_SECRET_ACCESS_KEY
-cf secret put R2_BUCKET_NAME
-cf secret put R2_PUBLIC_BASE_URL
+cf workers secrets update CONFIG_ENCRYPTION_KEY --type secret_text --worker afilmory-edge
+cf workers secrets update BETTER_AUTH_SECRET --type secret_text --worker afilmory-edge
+cf workers secrets update S3_ENDPOINT --type secret_text --worker afilmory-edge
+cf workers secrets update S3_REGION --type secret_text --worker afilmory-edge
+cf workers secrets update S3_ACCESS_KEY_ID --type secret_text --worker afilmory-edge
+cf workers secrets update S3_SECRET_ACCESS_KEY --type secret_text --worker afilmory-edge
 ```
 
-If the R2 S3 credentials are omitted, uploads are proxied through the Worker instead of using presigned URLs. For local development, copy `apps/edge/.dev.vars.example` to `apps/edge/.dev.vars`.
+The CLI prompts for each value; pass `--text <value>` instead for non-interactive setups. `BETTER_AUTH_SECRET` is optional and falls back to `CONFIG_ENCRYPTION_KEY`.
+
+`S3_ENDPOINT` is the virtual-hosted bucket URL (`https://<bucket>.s3.oss-<region>.aliyuncs.com`). Keep the bucket private: media is served through the Worker's `/media/*` proxy. For local development, copy `apps/edge/.dev.vars.example` to `apps/edge/.dev.vars`.
 
 ## 3. Apply the D1 schema
 
 ```bash
-cf d1 migrations apply afilmory-db --remote
+cf d1 migrations apply <database-id> --dir be/packages/db/migrations
 ```
+
+The command targets the remote database by default and requires the database ID, not its name (find it with `cf d1 list`); pass `--local` to target the local dev database.
 
 Migrations are generated from `be/packages/db/src/schema.ts`:
 
@@ -66,14 +67,14 @@ Use `--local` to target the local D1 database created by `pnpm dev`. The script 
 
 ## Backups
 
-The Worker runs a daily cron that exports D1 into R2 under `backups/d1/`. Restore with:
+The Worker runs a daily cron that exports D1 into OSS under `backups/d1/`. Restore with:
 
 ```bash
-cf r2 object get backups/d1/<file>.json.gz --file ./backup.json.gz
+ossutil cp oss://<bucket>/backups/d1/<file>.json.gz ./backup.json.gz
 pnpm restore:d1-backup --file ./backup.json.gz --local
 ```
 
 ## Next Steps
 
-- [Architecture](/architecture) — how the Worker, D1, R2, and KV interact
+- [Architecture](/architecture) — how the Worker, D1, OSS, and KV interact
 - [Quick Start](/getting-started/quick-start) — provision resources and upload your first photos

@@ -22,7 +22,7 @@ export const routes: RouteConfig[] = [
     title: 'Overview',
     meta: {
       title: 'Overview',
-      description: 'A single-tenant photo gallery running on Cloudflare Workers, D1, R2, and KV.',
+      description: 'A single-tenant photo gallery running on Cloudflare Workers, D1, KV, and Aliyun OSS.',
       createdAt: '2025-07-20T22:35:03+08:00',
       lastModified: '2026-10-19T15:10:06+08:00',
       order: '1',
@@ -46,7 +46,7 @@ export const routes: RouteConfig[] = [
     title: 'Architecture',
     meta: {
       title: 'Architecture',
-      description: 'How the Worker, D1, R2, and KV fit together.',
+      description: 'How the Worker, D1, OSS, and KV fit together.',
       createdAt: '2025-11-14T22:25:00+08:00',
       lastModified: '2026-10-19T15:10:06+08:00',
       order: '3',

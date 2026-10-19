@@ -10,12 +10,10 @@ export interface AppEnv {
   APPLE_TEAM_ID?: string
   APPLE_KEY_ID?: string
   APPLE_PRIVATE_KEY?: string
-  R2_ACCOUNT_ID?: string
-  R2_ACCESS_KEY_ID?: string
-  R2_SECRET_ACCESS_KEY?: string
-  R2_BUCKET_NAME?: string
-  R2_PUBLIC_BASE_URL?: string
-  OG_THUMBNAIL_ORIGIN?: string
+  S3_ENDPOINT?: string
+  S3_REGION?: string
+  S3_ACCESS_KEY_ID?: string
+  S3_SECRET_ACCESS_KEY?: string
 }
 
 const DEFAULTS: Partial<Record<keyof AppEnv, unknown>> = {

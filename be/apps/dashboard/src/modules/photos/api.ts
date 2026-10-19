@@ -33,8 +33,7 @@ function parseRawPayload(raw: string | null | undefined): unknown | null {
   }
   try {
     return JSON.parse(trimmed)
-  }
-  catch {
+  } catch {
     return trimmed
   }
 }
@@ -48,8 +47,8 @@ type ServerErrorInfo = {
 const extractErrorInfoFromPayload = (payload: unknown): ServerErrorInfo => {
   const message = normalizeServerMessage(payload)
   const codeValue = typeof payload === 'object' && payload ? (payload as { code?: unknown }).code : null
-  const code
-    = typeof codeValue === 'number' && Number.isFinite(codeValue)
+  const code =
+    typeof codeValue === 'number' && Number.isFinite(codeValue)
       ? codeValue
       : typeof codeValue === 'string'
         ? Number.parseInt(codeValue, 10)
@@ -79,13 +78,13 @@ const createApiError = (
   statusCode?: number
   code?: number
   data?: unknown
-  response?: { status?: number, _data?: unknown }
+  response?: { status?: number; _data?: unknown }
 } => {
   const error = new Error(info.message ?? fallback) as Error & {
     statusCode?: number
     code?: number
     data?: unknown
-    response?: { status?: number, _data?: unknown }
+    response?: { status?: number; _data?: unknown }
   }
   if (typeof status === 'number' && Number.isFinite(status)) {
     error.statusCode = status
@@ -152,13 +151,13 @@ export async function updatePhotoAssetTags(id: string, tags: string[]): Promise<
 }
 
 type UploadIntent = {
-  mode: 'single' | 'multipart' | 'proxy'
+  mode: 'single' | 'multipart'
   key: string
   photoId: string
   headers: Record<string, string>
   url?: string
   uploadId?: string
-  parts?: Array<{ partNumber: number, url: string }>
+  parts?: Array<{ partNumber: number; url: string }>
 }
 
 type UploadPart = {
@@ -321,14 +320,11 @@ function analyzeTone(data: Uint8ClampedArray): ToneAnalysis | null {
   let toneType: ToneType
   if (brightness < 30 && shadowRatio > 0.6) {
     toneType = 'low-key'
-  }
-  else if (brightness > 70 && highlightRatio > 0.6) {
+  } else if (brightness > 70 && highlightRatio > 0.6) {
     toneType = 'high-key'
-  }
-  else if (contrast > 60 && shadowRatio > 0.3 && highlightRatio > 0.3) {
+  } else if (contrast > 60 && shadowRatio > 0.3 && highlightRatio > 0.3) {
     toneType = 'high-contrast'
-  }
-  else {
+  } else {
     toneType = 'normal'
   }
 
@@ -346,8 +342,7 @@ const HEIC_EXTENSIONS = new Set(['heic', 'heif', 'hif'])
 async function decodeImage(file: File): Promise<ImageBitmap | null> {
   try {
     return await createImageBitmap(file)
-  }
-  catch {
+  } catch {
     if (!HEIC_EXTENSIONS.has(fileExtension(file.name))) {
       return null
     }
@@ -358,8 +353,7 @@ async function decodeImage(file: File): Promise<ImageBitmap | null> {
   try {
     const jpeg = await heicTo({ blob: file, type: 'image/jpeg', quality: 0.9 })
     return await createImageBitmap(jpeg)
-  }
-  catch {
+  } catch {
     return null
   }
 }
@@ -393,11 +387,9 @@ async function inspectImage(file: File): Promise<ImageInspection | null> {
       toneAnalysis: analyzeTone(data),
       thumbnail: await renderThumbnail(bitmap),
     }
-  }
-  catch {
+  } catch {
     return { width: bitmap.width, height: bitmap.height, thumbHash: null, toneAnalysis: null, thumbnail: null }
-  }
-  finally {
+  } finally {
     bitmap.close()
   }
 }
@@ -414,8 +406,7 @@ async function renderThumbnail(bitmap: ImageBitmap): Promise<Blob | null> {
     }
     context.drawImage(bitmap, 0, 0, width, height)
     return await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 })
-  }
-  catch {
+  } catch {
     return null
   }
 }
@@ -470,10 +461,10 @@ async function uploadMultipartFile(params: {
       headers: intent.headers,
       signal,
       timeoutMs,
-      onProgress: loaded => onProgress(completedBytes + loaded),
+      onProgress: (loaded) => onProgress(completedBytes + loaded),
     })
     if (!result.etag) {
-      throw new Error('R2 did not expose the part ETag. Configure CORS ExposeHeaders: ETag on the bucket.')
+      throw new Error('S3 did not expose the part ETag. Configure CORS ExposeHeaders: ETag on the bucket.')
     }
     uploaded.push({ partNumber: part.partNumber, etag: result.etag })
     completedBytes += blob.size
@@ -539,8 +530,7 @@ export async function uploadPhotoAssets(
     const imageIndex = imageIndexByBase.get(fileBaseName(file.name))
     if (imageIndex === undefined) {
       skippedVideoIndices.add(index)
-    }
-    else {
+    } else {
       videoIndexForImage.set(imageIndex, index)
       pairedVideoIndices.add(index)
     }
@@ -568,7 +558,7 @@ export async function uploadPhotoAssets(
     options.onProgress({ totalBytes, uploadedBytes: Math.min(uploadedBytes, totalBytes), files: filesProgress })
   }
 
-  const uploadObject = async (file: File, index: number): Promise<{ intent: UploadIntent, parts: UploadPart[] }> => {
+  const uploadObject = async (file: File, index: number): Promise<{ intent: UploadIntent; parts: UploadPart[] }> => {
     const intent = await coreApi<UploadIntent>('/photos/upload-intent', {
       method: 'POST',
       body: {
@@ -584,8 +574,8 @@ export async function uploadPhotoAssets(
       emitProgress()
     }
 
-    const parts
-      = intent.mode === 'multipart'
+    const parts =
+      intent.mode === 'multipart'
         ? await uploadMultipartFile({
             file,
             intent,
@@ -620,8 +610,7 @@ export async function uploadPhotoAssets(
         timeoutMs: options?.timeoutMs,
         onProgress: () => {},
       })
-    }
-    catch (error) {
+    } catch (error) {
       console.warn('Thumbnail upload failed; falling back to the original image', error)
     }
   }

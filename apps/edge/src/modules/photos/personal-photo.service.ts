@@ -10,10 +10,10 @@ import { injectable } from 'tsyringe'
 
 import { ExifMetadataService } from './exif-metadata.service'
 import { ManifestPublisher } from './manifest-publisher.service'
-import type { MultipartPart, UploadIntentResult } from './r2-upload.service'
-import { R2UploadService } from './r2-upload.service'
+import type { MultipartPart, UploadIntentResult } from './s3-storage.service'
+import { S3StorageService } from './s3-storage.service'
 
-const STORAGE_PROVIDER = 'r2'
+const STORAGE_PROVIDER = 'oss'
 const KEY_PREFIX = 'photos'
 export const MAX_UPLOAD_FILE_BYTES = 1024 * 1024 * 1024
 
@@ -76,12 +76,12 @@ export function sanitizeDirectory(directory?: string | null): string {
   }
   return directory
     .split('/')
-    .map(segment => sanitizeSegment(segment, ''))
+    .map((segment) => sanitizeSegment(segment, ''))
     .filter(Boolean)
     .join('/')
 }
 
-export function splitFilename(filename: string): { base: string, extension: string } {
+export function splitFilename(filename: string): { base: string; extension: string } {
   const normalized = filename.split(/[\\/]/).pop() ?? filename
   const dotIndex = normalized.lastIndexOf('.')
   if (dotIndex <= 0) {
@@ -164,7 +164,7 @@ function normalizeToneAnalysis(value: unknown): ToneAnalysis | null {
 export class PersonalPhotoService {
   constructor(
     private readonly dbAccessor: DbAccessor,
-    private readonly r2: R2UploadService,
+    private readonly storage: S3StorageService,
     private readonly exif: ExifMetadataService,
     private readonly publisher: ManifestPublisher,
     private readonly manifestSync: ManifestSyncService,
@@ -183,18 +183,18 @@ export class PersonalPhotoService {
       })
     }
 
-    const requestedPhotoId
-      = typeof input.photoId === 'string' && /^\d{6,32}$/.test(input.photoId) ? input.photoId : null
+    const requestedPhotoId =
+      typeof input.photoId === 'string' && /^\d{6,32}$/.test(input.photoId) ? input.photoId : null
     if (input.variant === 'thumbnail' && !requestedPhotoId) {
       throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: 'photoId is required for thumbnails' })
     }
     const photoId = requestedPhotoId ?? generateId()
-    const key
-      = input.variant === 'thumbnail'
+    const key =
+      input.variant === 'thumbnail'
         ? this.buildThumbnailKey(input.filename, input.directory, photoId)
         : this.buildStorageKey(input.filename, input.directory, photoId)
 
-    const intent = await this.r2.createUploadIntent({
+    const intent = await this.storage.createUploadIntent({
       key,
       size: input.size,
       contentType: input.contentType ?? contentTypeForFilename(input.filename),
@@ -213,7 +213,7 @@ export class PersonalPhotoService {
       if (!Array.isArray(input.parts) || input.parts.length === 0) {
         throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: 'parts are required for multipart uploads' })
       }
-      await this.r2.completeMultipartUpload(input.key, input.uploadId, input.parts)
+      await this.storage.completeMultipartUpload(input.key, input.uploadId, input.parts)
     }
 
     const db = this.dbAccessor.get()
@@ -222,9 +222,9 @@ export class PersonalPhotoService {
       return await this.finalizeAsset(db, existing[0])
     }
 
-    const object = await this.r2.head(input.key)
+    const object = await this.storage.head(input.key)
     if (!object) {
-      throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: 'Uploaded object was not found in R2' })
+      throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: 'Uploaded object was not found in S3' })
     }
     this.assertUploadSize(object.size)
 
@@ -238,20 +238,19 @@ export class PersonalPhotoService {
     let video: VideoSource | null = null
     if (input.videoKey) {
       this.assertStorageKey(input.videoKey)
-      const videoObject = await this.r2.head(input.videoKey)
+      const videoObject = await this.storage.head(input.videoKey)
       if (!videoObject) {
         throw new BizException(ErrorCode.COMMON_BAD_REQUEST, {
-          message: 'Live Photo video was not found in R2',
+          message: 'Live Photo video was not found in S3',
         })
       }
       this.assertUploadSize(videoObject.size)
       video = {
         type: 'live-photo',
-        videoUrl: this.r2.publicUrl(input.videoKey),
+        videoUrl: this.storage.publicUrl(input.videoKey),
         s3Key: input.videoKey,
       }
-    }
-    else if (metadata.motionPhoto) {
+    } else if (metadata.motionPhoto) {
       // Android Motion Photos embed the MP4 at the end of the original file;
       // the gallery extracts it client-side using this offset and size.
       const candidates = [
@@ -261,7 +260,7 @@ export class PersonalPhotoService {
           : []),
       ]
       for (const candidate of candidates) {
-        const probe = await this.r2.readRange(input.key, candidate.offset, Math.min(32, candidate.size))
+        const probe = await this.storage.readRange(input.key, candidate.offset, Math.min(32, candidate.size))
         if (!probe || !hasMp4Signature(probe)) {
           continue
         }
@@ -277,9 +276,9 @@ export class PersonalPhotoService {
       }
     }
 
-    const originalUrl = this.r2.publicUrl(input.key)
+    const originalUrl = this.storage.publicUrl(input.key)
     const thumbnailKey = this.thumbnailKeyFor(input.key)
-    const thumbnailObject = await this.r2.head(thumbnailKey)
+    const thumbnailObject = await this.storage.head(thumbnailKey)
 
     const manifest = {
       version: CURRENT_PHOTO_MANIFEST_VERSION,
@@ -290,7 +289,7 @@ export class PersonalPhotoService {
         dateTaken: input.takenAt || metadata.dateTaken || lastModified,
         tags: [],
         originalUrl,
-        thumbnailUrl: thumbnailObject ? this.r2.publicUrl(thumbnailKey) : this.r2.thumbnailUrl(input.key),
+        thumbnailUrl: thumbnailObject ? this.storage.publicUrl(thumbnailKey) : this.storage.thumbnailUrl(input.key),
         thumbHash: input.thumbHash ?? null,
         width,
         height,
@@ -352,14 +351,14 @@ export class PersonalPhotoService {
       finalRecord = synced ?? record
     }
 
-    const change = await this.manifestSync.recordUpsert(finalRecord, this.r2.publicUrl(finalRecord.storageKey))
+    const change = await this.manifestSync.recordUpsert(finalRecord, this.storage.publicUrl(finalRecord.storageKey))
     return { ...this.toListItem(finalRecord), change }
   }
 
   async listAssets(): Promise<PhotoAssetListItem[]> {
     const db = this.dbAccessor.get()
     const records = await db.select().from(photoAssets).orderBy(asc(photoAssets.createdAt))
-    return records.map(record => this.toListItem(record))
+    return records.map((record) => this.toListItem(record))
   }
 
   async getSummary(): Promise<PhotoAssetSummary> {
@@ -370,11 +369,9 @@ export class PersonalPhotoService {
     for (const record of records) {
       if (record.status === 'synced') {
         summary.synced += 1
-      }
-      else if (record.status === 'conflict') {
+      } else if (record.status === 'conflict') {
         summary.conflicts += 1
-      }
-      else {
+      } else {
         summary.pending += 1
       }
     }
@@ -383,7 +380,7 @@ export class PersonalPhotoService {
 
   async updateAssetTags(id: string, tags: string[]): Promise<PhotoAssetListItem & { change: PhotoChange | null }> {
     const db = this.dbAccessor.get()
-    const normalized = Array.from(new Set(tags.map(tag => tag.trim()).filter(Boolean)))
+    const normalized = Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean)))
     const [record] = await db.select().from(photoAssets).where(eq(photoAssets.id, id)).limit(1)
     if (!record) {
       throw new BizException(ErrorCode.COMMON_NOT_FOUND, { message: 'Photo asset not found' })
@@ -399,7 +396,7 @@ export class PersonalPhotoService {
       .where(eq(photoAssets.id, id))
       .returning()
     await this.publisher.publish()
-    const change = await this.manifestSync.recordUpsert(updated, this.r2.publicUrl(updated.storageKey))
+    const change = await this.manifestSync.recordUpsert(updated, this.storage.publicUrl(updated.storageKey))
     return { ...this.toListItem(updated), change }
   }
 
@@ -418,13 +415,13 @@ export class PersonalPhotoService {
       })
       .from(photoAssets)
     const targetIds = new Set(ids)
-    const targets = records.filter(record => targetIds.has(record.id))
+    const targets = records.filter((record) => targetIds.has(record.id))
     if (targets.length === 0) {
       return []
     }
 
     if (deleteFromStorage) {
-      const keys = new Set(targets.map(target => target.storageKey))
+      const keys = new Set(targets.map((target) => target.storageKey))
       for (const target of targets) {
         keys.add(this.thumbnailKeyFor(target.storageKey))
         const video = target.manifest?.data?.video
@@ -432,17 +429,17 @@ export class PersonalPhotoService {
           keys.add(video.s3Key)
         }
       }
-      await this.r2.delete([...keys])
+      await this.storage.delete([...keys])
     }
     await db.delete(photoAssets).where(
       inArray(
         photoAssets.id,
-        targets.map(target => target.id),
+        targets.map((target) => target.id),
       ),
     )
     await this.publisher.publish()
 
-    return await this.manifestSync.recordDeletes(targets.map(target => ({ id: target.id, photoId: target.photoId })))
+    return await this.manifestSync.recordDeletes(targets.map((target) => ({ id: target.id, photoId: target.photoId })))
   }
 
   async getStorageUrl(key: string): Promise<string> {
@@ -450,13 +447,7 @@ export class PersonalPhotoService {
       throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: 'key is required' })
     }
     this.assertStorageKey(key)
-    return this.r2.publicUrl(key)
-  }
-
-  async putUploadedObject(key: string, body: ArrayBuffer, contentType?: string | null): Promise<void> {
-    this.assertStorageKey(key)
-    this.assertUploadSize(body.byteLength)
-    await this.r2.put(key, body, contentType)
+    return this.storage.publicUrl(key)
   }
 
   private buildThumbnailKey(filename: string, directory: string | null | undefined, photoId: string): string {
@@ -504,7 +495,7 @@ export class PersonalPhotoService {
       syncedAt: record.syncedAt,
       updatedAt: record.updatedAt,
       createdAt: record.createdAt,
-      publicUrl: record.storageProvider === 'database-only' ? null : this.r2.publicUrl(record.storageKey),
+      publicUrl: record.storageProvider === 'database-only' ? null : this.storage.publicUrl(record.storageKey),
       size: record.size ?? null,
       syncStatus: record.syncStatus,
     }

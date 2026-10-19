@@ -1,7 +1,7 @@
 // Restore the gzipped JSON document produced by the daily cron backup
 // (`apps/edge/src/cron.ts`) into a local D1 SQLite file.
 //
-// Download the object first, e.g. `cf r2 object get backups/d1/<name>.json.gz`
+// Download the object first, e.g. `ossutil cp oss://<bucket>/backups/d1/<name>.json.gz .`
 // (or copy it from `.cloudflare/state` in local dev), then run:
 //
 //   pnpm -C be/apps/core restore:d1-backup --file ./backup.json.gz --local
@@ -94,8 +94,8 @@ function parseCliArgs(argv: readonly string[]): CliOptions {
 function resolveLocalDatabaseFile(): string {
   for (const directory of LOCAL_D1_DIRECTORIES) {
     const candidates = readdirSync(directory)
-      .filter(name => name.endsWith('.sqlite') && !name.includes('metadata'))
-      .map(name => new URL(name, directory).pathname)
+      .filter((name) => name.endsWith('.sqlite') && !name.includes('metadata'))
+      .map((name) => new URL(name, directory).pathname)
     if (candidates.length === 1) {
       return candidates[0]
     }
@@ -124,8 +124,8 @@ export interface RestoreSummary {
 
 export function restoreBackup(sqlite: DatabaseSync, document: BackupDocument): RestoreSummary {
   const existing = new Set(
-    (sqlite.prepare('select name from sqlite_master where type = \'table\'').all() as Array<{ name: string }>).map(
-      row => row.name,
+    (sqlite.prepare("select name from sqlite_master where type = 'table'").all() as Array<{ name: string }>).map(
+      (row) => row.name,
     ),
   )
 
@@ -151,17 +151,15 @@ export function restoreBackup(sqlite: DatabaseSync, document: BackupDocument): R
       )
       sqlite.exec(`delete from ${quoteIdentifier(table)}`)
       for (const row of tableRows) {
-        insert.run(...columns.map(column => (row[column] ?? null) as string | number | null))
+        insert.run(...columns.map((column) => (row[column] ?? null) as string | number | null))
         rows++
       }
     }
     sqlite.exec('commit')
-  }
-  catch (error) {
+  } catch (error) {
     sqlite.exec('rollback')
     throw error
-  }
-  finally {
+  } finally {
     sqlite.exec('pragma foreign_keys = on')
   }
 
@@ -195,7 +193,7 @@ export function runRestoreCli(argv: readonly string[]): void {
 
   const sqlite = new DatabaseSync(path)
   const hasManifestState = sqlite
-    .prepare('select name from sqlite_master where type = \'table\' and name = \'manifest_state\'')
+    .prepare("select name from sqlite_master where type = 'table' and name = 'manifest_state'")
     .get()
   if (!hasManifestState) {
     stdout.write('Target has no schema; applying SQLite migrations first.\n')
@@ -218,8 +216,7 @@ export function runRestoreCli(argv: readonly string[]): void {
 if (!process.env.VITEST) {
   try {
     runRestoreCli(process.argv.slice(2))
-  }
-  catch (error) {
+  } catch (error) {
     stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
     process.exitCode = 1
   }

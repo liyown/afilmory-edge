@@ -22,7 +22,7 @@ be/
 - **API**: `@tsuki-hono` modules/controllers/decorators on Hono, with tsyringe DI.
 - **Database**: Cloudflare D1 through `drizzle-orm/d1`.
 - **Cache**: Cloudflare KV through `CacheService`.
-- **Object storage**: Cloudflare R2.
+- **Object storage**: Aliyun OSS over the S3 API.
 - **Auth**: Better Auth with the Drizzle SQLite adapter; registration is closed.
 - **Events**: in-process event emitter.
   There is no Redis or external queue.

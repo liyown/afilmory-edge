@@ -1,14 +1,15 @@
 // Storage maintenance shared by the scheduled handler. Kept free of OG
 // rendering so it can be exercised outside workerd (no wasm imports).
 
+import type { StorageObjectInfo } from './storage'
+import { storageDelete, storageList, storagePut } from './storage'
+
 const PHOTO_PREFIX = 'photos/'
 const BACKUP_PREFIX = 'backups/d1/'
 const BACKUP_RETENTION = 14
 const ORPHAN_GRACE_MS = 24 * 60 * 60 * 1000
-const LIST_LIMIT = 1000
-const DELETE_BATCH = 500
 
-export type CronEnv = Pick<Env, 'ASSETS' | 'DB' | 'PHOTOS' | 'CACHE'>
+export type CronEnv = Pick<Env, 'ASSETS' | 'DB' | 'CACHE'>
 
 interface PhotoAssetRow {
   storageKey: string
@@ -29,21 +30,12 @@ export interface BackupResult {
   pruned: number
 }
 
-export async function listAll(bucket: R2Bucket, prefix: string): Promise<R2Object[]> {
-  const objects: R2Object[] = []
-  let cursor: string | undefined
-  do {
-    const page = await bucket.list({ prefix, cursor, limit: LIST_LIMIT })
-    objects.push(...page.objects)
-    cursor = page.truncated ? page.cursor : undefined
-  } while (cursor)
-  return objects
+export async function listAll(prefix: string): Promise<StorageObjectInfo[]> {
+  return await storageList(prefix)
 }
 
-export async function deleteKeys(bucket: R2Bucket, keys: string[]): Promise<void> {
-  for (let index = 0; index < keys.length; index += DELETE_BATCH) {
-    await bucket.delete(keys.slice(index, index + DELETE_BATCH))
-  }
+export async function deleteKeys(keys: string[]): Promise<void> {
+  await storageDelete(keys)
 }
 
 async function referencedPhotoKeys(db: D1Database): Promise<Set<string>> {
@@ -60,13 +52,12 @@ async function referencedPhotoKeys(db: D1Database): Promise<Set<string>> {
       continue
     }
     try {
-      const manifest = JSON.parse(row.manifest) as { data?: { video?: { type?: string, s3Key?: string } } }
+      const manifest = JSON.parse(row.manifest) as { data?: { video?: { type?: string; s3Key?: string } } }
       const video = manifest.data?.video
       if (video?.type === 'live-photo' && video.s3Key) {
         keys.add(video.s3Key)
       }
-    }
-    catch {
+    } catch {
       // A malformed manifest should not stop cleanup; the asset row still
       // keeps its primary object referenced.
     }
@@ -82,13 +73,18 @@ async function referencedPhotoKeys(db: D1Database): Promise<Set<string>> {
  */
 export async function cleanupOrphanUploads(env: CronEnv, now = Date.now()): Promise<CleanupResult> {
   const referenced = await referencedPhotoKeys(env.DB)
-  const objects = await listAll(env.PHOTOS, PHOTO_PREFIX)
+  const objects = await listAll(PHOTO_PREFIX)
 
   const orphans = objects
-    .filter(object => !referenced.has(object.key) && now - object.uploaded.getTime() > ORPHAN_GRACE_MS)
-    .map(object => object.key)
+    .filter(
+      (object) =>
+        !referenced.has(object.key) &&
+        object.uploaded !== undefined &&
+        now - object.uploaded.getTime() > ORPHAN_GRACE_MS,
+    )
+    .map((object) => object.key)
 
-  await deleteKeys(env.PHOTOS, orphans)
+  await deleteKeys(orphans)
   return { scanned: objects.length, deleted: orphans.length, keys: orphans }
 }
 
@@ -103,7 +99,7 @@ async function gzip(text: string): Promise<ArrayBuffer> {
 
 export async function backupD1(env: CronEnv, now = new Date()): Promise<BackupResult> {
   const { results } = await env.DB.prepare(
-    'select name from sqlite_master where type = \'table\' and name not like \'sqlite_%\' order by name',
+    "select name from sqlite_master where type = 'table' and name not like 'sqlite_%' order by name",
   ).all<{ name: string }>()
 
   const tables: Record<string, Record<string, unknown>[]> = {}
@@ -126,18 +122,19 @@ export async function backupD1(env: CronEnv, now = new Date()): Promise<BackupRe
   })
   const body = await gzip(document)
   const key = backupKey(now)
-  await env.PHOTOS.put(key, body, {
-    httpMetadata: { contentType: 'application/gzip', cacheControl: 'private, max-age=0' },
-    customMetadata: { rowCount: String(rowCount), tableCount: String(Object.keys(tables).length) },
+  await storagePut(key, body, {
+    contentType: 'application/gzip',
+    cacheControl: 'private, max-age=0',
+    metadata: { rowCount: String(rowCount), tableCount: String(Object.keys(tables).length) },
   })
   await env.CACHE.put('backup:last', key)
 
-  const backups = (await listAll(env.PHOTOS, BACKUP_PREFIX))
-    .map(object => object.key)
+  const backups = (await listAll(BACKUP_PREFIX))
+    .map((object) => object.key)
     .sort()
     .reverse()
   const stale = backups.slice(BACKUP_RETENTION)
-  await deleteKeys(env.PHOTOS, stale)
+  await deleteKeys(stale)
 
   return {
     key,

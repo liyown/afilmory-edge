@@ -3,11 +3,12 @@ import { env } from 'cloudflare:workers'
 import { getCoreApp } from './core-app'
 import { getDatabaseHealthApp } from './core-database'
 import { homepageOgCacheKey, photoOgCacheKey, runScheduled } from './cron'
-import { loadManifest, serveAppShell, servePhotoShell, serveWebManifest } from './html'
+import { loadManifest, serveAppShell, servePhotoShell, serveWebManifest, toInlineJson } from './html'
 import { decodeMediaKey, isPublicMediaKey } from './media-key'
 import { renderHomepageOgImage, renderPhotoOgImage } from './og'
 import { loadOgSiteConfig } from './og-site'
 import type { OgPhoto } from './og-template'
+import { storageGet, storagePut } from './storage'
 
 const DASHBOARD_BASENAME = '/platform'
 const DASHBOARD_ALIAS = '/dashboard'
@@ -56,10 +57,46 @@ function hardenResponse(response: Response, request: Request): Response {
  */
 async function serveDashboardAsset(request: Request): Promise<Response> {
   const url = new URL(request.url)
-  const target = ASSET_EXTENSION_PATTERN.test(url.pathname)
-    ? url
-    : new URL(`${DASHBOARD_BASENAME}/index.html`, request.url)
-  return await env.ASSETS.fetch(target)
+
+  if (ASSET_EXTENSION_PATTERN.test(url.pathname)) {
+    return await env.ASSETS.fetch(request)
+  }
+
+  const assetResponse = await env.ASSETS.fetch(new URL(`${DASHBOARD_BASENAME}/index.html`, request.url))
+  if (!assetResponse.ok) {
+    return assetResponse
+  }
+
+  const site = await loadOgSiteConfig(env)
+  const title = `${site.title || site.name} Dashboard`
+  const configScript = `window.__SITE_CONFIG__ = ${toInlineJson({ name: site.name, title: site.title })};`
+
+  return new HTMLRewriter()
+    .on('head', {
+      element(element) {
+        element.prepend(`<script>${configScript}</script>`, { html: true })
+      },
+    })
+    .on('title', {
+      element(element) {
+        element.setInnerContent(title)
+      },
+    })
+    .on('meta[name="description"]', {
+      element(element) {
+        element.setAttribute('content', `${site.name} Dashboard`)
+      },
+    })
+    .transform(
+      new Response(assetResponse.body, {
+        status: assetResponse.status,
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+          // The injected name/title must not be cached by the CDN.
+          'cache-control': 'no-store',
+        },
+      }),
+    )
 }
 
 function writeLog(payload: Record<string, unknown>): void {
@@ -148,22 +185,28 @@ async function handleRequest(request: Request): Promise<Response> {
     return servePhotoShell(request, env, decodeURIComponent(photoMatch[1]))
   }
 
-  // Serve photo bytes straight from R2 (originals + thumbnails).
+  // Serve photo bytes from OSS through the Worker (originals + thumbnails).
   const mediaMatch = /^\/media\/(.+)$/.exec(url.pathname)
   if (mediaMatch) {
     const key = decodeMediaKey(mediaMatch[1])
     if (!key || !isPublicMediaKey(key)) {
       return new Response('Not Found', { status: 404 })
     }
-    const object = await env.PHOTOS.get(key)
+    const object = await storageGet(key)
     if (!object) {
       return new Response('Not Found', { status: 404 })
     }
     const headers = new Headers()
-    object.writeHttpMetadata(headers)
-    headers.set('etag', object.httpEtag)
+    const contentType = object.response.headers.get('content-type')
+    if (contentType) {
+      headers.set('content-type', contentType)
+    }
+    const etag = object.response.headers.get('etag')
+    if (etag) {
+      headers.set('etag', etag)
+    }
     headers.set('cache-control', 'public, max-age=31536000, immutable')
-    return new Response(object.body, { headers })
+    return new Response(object.response.body, { headers })
   }
 
   // Homepage card. Kept separate from the photo route so `/og/` is a valid
@@ -208,19 +251,23 @@ async function handleRequest(request: Request): Promise<Response> {
  * otherwise render and cache it for the next visitor.
  */
 async function serveOgImage(env: Env, cacheKey: string, render: () => Promise<Uint8Array>): Promise<Response> {
-  const cached = await env.PHOTOS.get(cacheKey)
+  const cached = await storageGet(cacheKey)
   if (cached) {
     const headers = new Headers()
-    cached.writeHttpMetadata(headers)
-    headers.set('etag', cached.httpEtag)
+    const etag = cached.response.headers.get('etag')
+    if (etag) {
+      headers.set('etag', etag)
+    }
+    headers.set('content-type', 'image/png')
     headers.set('cache-control', 'public, max-age=86400')
     headers.set('x-og-cache', 'hit')
-    return new Response(cached.body, { headers })
+    return new Response(cached.response.body, { headers })
   }
 
   const body = await render()
-  await env.PHOTOS.put(cacheKey, body, {
-    httpMetadata: { contentType: 'image/png', cacheControl: 'public, max-age=86400' },
+  await storagePut(cacheKey, body, {
+    contentType: 'image/png',
+    cacheControl: 'public, max-age=86400',
   })
   return new Response(body, {
     headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400', 'x-og-cache': 'miss' },
