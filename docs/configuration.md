@@ -25,6 +25,22 @@ Values saved from the dashboard are stored in D1 under `site.*` and injected int
 
 Bindings (`DB`, `CACHE`, `ASSETS`) are declared in `apps/edge/cloudflare.config.ts`; the S3 values are Worker secrets.
 
+### Object storage example (Aliyun OSS)
+
+```bash
+S3_ENDPOINT=https://<bucket>.s3.oss-<region>.aliyuncs.com
+S3_REGION=cn-shenzhen
+S3_ACCESS_KEY_ID=<access-key-id>
+S3_SECRET_ACCESS_KEY=<access-key-secret>
+```
+
+The endpoint is the virtual-hosted bucket URL, so the bucket name is part of the host. Keep the bucket private: the Worker issues presigned upload URLs, reads originals with range requests, and serves media through `/media/*`. The bucket layout is:
+
+- `photos/` — originals, thumbnails, and Live Photo/Motion Photo videos
+- `manifest.json` — the rendered gallery manifest
+- `og/` — cached OpenGraph images
+- `backups/d1/` — daily D1 exports (not reachable over HTTP)
+
 ## App Commands (common)
 
 ```bash

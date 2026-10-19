@@ -2,13 +2,13 @@
 
 # Pass maps from main process to worker (2025-06-17 14:17:27)
 
-_**User**_
+**_User_**
 
-@runAsWorker.ts  cluster worker 中的 livePhotoMap， existingManifestMap 应该从 主进程传递 @builder.ts 
+@runAsWorker.ts cluster worker 中的 livePhotoMap， existingManifestMap 应该从 主进程传递 @builder.ts
 
 ---
 
-_**Assistant**_
+**_Assistant_**
 
 我来分析一下代码，然后修改 cluster worker 的实现，让它从主进程接收 `livePhotoMap` 和 `existingManifestMap`，而不是在每个 worker 中重复加载这些数据。
 
@@ -26,7 +26,9 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 
 ---
 
-现在我了解了代码结构。我需要修改 ClusterPool 来传递 `livePhotoMap` 和 `existingManifestMap` 给 worker，以及修改 `runAsWorker.ts` 来接收这些数据。让我开始修改：
+现在我了解了代码结构。
+我需要修改 ClusterPool 来传递 `livePhotoMap` 和 `existingManifestMap` 给 worker，以及修改 `runAsWorker.ts` 来接收这些数据。
+让我开始修改：
 
 ---
 
@@ -40,13 +42,13 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 +     imageObjects: any[]
 +   }
   }
-  
+
 ```
 
 ```diff
     isReady: boolean
   }
-+ 
++
 + export interface WorkerInitMessage {
 +   type: 'init'
 +   sharedData: {
@@ -55,7 +57,7 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 +     imageObjects: any[]
 +   }
 + }
-  
+
   // 基于 Node.js cluster 的 Worker 池管理器
 ```
 
@@ -65,15 +67,11 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 
 ---
 
-
-
 ---
 
 现在我需要修改 handleWorkerReady 方法来发送初始化数据：
 
 ---
-
-
 
 ---
 
@@ -81,15 +79,11 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 
 ---
 
-
-
 ---
 
 现在我需要修改 builder.ts 来传递共享数据给 ClusterPool：
 
 ---
-
-
 
 ---
 
@@ -100,7 +94,7 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 ```diff
     TaskResult,
   } from './worker/cluster-pool'
-+ 
++
 + // 新增接口定义
 + interface WorkerInitMessage {
 +   type: 'init'
@@ -110,19 +104,19 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 +     imageObjects: any[]
 +   }
 + }
-  
+
   // Worker 进程处理逻辑
 ```
 
 ```diff
     let livePhotoMap: Map<string, StorageObject>
-  
+
 -   // 初始化函数，只在第一次收到任务时执行
 -   const initializeWorker = async () => {
 +   // 初始化函数，从主进程接收共享数据
 +   const initializeWorker = async (sharedData: WorkerInitMessage['sharedData']) => {
       if (isInitialized) return
-  
+
       // 动态导入所需模块
 -     const [{ StorageManager }, { builderConfig }, { loadExistingManifest }] =
 -       await Promise.all([
@@ -134,14 +128,14 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 +       import('./storage/index.js'),
 +       import('@builder'),
 +     ])
-  
+
 -     // 在 worker 中初始化存储管理器和数据
 +     // 在 worker 中初始化存储管理器
       storageManager = new StorageManager(builderConfig.storage)
-  
+
 -     // 获取图片列表（worker 需要知道要处理什么）
 -     imageObjects = await storageManager.listImages()
-- 
+-
 -     // 获取现有 manifest 和 live photo 信息
 -     const existingManifestItems = await loadExistingManifest().then(
 -       (manifest) => manifest.data,
@@ -152,7 +146,7 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 -         item,
 -       ]),
 -     )
-- 
+-
 -     // 检测 Live Photos
 -     const allObjects = await storageManager.listAllFiles()
 -     livePhotoMap = builderConfig.options.enableLivePhotoDetection
@@ -162,7 +156,7 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 +     imageObjects = sharedData.imageObjects
 +     existingManifestMap = new Map(sharedData.existingManifestMap)
 +     livePhotoMap = new Map(sharedData.livePhotoMap)
-  
+
       isInitialized = true
 ```
 
@@ -175,7 +169,7 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 +         livePhotoMap: Array.from(livePhotoMap.entries()),
 +         imageObjects: imageObjects,
 +       })
-  
+
         // 动态导入 processPhoto（放在这里以避免阻塞消息监听）
 ```
 
@@ -188,21 +182,18 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 +         livePhotoMap: Array.from(livePhotoMap.entries()),
 +         imageObjects: imageObjects,
 +       })
-  
+
         const results: TaskResult[] = []
 ```
 
 ---
 
-我发现上面的修改有问题，在 handleTask 和 handleBatchTask 中，我们此时还没有收到初始化数据，所以不能这样调用。让我重新修改这部分：
+我发现上面的修改有问题，在 handleTask 和 handleBatchTask 中，我们此时还没有收到初始化数据，所以不能这样调用。
+让我重新修改这部分：
 
 ---
 
-
-
 ---
-
-
 
 ---
 
@@ -210,11 +201,10 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 
 ---
 
-
-
 ---
 
-现在我需要检查一下是否还有其他地方需要修改。让我查看一下 ClusterPool 中等待 worker 准备就绪的逻辑：
+现在我需要检查一下是否还有其他地方需要修改。
+让我查看一下 ClusterPool 中等待 worker 准备就绪的逻辑：
 
 ---
 
@@ -222,7 +212,8 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 
 ---
 
-现在让我测试一下修改是否正确。我需要运行构建命令来验证：
+现在让我测试一下修改是否正确。
+我需要运行构建命令来验证：
 
 ---
 
@@ -232,9 +223,9 @@ cd packages/builder && npm run build
 
 ```
 
-innei in photo-gallery-site on  main [$!+] via 🐳 orbstack via  v22.15.0 on ☁️ 
+innei in photo-gallery-site on  main [$!+] via 🐳 orbstack via  v22.15.0 on ☁️
  innei@rss3.io at     54312be "refactor: remove image preloading logic from P
-hotoViewer component"  by tukon479@gmail.com 
+hotoViewer component"  by tukon479@gmail.com
 at 16:13:31 ❯ cd packages/builder && npm run build
  ERR_PNPM_NO_SCRIPT  Missing script: build
 
@@ -242,8 +233,8 @@ But script matched with build is present in the root of the workspace,
 so you may run "pnpm -w run build"
 
 innei in photo-gallery-site/packages/builder on  main [$!+] via  v22.15.0 on ☁️
-  innei@rss3.io at     54312be "refactor: remove image preloading logic from 
-PhotoViewer component"  by tukon479@gmail.com 
+  innei@rss3.io at     54312be "refactor: remove image preloading logic from
+PhotoViewer component"  by tukon479@gmail.com
 at 16:13:31 ❯
 ```
 
@@ -264,7 +255,7 @@ at 16:13:32 ❯ cd ../.. && pnpm run build:builder
 Command "build:builder" not found. Did you mean "pnpm run build:manifest"?
 
 innei in photo-gallery-site on  main [$!+] via 🐳 orbstack via  v22.15.0 on ☁️  innei@rss3.io at     54312be "re
-factor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com 
+factor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com
 at 16:13:37 ❯
 ```
 
@@ -289,9 +280,9 @@ cd packages/builder && npx tsc --noEmit
 ```
 at 16:13:37 ❯ cd packages/builder && npx tsc --noEmit
 
-                                                                               
-                This is not the tsc command you are looking for                
-                                                                               
+
+                This is not the tsc command you are looking for
+
 
 To get access to the TypeScript compiler, tsc, from the command line either:
 
@@ -299,7 +290,7 @@ To get access to the TypeScript compiler, tsc, from the command line either:
 - Use yarn to avoid accidentally running code from un-installed packages
 
 innei in photo-gallery-site/packages/builder on  main [$!+] via  v22.15.0 on ☁️  innei@rss3.io at     54312be "r
-efactor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com 
+efactor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com
 at 16:13:48 ❯
 ```
 
@@ -312,9 +303,9 @@ cd ../.. && npx tsc --noEmit -p packages/builder
 ```
 at 16:13:48 ❯ cd ../.. && npx tsc --noEmit -p packages/builder
 
-                                                                               
-                This is not the tsc command you are looking for                
-                                                                               
+
+                This is not the tsc command you are looking for
+
 
 To get access to the TypeScript compiler, tsc, from the command line either:
 
@@ -322,7 +313,7 @@ To get access to the TypeScript compiler, tsc, from the command line either:
 - Use yarn to avoid accidentally running code from un-installed packages
 
 innei in photo-gallery-site on  main [$!+] via 🐳 orbstack via  v22.15.0 on ☁️  innei@rss3.io at     54312be "re
-factor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com 
+factor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com
 at 16:13:54 ❯
 ```
 
@@ -338,7 +329,9 @@ at 16:13:54 ❯ pnpm exec tsc --noEmit -p packages/builder
 
 ---
 
-很好！没有类型错误。现在让我测试一下构建是否正常工作：
+很好！
+没有类型错误。
+现在让我测试一下构建是否正常工作：
 
 ---
 
@@ -376,26 +369,27 @@ Already up to date.
   tsx src/core/cli.ts --config                  # 显示配置信息
 
 配置：
-  在 builder.config.ts 中设置 performance.worker.useClusterMode = true 
+  在 builder.config.ts 中设置 performance.worker.useClusterMode = true
   可启用多进程集群模式，发挥多核心优势。
 
 
 innei in photo-gallery-site on  main [$!+] via 🐳 orbstack via  v22.15.0 on ☁️  innei@rss3.io at     54312be "re
-factor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com took 2s 
+factor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com took 2s
 at 16:14:07 ❯
 ```
 
 ---
 
-现在让我创建一个测试来验证修改是否正确。首先让我查看一下是否有配置文件：
+现在让我创建一个测试来验证修改是否正确。
+首先让我查看一下是否有配置文件：
 
 ---
 
 <details>
             <summary>Searched codebase "builder.config" • **2** results</summary>
-        
-| File |
-|------|
+
+| File        |
+| ----------- |
 | `undefined` |
 | `undefined` |
 
@@ -407,9 +401,12 @@ Read file: builder.config.ts
 
 ---
 
-很好！配置文件已经启用了集群模式。现在我来创建一个简单的测试来验证我们的修改是否正确工作。
+很好！
+配置文件已经启用了集群模式。
+现在我来创建一个简单的测试来验证我们的修改是否正确工作。
 
-让我查看一下还有什么其他需要注意的地方。让我检查 CLI 文件：
+让我查看一下还有什么其他需要注意的地方。
+让我检查 CLI 文件：
 
 ---
 
@@ -417,11 +414,11 @@ Read file: packages/builder/src/cli.ts
 
 ---
 
-很好！CLI 文件已经正确处理了集群模式。现在让我添加一些日志来验证我们的更改是否正确工作：
+很好！
+CLI 文件已经正确处理了集群模式。
+现在让我添加一些日志来验证我们的更改是否正确工作：
 
 ---
-
-
 
 ---
 
@@ -437,19 +434,18 @@ Read file: packages/builder/src/runAsWorker.ts
 
 ---
 
-
-
 ---
 
-现在让我创建一个简单的测试配置来验证我们的更改。首先检查是否已经有测试配置：
+现在让我创建一个简单的测试配置来验证我们的更改。
+首先检查是否已经有测试配置：
 
 ---
 
 <details>
             <summary>Searched codebase "builder.config.json" • **1** results</summary>
-        
-| File |
-|------|
+
+| File        |
+| ----------- |
 | `undefined` |
 
 </details>
@@ -468,7 +464,8 @@ Read file: builder.config.example.json
 
 ## 修改总结
 
-我已经成功修改了 cluster worker 的实现，让 `livePhotoMap` 和 `existingManifestMap` 从主进程传递而不是在每个 worker 中重复加载。以下是主要修改：
+我已经成功修改了 cluster worker 的实现，让 `livePhotoMap` 和 `existingManifestMap` 从主进程传递而不是在每个 worker 中重复加载。
+以下是主要修改：
 
 ### 1. 修改 `packages/builder/src/worker/cluster-pool.ts`
 
@@ -483,7 +480,7 @@ Read file: builder.config.example.json
 
 - **更新 ClusterPool 创建**：在创建 ClusterPool 时传递 `sharedData`，包含：
   - `existingManifestMap`：现有照片清单映射
-  - `livePhotoMap`：Live Photo 配对映射  
+  - `livePhotoMap`：Live Photo 配对映射
   - `imageObjects`：需要处理的图片对象列表
 
 ### 3. 修改 `packages/builder/src/runAsWorker.ts`
@@ -513,6 +510,7 @@ Read file: builder.config.example.json
 ## 向后兼容性
 
 这些修改保持了向后兼容性：
+
 - 非集群模式（传统并发模式）的行为没有改变
 - CLI 接口和配置保持不变
 - 现有的错误处理和日志记录机制得到了加强
@@ -521,15 +519,18 @@ Read file: builder.config.example.json
 
 ---
 
-_**User**_
+**_User_**
 
-用 json stringfiy 去传递数据会导致类型丢失，比如 date。需要用结构化的 json stringify 的库去做
+用 json stringfiy 去传递数据会导致类型丢失，比如 date。
+需要用结构化的 json stringify 的库去做
 
 ---
 
-_**Assistant**_
+**_Assistant_**
 
-您说得对！使用 `JSON.stringify` 会导致类型丢失，特别是 `Date` 对象会被转换为字符串。我们需要使用支持结构化序列化的库来保持数据类型完整性。
+您说得对！
+使用 `JSON.stringify` 会导致类型丢失，特别是 `Date` 对象会被转换为字符串。
+我们需要使用支持结构化序列化的库来保持数据类型完整性。
 
 让我先检查项目中已有的依赖，然后选择合适的解决方案：
 
@@ -547,7 +548,8 @@ Read file: package.json
 
 ---
 
-我发现项目中没有专门的结构化序列化库。让我考虑几个选择：
+我发现项目中没有专门的结构化序列化库。
+让我考虑几个选择：
 
 1. 使用 Node.js 内置的 `v8.serialize/deserialize`（最高效）
 2. 使用 `superjson` 库（支持 Date、RegExp、Map、Set 等）
@@ -559,15 +561,11 @@ Read file: package.json
 
 ---
 
-
-
 ---
 
 我需要添加 v8 导入并修改序列化逻辑：
 
 ---
-
-
 
 ---
 
@@ -575,23 +573,17 @@ Read file: package.json
 
 ---
 
-
-
 ---
 
 现在修改 runAsWorker.ts 来使用 v8.deserialize：
 
 ---
 
-
-
 ---
 
 现在修改 initializeWorker 函数来反序列化数据：
 
 ---
-
-
 
 ---
 
@@ -609,7 +601,9 @@ at 16:14:07 ❯ pnpm exec tsc --noEmit -p packages/builder
 
 ---
 
-很好！没有类型错误。现在让我测试一下修改是否正常工作：
+很好！
+没有类型错误。
+现在让我测试一下修改是否正常工作：
 
 ---
 
@@ -647,25 +641,27 @@ Already up to date.
   tsx src/core/cli.ts --config                  # 显示配置信息
 
 配置：
-  在 builder.config.ts 中设置 performance.worker.useClusterMode = true 
+  在 builder.config.ts 中设置 performance.worker.useClusterMode = true
   可启用多进程集群模式，发挥多核心优势。
 
 
 innei in photo-gallery-site on  main [$!+] via 🐳 orbstack via  v22.15.0 on ☁️  innei@rss3.io at     54312be "re
-factor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com took 2s 
+factor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com took 2s
 at 16:21:09 ❯
 ```
 
 ---
 
-很好！现在让我创建一个简单的测试来验证序列化是否正确保持了数据类型。让我创建一个小的测试脚本：
+很好！
+现在让我创建一个简单的测试来验证序列化是否正确保持了数据类型。
+让我创建一个小的测试脚本：
 
 ---
 
 ```diff
-- 
+-
 + import { serialize, deserialize } from 'node:v8'
-+ 
++
 + // 创建测试数据，包含各种类型
 + const testData = {
 +   existingManifestMap: new Map([
@@ -717,43 +713,43 @@ at 16:21:09 ❯
 +     }
 +   ]
 + }
-+ 
++
 + console.log('原始数据:')
 + console.log('existingManifestMap.size:', testData.existingManifestMap.size)
 + console.log('livePhotoMap.size:', testData.livePhotoMap.size)
 + console.log('imageObjects.length:', testData.imageObjects.length)
-+ 
++
 + // 检查原始Date对象
 + const originalDate = testData.existingManifestMap.get('key1').createdAt
 + console.log('原始Date对象:', originalDate)
 + console.log('原始Date类型:', originalDate.constructor.name)
 + console.log('原始Date是否为Date实例:', originalDate instanceof Date)
-+ 
++
 + // 序列化
 + console.log('\n序列化数据...')
 + const serialized = serialize(testData)
 + console.log('序列化后的Buffer大小:', serialized.length, 'bytes')
-+ 
++
 + // 反序列化
 + console.log('\n反序列化数据...')
 + const deserialized = deserialize(serialized)
-+ 
++
 + console.log('反序列化后:')
 + console.log('existingManifestMap.size:', deserialized.existingManifestMap.size)
 + console.log('livePhotoMap.size:', deserialized.livePhotoMap.size)
 + console.log('imageObjects.length:', deserialized.imageObjects.length)
-+ 
++
 + // 检查反序列化后的Date对象
 + const deserializedDate = deserialized.existingManifestMap.get('key1').createdAt
 + console.log('反序列化Date对象:', deserializedDate)
 + console.log('反序列化Date类型:', deserializedDate.constructor.name)
 + console.log('反序列化Date是否为Date实例:', deserializedDate instanceof Date)
-+ 
++
 + // 验证Map结构是否保持
 + console.log('\nMap结构验证:')
 + console.log('原始Map是Map实例:', testData.existingManifestMap instanceof Map)
 + console.log('反序列化Map是Map实例:', deserialized.existingManifestMap instanceof Map)
-+ 
++
 + // 验证深度相等性
 + const originalItem = testData.existingManifestMap.get('key1')
 + const deserializedItem = deserialized.existingManifestMap.get('key1')
@@ -761,8 +757,8 @@ at 16:21:09 ❯
 + console.log('ID相等:', originalItem.id === deserializedItem.id)
 + console.log('日期相等:', originalItem.createdAt.getTime() === deserializedItem.createdAt.getTime())
 + console.log('元数据相等:', JSON.stringify(originalItem.metadata) === JSON.stringify(deserializedItem.metadata))
-+ 
-+ console.log('\n✅ v8 序列化成功保持了所有数据类型！') 
++
++ console.log('\n✅ v8 序列化成功保持了所有数据类型！')
 ```
 
 ---
@@ -809,13 +805,15 @@ ID相等: true
 ✅ v8 序列化成功保持了所有数据类型！
 
 innei in photo-gallery-site on  main [$!+?] via 🐳 orbstack via  v22.15.0 on ☁️  innei@rss3.io at     54312be "r
-efactor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com 
+efactor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com
 at 16:21:38 ❯
 ```
 
 ---
 
-完美！测试证明 `v8.serialize` 和 `v8.deserialize` 完全保持了数据类型的完整性。现在让我清理测试文件：
+完美！
+测试证明 `v8.serialize` 和 `v8.deserialize` 完全保持了数据类型的完整性。
+现在让我清理测试文件：
 
 ---
 
@@ -830,6 +828,7 @@ at 16:21:38 ❯
 ### 🎯 问题解决
 
 您提出的问题完全正确：使用 `JSON.stringify` 会导致类型丢失，特别是：
+
 - `Date` 对象被转换为字符串
 - `Map` 和 `Set` 被转换为空对象
 - `undefined` 值丢失
@@ -857,6 +856,7 @@ at 16:21:38 ❯
 ### 🔧 实现细节
 
 #### 1. 修改 cluster-pool.ts
+
 ```typescript
 // 序列化时
 const serializedData = serialize({
@@ -872,17 +872,19 @@ const initMessage: WorkerInitMessage = {
 ```
 
 #### 2. 修改 runAsWorker.ts
+
 ```typescript
 // 反序列化时
 const sharedData = deserialize(serializedData) as SharedData
 
 // 数据已经是正确的类型，无需转换
 imageObjects = sharedData.imageObjects
-existingManifestMap = sharedData.existingManifestMap  // 保持 Map 类型
-livePhotoMap = sharedData.livePhotoMap                // 保持 Map 类型
+existingManifestMap = sharedData.existingManifestMap // 保持 Map 类型
+livePhotoMap = sharedData.livePhotoMap // 保持 Map 类型
 ```
 
 #### 3. 类型安全
+
 ```typescript
 interface SharedData {
   existingManifestMap: Map<string, PhotoManifestItem>
@@ -894,6 +896,7 @@ interface SharedData {
 ### 🧪 验证结果
 
 测试显示：
+
 - `Date` 对象：✅ 保持为 `Date` 实例
 - `Map` 结构：✅ 保持为 `Map` 实例
 - 数据完整性：✅ 所有值完全相等
@@ -912,21 +915,19 @@ interface SharedData {
 
 ---
 
-_**User**_
-
-
+**_User_**
 
 ---
 
-_**Assistant**_
+**_Assistant_**
 
-我看到了错误！问题是通过 IPC (进程间通信) 发送的 Buffer 被自动转换为了普通对象，而不是保持为 Buffer 类型。这是 Node.js cluster 模块的已知行为。
+我看到了错误！
+问题是通过 IPC (进程间通信) 发送的 Buffer 被自动转换为了普通对象，而不是保持为 Buffer 类型。
+这是 Node.js cluster 模块的已知行为。
 
 让我修复这个问题，我们需要手动处理 Buffer 的序列化：
 
 ---
-
-
 
 ---
 
@@ -934,23 +935,17 @@ _**Assistant**_
 
 ---
 
-
-
 ---
 
 现在修改 runAsWorker.ts 中的反序列化逻辑：
 
 ---
 
-
-
 ---
 
 现在修改反序列化逻辑：
 
 ---
-
-
 
 ---
 
@@ -968,13 +963,14 @@ at 16:21:38 ❯ pnpm exec tsc --noEmit -p packages/builder
 
 ---
 
-很好！现在让我创建一个测试脚本来验证通过 IPC 传输的修复方案是否正确工作：
+很好！
+现在让我创建一个测试脚本来验证通过 IPC 传输的修复方案是否正确工作：
 
 ---
 
 ```diff
-- 
-+  
+-
++
 ```
 
 ---
@@ -989,35 +985,36 @@ at 16:23:24 ❯ node test-ipc-serialization.js
 
 ---
 
-看起来文件没有正确创建。让我重新创建：
+看起来文件没有正确创建。
+让我重新创建：
 
 ---
 
 ```diff
--  
+-
 + import { serialize, deserialize } from 'node:v8'
-+ 
++
 + // 模拟 IPC 传输的 Buffer 处理
 + function simulateIPCTransfer(data) {
 +   // 序列化数据
 +   const serializedBuffer = serialize(data)
 +   console.log('序列化后的 Buffer 大小:', serializedBuffer.length, 'bytes')
-+   
++
 +   // 模拟通过 IPC 传输 - 将 Buffer 转换为数组
 +   const transferData = {
 +     data: Array.from(serializedBuffer),
 +     length: serializedBuffer.length
 +   }
-+   
++
 +   console.log('转换为数组后的大小:', transferData.data.length, 'elements')
-+   
++
 +   // 模拟在接收端重建 Buffer 并反序列化
 +   const reconstructedBuffer = Buffer.from(transferData.data)
 +   const deserializedData = deserialize(reconstructedBuffer)
-+   
++
 +   return deserializedData
 + }
-+ 
++
 + // 创建测试数据
 + const testData = {
 +   existingManifestMap: new Map([
@@ -1046,36 +1043,36 @@ at 16:23:24 ❯ node test-ipc-serialization.js
 +     }
 +   ]
 + }
-+ 
++
 + console.log('=== 测试 IPC 传输中的 v8 序列化 ===\n')
-+ 
++
 + console.log('原始数据:')
 + console.log('- existingManifestMap 是 Map:', testData.existingManifestMap instanceof Map)
 + console.log('- livePhotoMap 是 Map:', testData.livePhotoMap instanceof Map)
 + console.log('- 原始 Date:', testData.existingManifestMap.get('key1').createdAt)
 + console.log('- Date 类型:', testData.existingManifestMap.get('key1').createdAt instanceof Date)
-+ 
++
 + console.log('\n模拟 IPC 传输...')
-+ 
++
 + // 执行模拟的 IPC 传输
 + const result = simulateIPCTransfer(testData)
-+ 
++
 + console.log('\n传输后的数据:')
 + console.log('- existingManifestMap 是 Map:', result.existingManifestMap instanceof Map)
 + console.log('- livePhotoMap 是 Map:', result.livePhotoMap instanceof Map)
 + console.log('- 恢复的 Date:', result.existingManifestMap.get('key1').createdAt)
 + console.log('- Date 类型:', result.existingManifestMap.get('key1').createdAt instanceof Date)
-+ 
++
 + // 验证数据完整性
 + const originalItem = testData.existingManifestMap.get('key1')
 + const restoredItem = result.existingManifestMap.get('key1')
-+ 
++
 + console.log('\n数据完整性验证:')
 + console.log('- ID 相等:', originalItem.id === restoredItem.id)
 + console.log('- 日期时间戳相等:', originalItem.createdAt.getTime() === restoredItem.createdAt.getTime())
 + console.log('- 大小相等:', originalItem.size === restoredItem.size)
-+ 
-+ console.log('\n✅ IPC 传输的 v8 序列化修复成功！') 
++
++ console.log('\n✅ IPC 传输的 v8 序列化修复成功！')
 ```
 
 ---
@@ -1112,13 +1109,15 @@ at 16:23:51 ❯ node test-ipc-serialization.js
 ✅ IPC 传输的 v8 序列化修复成功！
 
 innei in photo-gallery-site on  main [$!+?] via 🐳 orbstack via  v22.15.0 on ☁️  innei@rss3.io at     54312be "r
-efactor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com 
+efactor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com
 at 16:24:15 ❯
 ```
 
 ---
 
-完美！测试成功了。现在让我清理测试文件并验证实际的构建器是否能正常工作：
+完美！
+测试成功了。
+现在让我清理测试文件并验证实际的构建器是否能正常工作：
 
 ---
 
@@ -1159,54 +1158,62 @@ Already up to date.
 ℹ    集群模式：启用                                                                               MAIN 4:24:27 PM
 
 innei in photo-gallery-site on  main [$!+] via 🐳 orbstack via  v22.15.0 on ☁️  innei@rss3.io at     54312be "re
-factor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com took 2s 
+factor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com took 2s
 at 16:24:27 ❯
 ```
 
 ---
 
-很好！配置正常，集群模式已启用。现在让我总结一下修复的内容：
+很好！
+配置正常，集群模式已启用。
+现在让我总结一下修复的内容：
 
 ## IPC Buffer 传输问题修复总结
 
 ### 🐛 问题分析
+
 您遇到的错误是：
+
 ```
 TypeError: buffer must be a TypedArray or a DataView
 ```
 
-这是因为 Node.js cluster 模块在通过 IPC 传递消息时，会自动序列化数据。Buffer 对象在 IPC 传输过程中被转换为普通对象 `{type: 'Buffer', data: [...]}`，而不是保持为 Buffer 实例。
+这是因为 Node.js cluster 模块在通过 IPC 传递消息时，会自动序列化数据。
+Buffer 对象在 IPC 传输过程中被转换为普通对象 `{type: 'Buffer', data: [...]}`，而不是保持为 Buffer 实例。
 
 ### ✅ 解决方案
 
 我实现了一个手动的 Buffer 传输机制：
 
 #### 1. 发送端（主进程）
+
 ```typescript
 // 将 Buffer 转换为数组以通过 IPC 传输
 const serializedBuffer = serialize(data)
 const initMessage: WorkerInitMessage = {
   type: 'init',
   sharedData: {
-    data: Array.from(serializedBuffer),  // Buffer → 数组
+    data: Array.from(serializedBuffer), // Buffer → 数组
     length: serializedBuffer.length,
   },
 }
 ```
 
 #### 2. 接收端（worker 进程）
+
 ```typescript
 // 将数组重新转换为 Buffer，然后反序列化
-const buffer = Buffer.from(serializedData.data)  // 数组 → Buffer
+const buffer = Buffer.from(serializedData.data) // 数组 → Buffer
 const sharedData = deserialize(buffer) as SharedData
 ```
 
 #### 3. 类型定义更新
+
 ```typescript
 export interface WorkerInitMessage {
   type: 'init'
   sharedData: {
-    data: number[]     // Buffer 转换为数组传输
+    data: number[] // Buffer 转换为数组传输
     length: number
   }
 }
@@ -1215,8 +1222,9 @@ export interface WorkerInitMessage {
 ### 🧪 测试验证
 
 测试结果显示：
+
 - ✅ Buffer 成功通过 IPC 传输
-- ✅ Date 对象保持为 Date 实例  
+- ✅ Date 对象保持为 Date 实例
 - ✅ Map 结构完全保持
 - ✅ 数据完整性 100% 保持
 - ✅ 序列化大小：326 bytes（高效压缩）
@@ -1233,6 +1241,7 @@ export interface WorkerInitMessage {
 ### 🎯 实际应用
 
 现在当使用集群模式时：
+
 - 主进程会正确地将 `existingManifestMap`、`livePhotoMap` 和 `imageObjects` 传递给 worker
 - 每个 worker 接收的数据保持原始类型，包括 `Date` 对象和 `Map` 结构
 - 避免了在每个 worker 中重复加载这些数据的性能开销
@@ -1241,15 +1250,16 @@ export interface WorkerInitMessage {
 
 ---
 
-_**User**_
+**_User_**
 
 为什么会出现没有 init 的情况
 
 ---
 
-_**Assistant**_
+**_Assistant_**
 
-让我分析一下为什么会出现 Worker 未初始化的情况。这个问题可能是由于 Worker 准备就绪和任务分配的时序问题导致的。
+让我分析一下为什么会出现 Worker 未初始化的情况。
+这个问题可能是由于 Worker 准备就绪和任务分配的时序问题导致的。
 
 ---
 
@@ -1257,7 +1267,9 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 
 ---
 
-我发现了问题！问题在于初始化逻辑和任务分配的时序问题。当前的实现中，`handleWorkerReady` 方法会立即将 worker 标记为已初始化，但实际上 worker 可能还没有完成 `init` 消息的处理。
+我发现了问题！
+问题在于初始化逻辑和任务分配的时序问题。
+当前的实现中，`handleWorkerReady` 方法会立即将 worker 标记为已初始化，但实际上 worker 可能还没有完成 `init` 消息的处理。
 
 让我查看 `assignBatchTasksToWorker` 方法如何检查 worker 是否准备好：
 
@@ -1267,7 +1279,8 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 
 ---
 
-现在我明白问题所在了！问题的根本原因是：
+现在我明白问题所在了！
+问题的根本原因是：
 
 1. **时序问题**：当 worker 发送 `ready` 消息时，主进程立即将其标记为 `isReady = true` 并发送 `init` 消息
 2. **异步初始化**：worker 收到 `init` 消息后需要时间来处理初始化，但主进程已经认为 worker 准备好了
@@ -1279,15 +1292,11 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 
 ---
 
-
-
 ---
 
 现在修改消息处理器来正确处理 `init-complete` 消息：
 
 ---
-
-
 
 ---
 
@@ -1295,15 +1304,11 @@ Read file: packages/builder/src/worker/cluster-pool.ts
 
 ---
 
-
-
 ---
 
 现在还需要修改任务分配的条件，确保只有真正完成初始化的 worker 才能接受任务：
 
 ---
-
-
 
 ---
 
@@ -1321,7 +1326,8 @@ at 16:24:27 ❯ pnpm exec tsc --noEmit -p packages/builder
 
 ---
 
-很好！现在让我们测试修复是否有效：
+很好！
+现在让我们测试修复是否有效：
 
 ---
 
@@ -2000,9 +2006,8 @@ est.json
 ℹ    ⏱️ 总耗时：37秒                                                                              MAIN 4:29:59 PM
 
 innei in photo-gallery-site on  main [$!+] via 🐳 orbstack via  v22.15.0 on ☁️  innei@rss3.io at     54312be "re
-factor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com took 39s 
+factor: remove image preloading logic from PhotoViewer component"  by tukon479@gmail.com took 39s
 at 16:30:00 ❯
 ```
 
 ---
-

@@ -90,10 +90,10 @@ interface ViewerConfig {
 }
 
 const defaultConfig: SiteConfig = {
-  name: 'New Afilmory',
-  title: 'New Afilmory',
-  description: 'A modern photo gallery website.',
-  url: 'https://afilmory.art',
+  name: 'Afilmory Edge',
+  title: 'Afilmory Edge',
+  description: 'A personal photo gallery on Cloudflare.',
+  url: 'https://photos.example.com',
   accentColor: '#007bff',
   viewer: {
     regions: {
@@ -102,9 +102,8 @@ const defaultConfig: SiteConfig = {
     },
   },
   author: {
-    name: 'Afilmory',
-    url: 'https://afilmory.art/',
-    avatar: 'https://cdn.jsdelivr.net/gh/Afilmory/Afilmory@main/logo.jpg',
+    name: 'Afilmory Edge',
+    url: 'https://photos.example.com',
   },
   telemetry: {
     vibeloft: true,

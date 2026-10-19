@@ -7,6 +7,7 @@ import { siteConfig } from '~/config'
 import { usePhotos } from '~/hooks/usePhotoViewer'
 
 import { ActionGroup } from './ActionGroup'
+import { PoweredByNotice } from './PoweredByNotice'
 
 function resolveSocialUrl(
   value: string,
@@ -151,6 +152,7 @@ export const MasonryHeaderMasonryItem = ({ style, className }: { style?: React.C
             )}
           </span>
         </div>
+        <PoweredByNotice className="mt-2 text-[10px] text-gray-400 dark:text-gray-500" />
       </div>
     </div>
   )

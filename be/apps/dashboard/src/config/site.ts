@@ -11,5 +11,5 @@ declare global {
 
 const runtimeSiteConfig = typeof window === 'undefined' ? undefined : window.__SITE_CONFIG__
 
-export const dashboardSiteName = runtimeSiteConfig?.name?.trim() || 'Afilmory'
+export const dashboardSiteName = runtimeSiteConfig?.name?.trim() || 'Afilmory Edge'
 export const dashboardSiteTitle = runtimeSiteConfig?.title?.trim() || dashboardSiteName

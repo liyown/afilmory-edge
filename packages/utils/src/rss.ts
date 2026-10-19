@@ -1,6 +1,6 @@
 import type { PhotoManifestItem } from '@afilmory/typing'
 
-const GENERATOR_NAME = 'Afilmory Feed Generator'
+const GENERATOR_NAME = 'Afilmory Edge Feed Generator'
 const EXIF_NAMESPACE = 'https://afilmory.art/rss/exif'
 const PROTOCOL_VERSION = '1.1'
 const PROTOCOL_ID = 'afilmory-rss-exif'

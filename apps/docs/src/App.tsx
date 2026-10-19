@@ -40,9 +40,9 @@ function App({ url }: { url?: string }) {
 
   useEffect(() => {
     if (matchedRoute) {
-      document.title = `${matchedRoute.title || 'Docs'} | Afilmory Docs`
+      document.title = `${matchedRoute.title || 'Docs'} | Afilmory Edge Docs`
     } else {
-      document.title = '404 Page Not Found | Afilmory Docs'
+      document.title = '404 Page Not Found | Afilmory Edge Docs'
     }
   }, [matchedRoute])
 
@@ -89,7 +89,7 @@ function App({ url }: { url?: string }) {
                   </svg>
                 </button>
                 <div className="flex-1 text-center">
-                  <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Afilmory Docs</h1>
+                  <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Afilmory Edge Docs</h1>
                 </div>
                 <div className="w-10" /> {/* 平衡按钮 */}
               </div>
@@ -162,7 +162,7 @@ function App({ url }: { url?: string }) {
               </button>
               <div className="flex-1 text-center">
                 <a href="/" className="select-none">
-                  <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Afilmory Docs</h1>
+                  <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Afilmory Edge Docs</h1>
                 </a>
               </div>
               <div className="w-10" /> {/* 平衡按钮 */}

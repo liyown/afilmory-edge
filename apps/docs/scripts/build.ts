@@ -28,7 +28,7 @@ async function build() {
       // Replace placeholders in template
       const pageHtml = templateHtml
         .replace('<!--app-html-->', html)
-        .replace('<!--app-title-->', `${(route.meta?.title as string) || route.title || 'Docs'} | Afilmory Docs`)
+        .replace('<!--app-title-->', `${(route.meta?.title as string) || route.title || 'Docs'} | Afilmory Edge Docs`)
         .replace('<!--app-head-->', generateMetaTags(route))
 
       // Determine output path

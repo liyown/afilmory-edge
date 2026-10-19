@@ -1,7 +1,7 @@
 [project]
 name = "clip-embedder"
 version = "0.1.0"
-description = "Stdin-driven CLIP image embedder for Afilmory variant clustering."
+description = "Stdin-driven CLIP image embedder for Afilmory Edge variant clustering."
 requires-python = ">=3.11"
 dependencies = [
     "sentence-transformers>=3.0",

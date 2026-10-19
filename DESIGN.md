@@ -1,4 +1,4 @@
-# DESIGN.md — Afilmory Web Design System
+# DESIGN.md — Afilmory Edge Web Design System
 
 **Scope:** `apps/web` (the gallery SPA) and `packages/ui` (its primitives).
 

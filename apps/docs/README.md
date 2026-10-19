@@ -222,4 +222,4 @@ When contributing to the documentation:
 4. Ensure the build passes with `pnpm build`
 5. Use semantic commit messages
 
-For more information about the Afilmory project architecture, see the main project documentation.
+For more information about the Afilmory Edge project architecture, see the main project documentation.

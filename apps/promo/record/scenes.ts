@@ -2,7 +2,7 @@ import type { Page } from 'playwright'
 
 import { actions } from './capture'
 
-export const SITE = 'https://innei.afilmory.art'
+export const SITE = 'https://photos.liuyaowen.cn'
 
 export interface Scene {
   url: string
@@ -110,7 +110,7 @@ export const scenes: Record<string, Scene> = {
       await a.wait(400)
       const fire = await page
         .locator('[aria-label="React with 🔥"]')
-        .evaluateAll(els => els.map(e => e.getBoundingClientRect()).find(r => r.x > 0 && r.x < innerWidth))
+        .evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).find((r) => r.x > 0 && r.x < innerWidth))
       if (!fire) {
         throw new Error('no reaction button')
       }
@@ -123,12 +123,12 @@ export const scenes: Record<string, Scene> = {
 async function markerCenter(page: Page, kind: 'largest' | 'single') {
   const boxes = await page
     .locator('[aria-label="Map marker"]')
-    .evaluateAll(els => els.map(e => ({ r: e.getBoundingClientRect(), n: Number(e.textContent?.trim() || 0) })))
+    .evaluateAll((els) => els.map((e) => ({ r: e.getBoundingClientRect(), n: Number(e.textContent?.trim() || 0) })))
   const onScreen = boxes.filter(({ r }) => r.width > 0 && r.x > 40 && r.y > 40 && r.x < innerWidthOf(page) - 40)
-  const pick
-    = kind === 'largest'
+  const pick =
+    kind === 'largest'
       ? onScreen.toSorted((a, b) => b.n - a.n)[0]
-      : onScreen.filter(b => b.n === 0).toSorted((a, b) => dist(a.r) - dist(b.r))[0]
+      : onScreen.filter((b) => b.n === 0).toSorted((a, b) => dist(a.r) - dist(b.r))[0]
   if (!pick) {
     throw new Error(`no ${kind} marker`)
   }
@@ -141,8 +141,8 @@ const dist = (r: DOMRect) => Math.hypot(r.x - 800, r.y - 500)
 async function firstPhotoBelow(page: Page, minY: number) {
   const boxes = await page
     .locator('img[src*="thumbnails"]')
-    .evaluateAll(els => els.map(e => e.getBoundingClientRect()))
-  const r = boxes.filter(b => b.y >= minY && b.width > 100).toSorted((a, b) => a.y - b.y || a.x - b.x)[0]
+    .evaluateAll((els) => els.map((e) => e.getBoundingClientRect()))
+  const r = boxes.filter((b) => b.y >= minY && b.width > 100).toSorted((a, b) => a.y - b.y || a.x - b.x)[0]
   if (!r) {
     throw new Error('no photo below')
   }

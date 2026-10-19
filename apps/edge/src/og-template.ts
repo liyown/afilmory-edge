@@ -42,7 +42,7 @@ export interface PhotoOgInput {
   formattedDate?: string
   exifInfo: OgExifInfo | null
   thumbnailSrc: string | null
-  photoDimensions: { width: number, height: number }
+  photoDimensions: { width: number; height: number }
   accentColor: string
 }
 
@@ -87,7 +87,7 @@ function css(styles: Record<string, StyleValue>): string {
     if (value === undefined) {
       continue
     }
-    const name = property.replaceAll(/[A-Z]/g, match => `-${match.toLowerCase()}`)
+    const name = property.replaceAll(/[A-Z]/g, (match) => `-${match.toLowerCase()}`)
     const serialized = typeof value === 'number' && !UNITLESS_PROPERTIES.has(property) ? `${value}px` : String(value)
     declarations.push(`${name}:${serialized}`)
   }
@@ -107,7 +107,7 @@ interface LayoutConfig {
   arrangement: 'split' | 'stack' | 'wide'
   padding: number
   gap: number
-  photoBox: { maxWidth: number, maxHeight: number }
+  photoBox: { maxWidth: number; maxHeight: number }
   infoCompact: boolean
   photoFit: 'cover' | 'contain'
 }
@@ -180,8 +180,8 @@ function fitWithinBox(aspect: number, { maxWidth, maxHeight }: LayoutConfig['pho
   return { width, height }
 }
 
-function buildExifItems(exifInfo: OgExifInfo | null): Array<{ label: string, text: string }> {
-  const items: Array<{ label: string, text: string }> = []
+function buildExifItems(exifInfo: OgExifInfo | null): Array<{ label: string; text: string }> {
+  const items: Array<{ label: string; text: string }> = []
   if (exifInfo?.aperture) {
     items.push({ label: 'f', text: exifInfo.aperture })
   }
@@ -228,7 +228,7 @@ function baseCanvas(padding: number, siteName: string, content: string): string 
       color: 'rgba(255,255,255,0.68)',
       letterSpacing: '0.5px',
       display: 'flex',
-    })}">${escapeHtml(siteName)} · Afilmory</div>
+    })}">${escapeHtml(siteName)} · Afilmory Edge</div>
     <div style="position:relative;width:100%;height:100%;display:flex">${content}</div>
   </div>`
 }
@@ -311,7 +311,7 @@ function stackLayout(gap: number, photo: string, info: string, photoWidth: numbe
 interface InfoPanelInput {
   title: string
   tags: string[]
-  exifItems: Array<{ label: string, text: string }>
+  exifItems: Array<{ label: string; text: string }>
   camera: string | null
   formattedDate?: string
   accentColor: string
@@ -323,35 +323,35 @@ function infoPanel(input: InfoPanelInput): string {
   const tagLimit = compact ? 2 : 3
   const fontScale = compact ? 0.8 : 1
 
-  const tagHtml
-    = tags.length > 0
+  const tagHtml =
+    tags.length > 0
       ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${tags
-        .slice(0, tagLimit)
-        .map(
-          tag =>
-            `<div style="${css({
-              display: 'flex',
-              alignItems: 'center',
-              fontSize: 13 * fontScale,
-              color: 'rgba(255,255,255,0.9)',
-              backgroundColor: 'rgba(255,255,255,0.12)',
-              padding: `${compact ? 4 : 6}px ${compact ? 12 : 14}px`,
-              borderRadius: 16,
-              border: '1px solid rgba(255,255,255,0.15)',
-              letterSpacing: '0.2px',
-            })}">#${escapeHtml(tag)}</div>`,
-        )
-        .join('')}</div>`
+          .slice(0, tagLimit)
+          .map(
+            (tag) =>
+              `<div style="${css({
+                display: 'flex',
+                alignItems: 'center',
+                fontSize: 13 * fontScale,
+                color: 'rgba(255,255,255,0.9)',
+                backgroundColor: 'rgba(255,255,255,0.12)',
+                padding: `${compact ? 4 : 6}px ${compact ? 12 : 14}px`,
+                borderRadius: 16,
+                border: '1px solid rgba(255,255,255,0.15)',
+                letterSpacing: '0.2px',
+              })}">#${escapeHtml(tag)}</div>`,
+          )
+          .join('')}</div>`
       : ''
 
   const cameraHtml = camera
     ? `<div style="${css({
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
-      color: 'rgba(255,255,255,0.7)',
-      fontSize: 15 * fontScale,
-    })}">
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: 15 * fontScale,
+      })}">
       <span style="${css({
         fontSize: 11 * fontScale,
         color: 'rgba(255,255,255,0.45)',
@@ -362,17 +362,17 @@ function infoPanel(input: InfoPanelInput): string {
     </div>`
     : ''
 
-  const exifHtml
-    = exifItems.length > 0
+  const exifHtml =
+    exifItems.length > 0
       ? `<div style="${css({
-        display: 'flex',
-        gap: compact ? 12 : 18,
-        color: 'rgba(255,255,255,0.75)',
-        fontSize: 14 * fontScale,
-        flexWrap: 'wrap',
-      })}">${exifItems
-        .map(
-          item => `<div style="display:flex;gap:4px;align-items:center">
+          display: 'flex',
+          gap: compact ? 12 : 18,
+          color: 'rgba(255,255,255,0.75)',
+          fontSize: 14 * fontScale,
+          flexWrap: 'wrap',
+        })}">${exifItems
+          .map(
+            (item) => `<div style="display:flex;gap:4px;align-items:center">
           <span style="${css({
             fontSize: 10 * fontScale,
             color: 'rgba(255,255,255,0.35)',
@@ -381,17 +381,17 @@ function infoPanel(input: InfoPanelInput): string {
           })}">${escapeHtml(item.label)}</span>
           <span>${escapeHtml(item.text)}</span>
         </div>`,
-        )
-        .join('')}</div>`
+          )
+          .join('')}</div>`
       : ''
 
   const dateHtml = formattedDate
     ? `<div style="${css({
-      color: 'rgba(255,255,255,0.45)',
-      fontSize: 13 * fontScale,
-      marginTop: compact ? 2 : 6,
-      display: 'flex',
-    })}">${escapeHtml(formattedDate)}</div>`
+        color: 'rgba(255,255,255,0.45)',
+        fontSize: 13 * fontScale,
+        marginTop: compact ? 2 : 6,
+        display: 'flex',
+      })}">${escapeHtml(formattedDate)}</div>`
     : ''
 
   return `<div style="${css({
@@ -422,10 +422,10 @@ function infoPanel(input: InfoPanelInput): string {
 }
 
 export function buildPhotoOgHtml(input: PhotoOgInput): string {
-  const width
-    = Number.isFinite(input.photoDimensions.width) && input.photoDimensions.width > 0 ? input.photoDimensions.width : 1
-  const height
-    = Number.isFinite(input.photoDimensions.height) && input.photoDimensions.height > 0 ? input.photoDimensions.height : 1
+  const width =
+    Number.isFinite(input.photoDimensions.width) && input.photoDimensions.width > 0 ? input.photoDimensions.width : 1
+  const height =
+    Number.isFinite(input.photoDimensions.height) && input.photoDimensions.height > 0 ? input.photoDimensions.height : 1
   const aspect = width / height
 
   const layout = determineLayout(aspect)
@@ -441,8 +441,8 @@ export function buildPhotoOgHtml(input: PhotoOgInput): string {
     compact: layout.infoCompact,
   })
 
-  const content
-    = layout.arrangement === 'split'
+  const content =
+    layout.arrangement === 'split'
       ? splitLayout(layout.gap, photo, info)
       : stackLayout(layout.gap, photo, info, photoSize.width, layout.arrangement === 'wide')
 
@@ -507,23 +507,23 @@ export function buildHomepageOgHtml(input: HomepageOgInput): string {
 
   const featuredGrid = hasFeatured
     ? `<div style="${css({
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 0,
-      opacity: '0.2',
-    })}">
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 0,
+        opacity: '0.2',
+      })}">
       <div style="display:flex;flex-direction:row;gap:0;flex:1">${featured
         .slice(0, 3)
-        .map(photo => featuredTile(photo.thumbnailSrc))
+        .map((photo) => featuredTile(photo.thumbnailSrc))
         .join('')}</div>
       <div style="display:flex;flex-direction:row;gap:0;flex:1">${featured
         .slice(3, 6)
-        .map(photo => featuredTile(photo.thumbnailSrc))
+        .map((photo) => featuredTile(photo.thumbnailSrc))
         .join('')}</div>
     </div>
     <div style="${css({
@@ -565,13 +565,13 @@ export function buildHomepageOgHtml(input: HomepageOgInput): string {
 
   const description = input.siteDescription
     ? `<p style="${css({
-      margin: 0,
-      fontSize: 22,
-      fontWeight: 400,
-      lineHeight: 1.4,
-      color: 'rgba(255,255,255,0.75)',
-      maxWidth: 700,
-    })}">${escapeHtml(input.siteDescription)}</p>`
+        margin: 0,
+        fontSize: 22,
+        fontWeight: 400,
+        lineHeight: 1.4,
+        color: 'rgba(255,255,255,0.75)',
+        maxWidth: 700,
+      })}">${escapeHtml(input.siteDescription)}</p>`
     : ''
 
   const stats = `<div style="${css({

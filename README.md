@@ -16,11 +16,13 @@
 
 ---
 
-**Afilmory Edge** is a derived, single-tenant photo gallery that deploys as one Cloudflare Worker.
+**Afilmory Edge** is a personal photo gallery deployment that runs as one Cloudflare Worker.
 It keeps the name **Afilmory** — **Auto Focus (AF)**, **Aperture** (light control), **Film** (vintage medium), and **Memory** (captured moments) — and adds **Edge** for its Cloudflare-native deployment.
 The Worker serves the gallery SPA, the admin dashboard, and the API from the same origin, backed by D1, KV, and S3-compatible object storage (Aliyun OSS).
 
 This project is maintained independently from [Afilmory](https://github.com/Afilmory/Afilmory) and has been stripped down for personal use. See [ORIGIN.md](./ORIGIN.md) for what changed.
+
+> **Unofficial derivative.** Afilmory Edge is not affiliated with, sponsored by, or endorsed by the Afilmory team. "Afilmory" is used only to describe the origin of this code; the name and marks belong to their respective owners.
 
 ## 🚀 Quick Start
 
@@ -58,29 +60,18 @@ See [Deployment](./docs/deployment.md) for binding setup, secrets, and backups.
 
 For galleries running the upstream project, see [Afilmory](https://github.com/Afilmory/Afilmory#-live-galleries).
 
-## ✨ Features
+## ✨ What Afilmory Edge adds
 
-### Core Capabilities
+The gallery UI, WebGPU/WebGL viewer, masonry layout, EXIF display, maps, comments, and i18n come from upstream [Afilmory](https://github.com/Afilmory/Afilmory) and are kept intact. This repository focuses on the deployment layer and adds:
 
-- 🖼️ **WebGPU Image Viewer** - Custom GPU viewer that renders through WebGPU by default and falls back to WebGL when `navigator.gpu` is unavailable; smooth zoom, pan, pinch, and double-tap cycling between fit, fill, and 100%
-- 🧩 **Tiled Rendering** - Large photos are decoded off the main thread in a worker and streamed to the GPU as tiles
-- 📱 **Responsive Masonry Layout** - Powered by Masonic, adapts seamlessly to any screen size
-- 🎨 **Modern UI/UX** - Tailwind CSS 4 with the Apple UIKit color palette, glass materials, and spring motion
-- 🌐 **Internationalization** - English, 简体中文, 繁體中文 (HK/TW), 日本語, and 한국어
-- 🔗 **Social Sharing** - Dynamic OpenGraph images, per-photo metadata, sitemap, RSS feed, and embed script
-
-### Upload and Processing
-
-- 🖼️ **Dashboard Uploads** - Drag and drop batches of photos; HEIC/HEIF files are converted in the browser for previews and thumbnails
-- 🧵 **Generated Thumbnails** - A 600px JPEG is rendered client-side and stored beside the original in object storage
-- 📊 **Complete EXIF Display** - Camera, lens, focal length, aperture, ISO, GPS, timezone, white-balance shifts, and more (via `exifr` range reads)
-- 🌈 **ThumbHash Placeholders** - Compact placeholders for a smooth progressive loading experience
-- 📱 **Live Photos** - Pair an iPhone `.MOV` companion with its image; the dashboard matches them by base name
-- 🎬 **Motion Photos** - Android motion photos are detected from EXIF and extracted with range requests
-- ☀️ **HDR Gain Maps** - Renders JPEG gain-map HDR (including Apple HDR photos) on HDR-capable displays
-- 🗺️ **Interactive Map** - Geographic visualization with GPS coordinates using MapLibre
-- 💬 **Comments & Reactions** - Visitor engagement backed by D1
-- 📷 **Share & Embed** - Share images to social media or embed them via the SDK
+- ☁️ **One Worker, one origin** - The gallery SPA, dashboard, API, OG images, sitemap, RSS feed, and share embeds are all served by the same Worker.
+- 👤 **Personal deployment** - One owner account, registration closed, no platform or multi-user surface to configure.
+- 🪣 **Aliyun OSS over the S3 API** - Direct presigned multipart uploads (no Worker proxying), range reads for EXIF/motion data, and a signed `/media/*` proxy so the bucket stays private.
+- 🗄️ **D1 + KV only** - D1 for relational data and runtime settings, KV for hot caches; no PostgreSQL or Redis.
+- ⚙️ **D1-backed site settings** - Name, title, author, avatar, social links, and map options are edited in the dashboard and injected into every page shell.
+- 🧾 **Built-in backups** - A daily cron exports D1 into the same private bucket (14 rotating copies) with a restore script.
+- 🧱 **Fresh baseline** - A single D1 baseline migration with no legacy history or compatibility shims.
+- 🚀 **Single build and deploy** - `pnpm build` assembles both SPAs and the Worker; `pnpm deploy:edge` ships it.
 
 ## 🏗️ Architecture
 
@@ -201,9 +192,25 @@ pnpm format                 # Format code
 pnpm type-check             # Type checking
 ```
 
-### Configuration Files
+### Configuration
 
-**`config.json`** - Build-time presentation defaults:
+Configuration lives in three layers:
+
+| Layer                 | Location                                                                  | Purpose                                                                 |
+| --------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Presentation defaults | `config.json`                                                             | Fallback site identity used before anything is saved from the dashboard |
+| Runtime site settings | D1 (`site.*`)                                                             | Authoritative site identity, edited at `/platform/settings`             |
+| Worker secrets        | `apps/edge/.dev.vars` (local) or `cf workers secrets update` (production) | Encryption keys and object storage credentials                          |
+
+Bindings are declared in `apps/edge/cloudflare.config.ts`:
+
+| Binding  | Service            | Purpose                                             |
+| -------- | ------------------ | --------------------------------------------------- |
+| `DB`     | D1 (`afilmory-db`) | Users, photo assets, comments, settings, sync state |
+| `CACHE`  | KV                 | Manifest revisions and hot caches                   |
+| `ASSETS` | Workers Assets     | Built gallery and dashboard files                   |
+
+#### Presentation defaults (`config.json`)
 
 ```json
 {
@@ -227,10 +234,44 @@ pnpm type-check             # Type checking
 }
 ```
 
-Site settings stored in D1 are authoritative at runtime: the Worker injects them into every page shell, and the owner edits them from the dashboard. `config.json` only supplies the defaults used when a setting has not been saved yet.
+`config.json` is baked into the build. Once you save site settings from the dashboard they are stored in D1 and injected into every shell response, overriding these defaults.
 
-**`apps/edge/.dev.vars`** - Local Worker secrets (see `.dev.vars.example`).
-Production values are set with `cf workers secrets update <NAME> --type secret_text --worker afilmory-edge`.
+#### Worker secrets
+
+| Secret                  | Required | Purpose                                                     |
+| ----------------------- | -------- | ----------------------------------------------------------- |
+| `CONFIG_ENCRYPTION_KEY` | Yes      | Encrypts sensitive settings stored in D1                    |
+| `BETTER_AUTH_SECRET`    | No       | Signs auth sessions; falls back to `CONFIG_ENCRYPTION_KEY`  |
+| `S3_ENDPOINT`           | Yes      | Virtual-hosted bucket URL (bucket name is part of the host) |
+| `S3_REGION`             | Yes      | OSS region, e.g. `cn-shenzhen`                              |
+| `S3_ACCESS_KEY_ID`      | Yes      | Access key with read/write access to the bucket             |
+| `S3_SECRET_ACCESS_KEY`  | Yes      | Matching secret key                                         |
+
+Object storage uses the S3-compatible API of Aliyun OSS. The endpoint must include the bucket:
+
+```bash
+S3_ENDPOINT=https://my-gallery.s3.oss-cn-shenzhen.aliyuncs.com
+S3_REGION=cn-shenzhen
+S3_ACCESS_KEY_ID=<access-key-id>
+S3_SECRET_ACCESS_KEY=<access-key-secret>
+```
+
+Keep the bucket private. The Worker hands the browser presigned multipart upload URLs, reads originals through range requests, and serves media through the signed `/media/*` proxy. One bucket holds:
+
+- `photos/` - originals, thumbnails, and Live Photo/Motion Photo videos
+- `manifest.json` - the rendered gallery manifest
+- `og/` - cached OpenGraph images
+- `backups/d1/` - daily D1 exports, unreachable over HTTP
+
+Set production secrets interactively (the CLI prompts for the value):
+
+```bash
+cf workers secrets update CONFIG_ENCRYPTION_KEY --type secret_text --worker afilmory-edge
+cf workers secrets update S3_ENDPOINT --type secret_text --worker afilmory-edge
+# ...repeat for S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY
+```
+
+For local development, copy `apps/edge/.dev.vars.example` to `apps/edge/.dev.vars` and fill in the same values.
 
 ## 📚 Documentation
 
@@ -264,12 +305,13 @@ Afilmory Edge is a derivative of Afilmory. See [LICENSE](./LICENSE) and [ORIGIN.
 
 - **[Documentation](./docs/README.md)** - Full documentation
 - **[Origin & Differences](./ORIGIN.md)** - How this project relates to upstream Afilmory
+- **[Credits](./CREDITS.md)** - Upstream authors and attribution
 - **[Afilmory Edge](https://github.com/liyown/afilmory-edge)** - This repository
 - **[Afilmory](https://github.com/Afilmory/Afilmory)** - Upstream project
 
 ## 🙏 Acknowledgments
 
-Afilmory Edge is built on the work of the [Afilmory](https://github.com/Afilmory/Afilmory) team and its contributors.
+Afilmory Edge is built on the work of the [Afilmory](https://github.com/Afilmory/Afilmory) team and its contributors. See [CREDITS.md](./CREDITS.md) for the full list.
 Special thanks to all photographers using Afilmory to share their work with the world.
 
 ---

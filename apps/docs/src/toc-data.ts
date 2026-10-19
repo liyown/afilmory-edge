@@ -27,9 +27,9 @@ export const tocData: FileToc[] = [
         text: 'Overview',
         children: [
           {
-            id: 'heading-what-is-afilmory',
+            id: 'heading-what-is-afilmory-edge',
             level: 2,
-            text: 'What is Afilmory?',
+            text: 'What is Afilmory Edge?',
             children: [],
           },
           {
@@ -191,9 +191,9 @@ export const tocData: FileToc[] = [
     title: 'Docs Site',
     toc: [
       {
-        id: 'heading-afilmory-docs-site',
+        id: 'heading-afilmory-edge-docs-site',
         level: 1,
-        text: 'Afilmory Docs Site',
+        text: 'Afilmory Edge Docs Site',
         children: [
           {
             id: 'heading-features',

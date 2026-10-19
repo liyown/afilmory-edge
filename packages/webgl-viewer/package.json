@@ -3,7 +3,7 @@
   "type": "module",
   "version": "0.2.0",
   "packageManager": "pnpm@11.1.2",
-  "description": "Afilmory GPU Image Viewer",
+  "description": "Afilmory Edge GPU Image Viewer",
   "author": "Innei",
   "license": "MIT",
   "exports": {

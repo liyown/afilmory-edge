@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: A single-tenant photo gallery running on Cloudflare Workers, D1, KV, and Aliyun OSS.
+description: A personal photo gallery running on Cloudflare Workers, D1, KV, and Aliyun OSS.
 createdAt: 2025-07-20T22:35:03+08:00
 lastModified: 2026-10-19T15:10:06+08:00
 order: 1
@@ -8,11 +8,11 @@ order: 1
 
 # Overview
 
-Afilmory is a personal, single-tenant photo gallery. One owner account manages one gallery on one domain, deployed as a single Cloudflare Worker with D1 and KV bindings plus an Aliyun OSS bucket.
+Afilmory Edge is a personal photo gallery. One owner account manages one gallery on one domain, deployed as a single Cloudflare Worker with D1 and KV bindings plus an Aliyun OSS bucket.
 
-## What is Afilmory?
+## What is Afilmory Edge?
 
-Afilmory turns a photo collection into a fast, modern gallery. Photos live in Aliyun OSS, metadata lives in D1, and the Worker serves the gallery SPA, the admin dashboard, and the API from the same origin.
+Afilmory Edge turns a photo collection into a fast, modern gallery. Photos live in Aliyun OSS, metadata lives in D1, and the Worker serves the gallery SPA, the admin dashboard, and the API from the same origin.
 
 ## Key Features
 
@@ -22,7 +22,7 @@ Afilmory turns a photo collection into a fast, modern gallery. Photos live in Al
 - **Map view** — Geotagged photos on an interactive map
 - **Live uploads** — Dashboard uploads land in OSS and update the D1-backed manifest immediately
 - **SEO and social** — Dynamic OG images and per-photo metadata rendered by the Worker
-- **Single-tenant auth** — Better Auth with registration closed; the owner account is bootstrapped from the CLI
+- **Owner-only auth** — Better Auth with registration closed; the owner account is bootstrapped from the CLI
 
 ## Prerequisites
 

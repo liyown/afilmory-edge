@@ -4,7 +4,7 @@ import { color, font } from '../theme'
 
 const BAR = 44
 
-export function BrowserFrame({ width, children }: { width: number, children: ReactNode }) {
+export function BrowserFrame({ width, children }: { width: number; children: ReactNode }) {
   const height = width / 1.6 + BAR
   return (
     <div
@@ -27,7 +27,7 @@ export function BrowserFrame({ width, children }: { width: number, children: Rea
           borderBottom: `1px solid ${color.hairline}`,
         }}
       >
-        {['#ff5f57', '#febc2e', '#28c840'].map(c => (
+        {['#ff5f57', '#febc2e', '#28c840'].map((c) => (
           <span key={c} style={{ width: 12, height: 12, borderRadius: 6, background: c }} />
         ))}
         <div
@@ -44,7 +44,7 @@ export function BrowserFrame({ width, children }: { width: number, children: Rea
             placeItems: 'center',
           }}
         >
-          innei.afilmory.art
+          photos.liuyaowen.cn
         </div>
         <span style={{ width: 52 }} />
       </div>

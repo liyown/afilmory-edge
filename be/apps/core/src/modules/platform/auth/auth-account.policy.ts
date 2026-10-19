@@ -13,7 +13,7 @@ export const AUTH_ACCOUNT_POLICY = {
     // therefore not an ownership boundary, and would reject valid identities
     // such as Sign in with Apple private-relay addresses or alternate Google
     // accounts. Better Auth still rejects provider accounts owned by another
-    // Afilmory user.
+    // Afilmory Edge user.
     allowDifferentEmails: true,
   },
 } as const satisfies NonNullable<BetterAuthOptions['account']>

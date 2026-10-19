@@ -272,7 +272,7 @@
   "site.user.form.display.placeholder": "可选，例如 innei.photo",
   "site.user.form.name.helper": "会公开展示，并写入 RSS 的作者/编辑字段。",
   "site.user.form.name.label": "作者姓名",
-  "site.user.form.name.placeholder": "例如 Innei",
+  "site.user.form.name.placeholder": "例如 Evan",
   "site.user.form.username.helper": "内部用于识别作者，不会公开显示。",
   "site.user.form.username.label": "用户名（可选）",
   "site.user.form.username.placeholder": "例如 innei",

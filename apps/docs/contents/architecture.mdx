@@ -8,7 +8,7 @@ order: 3
 
 # Architecture
 
-Afilmory runs as one Cloudflare Worker. The same deployment serves the gallery SPA at `/`, the admin dashboard at `/platform/`, and the API under `/api`.
+Afilmory Edge runs as one Cloudflare Worker. The same deployment serves the gallery SPA at `/`, the admin dashboard at `/platform/`, and the API under `/api`.
 
 ## Components
 
@@ -70,4 +70,4 @@ Better Auth runs inside the Worker with the Drizzle D1 adapter. Registration is 
 
 ## What Is Not Here
 
-There is no tenant resolution, subdomain routing, billing, per-user storage configuration, Redis, or task queue. There is also no separate build-time photo pipeline: every upload goes through the Worker.
+There is no workspace resolution, subdomain routing, billing, per-user storage configuration, Redis, or task queue. There is also no separate build-time photo pipeline: every upload goes through the Worker.

@@ -1,6 +1,6 @@
 # Backend Guide for AI Agents
 
-The backend is a single-tenant Cloudflare Worker API.
+The backend is a personal Cloudflare Worker API.
 There is no Node server, PostgreSQL, Redis or task queue to start.
 
 ## Packages
@@ -32,7 +32,7 @@ There is no Node server, PostgreSQL, Redis or task queue to start.
 - Keep D1 schema changes in `be/packages/db/src/schema.ts`, then run `pnpm -C be/packages/db db:generate`.
 - Tests run in Node with an in-memory SQLite harness (`src/test-utils/d1-sqlite.ts`). `vitest.config.ts` aliases `cloudflare:workers` and `@afilmory/env` to test stand-ins.
 - The owner account comes from `pnpm -C be/apps/core bootstrap:admin`; registration is disabled.
-- Do not reintroduce tenant ids, tenant resolution, billing, or per-user storage settings.
+- Do not reintroduce workspace ids, workspace resolution, billing, or per-user storage settings.
 
 ## Verification
 

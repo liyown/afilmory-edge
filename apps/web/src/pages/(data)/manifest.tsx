@@ -224,7 +224,7 @@ export const Component = () => {
             <div className="flex h-16 items-center justify-between">
               <div className="flex items-center gap-6">
                 <div className="flex items-center gap-3">
-                  <h1 className="text-xl font-semibold text-zinc-100">Afilmory Manifest</h1>
+                  <h1 className="text-xl font-semibold text-zinc-100">Afilmory Edge Manifest</h1>
                 </div>
 
                 <div className="flex items-center rounded-lg bg-zinc-900/50 p-1">

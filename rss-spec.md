@@ -1,4 +1,4 @@
-# Afilmory RSS EXIF Extension Specification
+# Afilmory Edge RSS EXIF Extension Specification
 
 ## 概述
 

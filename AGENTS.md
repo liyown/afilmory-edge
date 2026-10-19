@@ -66,7 +66,7 @@ Pinned versions live in the pnpm `catalog:` (`tailwindcss`, `typescript`, `zod`,
 
 ## Architecture (Big Picture)
 
-Afilmory is a photo gallery composed of several deployable layers, all served by one Cloudflare Worker.
+Afilmory Edge is a photo gallery composed of several deployable layers, all served by one Cloudflare Worker.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐

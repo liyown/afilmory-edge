@@ -40,7 +40,7 @@ That split is deliberate. The host app owns product decisions. `@afilmory/viewer
 
 ## Getting the Package Into Another App
 
-Inside Afilmory this package is consumed as a workspace package.
+Inside Afilmory Edge this package is consumed as a workspace package.
 
 If you want to use it in another React codebase, the practical options are:
 
@@ -460,6 +460,6 @@ On the server they intentionally do nothing useful, because the package needs re
 
 ## Development Notes
 
-Inside Afilmory this package is consumed directly from source within the monorepo.
+Inside Afilmory Edge this package is consumed directly from source within the monorepo.
 
 The public API is intentionally generic enough to vendor or publish for other React apps, but the package still expects the host app to make the product-level decisions around media loading, routing, and viewer UI composition.

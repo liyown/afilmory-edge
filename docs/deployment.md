@@ -1,6 +1,6 @@
 # Deployment & Hosting
 
-Afilmory deploys as one Cloudflare Worker plus D1 and KV bindings, with photos stored in an Aliyun OSS bucket over the S3 API.
+Afilmory Edge deploys as one Cloudflare Worker plus D1 and KV bindings, with photos stored in an Aliyun OSS bucket over the S3 API.
 
 ## 1. Create resources
 

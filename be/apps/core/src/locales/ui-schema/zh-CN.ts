@@ -123,7 +123,7 @@ const zhCnUiSchema = {
           'site-url': {
             title: '站点 URL',
             description: '站点对外访问的主域名，必须为绝对地址。',
-            placeholder: 'https://afilmory.innei.in',
+            placeholder: 'https://photos.example.com',
           },
           'site-accent-color': {
             title: '品牌主题色',
@@ -308,17 +308,17 @@ const zhCnUiSchema = {
       },
       fields: {
         s3: {
-          'bucket': {
+          bucket: {
             label: 'Bucket 名称',
             description: '存放照片的 S3 Bucket 名称。',
             placeholder: 'afilmory-photos（示例）',
           },
-          'region': {
+          region: {
             label: '区域',
             description: 'S3 区域代码，例如 ap-southeast-1。',
             placeholder: 'ap-southeast-1（示例）',
           },
-          'endpoint': {
+          endpoint: {
             label: '自定义 Endpoint',
             description: 'S3 兼容服务的自定义 Endpoint。',
             placeholder: 'https://s3.example.com（示例）',
@@ -332,7 +332,7 @@ const zhCnUiSchema = {
             label: 'Secret Access Key（私钥）',
             placeholder: '************（示例）',
           },
-          'prefix': {
+          prefix: {
             label: '路径前缀',
             description: '可选，仅扫描该前缀下的对象。',
             placeholder: 'photos/（前缀）',
@@ -355,28 +355,28 @@ const zhCnUiSchema = {
           },
         },
         github: {
-          'owner': {
+          owner: {
             label: '仓库拥有者',
             description: 'GitHub 用户或组织名称。',
             placeholder: 'afilmory（示例）',
           },
-          'repo': {
+          repo: {
             label: '仓库名称',
             description: '存放照片的仓库。',
             placeholder: 'photo-assets（示例）',
           },
-          'branch': {
+          branch: {
             label: '分支',
             description: '可选，要同步的分支。',
             placeholder: 'main（示例）',
             helper: '默认 master/main，如有不同请填写完整分支名。',
           },
-          'token': {
+          token: {
             label: '访问令牌',
             description: '用于私有仓库的 Personal Access Token。',
             placeholder: 'ghp_xxxxxxxxxxxxxxxxxxxx（示例）',
           },
-          'path': {
+          path: {
             label: '仓库路径',
             description: '可选，限制同步的仓库路径。',
             placeholder: 'public/photos（可选）',
@@ -415,7 +415,7 @@ const zhCnUiSchema = {
             description: '用于记录或生成公开链接的友好名称。',
             placeholder: 'afilmory-photos',
           },
-          'prefix': {
+          prefix: {
             label: '路径前缀',
             description: '可选，仅扫描该前缀下的文件。',
             placeholder: 'photos/',

@@ -1,6 +1,6 @@
 # Backend
 
-Backend code for the single-tenant Afilmory gallery.
+Backend code for the Afilmory Edge personal gallery.
 Everything runs inside the Cloudflare Worker in `apps/edge` except the optional OAuth callback broker.
 
 ## Layout

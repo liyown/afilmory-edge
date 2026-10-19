@@ -1,6 +1,6 @@
 # Development Guide
 
-This document is for contributors and self-hosters who want to customize or run Afilmory from source.
+This document is for contributors and self-hosters who want to customize or run Afilmory Edge from source.
 
 ## Workspace Layout
 

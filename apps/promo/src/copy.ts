@@ -9,9 +9,9 @@ export const intro = {
 }
 
 export const outro = {
-  title: 'Afilmory',
-  tagline: '开源 · 可自托管 · afilmory.art',
-  repo: 'github.com/Afilmory/afilmory',
+  title: 'Afilmory Edge',
+  tagline: '个人 · Cloudflare · 自托管',
+  repo: 'github.com/liyown/afilmory-edge',
   seconds: 5,
 }
 

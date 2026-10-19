@@ -6,7 +6,7 @@ import { SITE_CONFIG_CACHE_KEY } from '@core/modules/configuration/site-setting/
 
 const CACHE_KEY = SITE_CONFIG_CACHE_KEY
 const CACHE_TTL_SECONDS = 60
-const DEFAULT_SITE_NAME = 'Afilmory'
+const DEFAULT_SITE_NAME = 'Afilmory Edge'
 const DEFAULT_ACCENT_COLOR = '#007bff'
 
 export interface SiteConfigAuthor {

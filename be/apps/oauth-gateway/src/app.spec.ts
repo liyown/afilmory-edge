@@ -7,7 +7,7 @@ import type { GatewayConfig } from './config'
 const config = {
   host: '0.0.0.0',
   port: 8790,
-  baseDomain: 'afilmory.art',
+  baseDomain: 'example.com',
   forceHttps: true,
   callbackBasePath: '/api/auth/callback',
   stateSecret: 'test-gateway-state-secret',
@@ -25,12 +25,12 @@ describe('oauth gateway callbacks', () => {
     const app = createOAuthGatewayApp(config)
     const state = createState()
     const response = await app.request(
-      `https://auth.afilmory.art/api/auth/callback/github?code=github-code&state=${encodeURIComponent(state)}`,
+      `https://auth.example.com/api/auth/callback/github?code=github-code&state=${encodeURIComponent(state)}`,
     )
 
     expect(response.status).toBe(302)
     const location = new URL(response.headers.get('location')!)
-    expect(location.origin).toBe('https://afilmory.art')
+    expect(location.origin).toBe('https://example.com')
     expect(location.pathname).toBe('/api/auth/callback/github')
     expect(location.searchParams.get('code')).toBe('github-code')
     expect(location.searchParams.get('state')).toBe('better-auth-state')
@@ -43,17 +43,17 @@ describe('oauth gateway callbacks', () => {
       code: 'apple-authorization-code',
       id_token: 'apple-id-token',
       state,
-      user: JSON.stringify({ name: { firstName: 'Afilmory' } }),
+      user: JSON.stringify({ name: { firstName: 'Afilmory Edge' } }),
     })
 
-    const response = await app.request('https://auth.afilmory.art/api/auth/callback/apple', {
+    const response = await app.request('https://auth.example.com/api/auth/callback/apple', {
       body: form,
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       method: 'POST',
     })
 
     expect(response.status).toBe(307)
-    expect(response.headers.get('location')).toBe('https://afilmory.art/api/auth/callback/apple')
+    expect(response.headers.get('location')).toBe('https://example.com/api/auth/callback/apple')
   })
 
   it('rejects a tampered form state instead of forwarding the Apple authorization code', async () => {
@@ -61,7 +61,7 @@ describe('oauth gateway callbacks', () => {
     const state = `${createState()}tampered`
     const form = new URLSearchParams({ code: 'apple-authorization-code', state })
 
-    const response = await app.request('https://auth.afilmory.art/api/auth/callback/apple', {
+    const response = await app.request('https://auth.example.com/api/auth/callback/apple', {
       body: form,
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       method: 'POST',
@@ -73,7 +73,7 @@ describe('oauth gateway callbacks', () => {
 
   it('rejects POST callbacks that are not URL-encoded forms', async () => {
     const app = createOAuthGatewayApp(config)
-    const response = await app.request('https://auth.afilmory.art/api/auth/callback/apple', {
+    const response = await app.request('https://auth.example.com/api/auth/callback/apple', {
       body: JSON.stringify({ state: createState() }),
       headers: { 'content-type': 'application/json' },
       method: 'POST',

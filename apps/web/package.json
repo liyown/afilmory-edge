@@ -7,7 +7,7 @@
   "license": "SEE LICENSE IN LICENSE.md",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Afilmory/Afilmory"
+    "url": "https://github.com/liyown/afilmory-edge"
   },
   "scripts": {
     "analyze": "analyzer=1 vite build",

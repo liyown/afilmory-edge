@@ -2,7 +2,7 @@
 name: afilmory-web-design
 description: >
   Use when writing, reviewing, or restyling any UI in apps/web or packages/ui —
-  the Afilmory gallery SPA. Triggers on creating or editing a React component,
+  the Afilmory Edge gallery SPA. Triggers on creating or editing a React component,
   panel, modal, drawer, button, badge, chip, overlay, tooltip, or viewer chrome;
   on choosing colors, backdrop blur, border radius, shadows, z-index, spacing,
   or transitions; on adding an icon; and on any request to "make it look right",
@@ -10,7 +10,7 @@ description: >
   apply to be/apps/dashboard (separate admin system).
 ---
 
-# Afilmory Web Design System
+# Afilmory Edge Web Design System
 
 **Full normative spec: `/DESIGN.md` at the repo root. Read it before non-trivial UI work.**
 This file is the fast path: the recipe, the lookup tables, and the red lines.

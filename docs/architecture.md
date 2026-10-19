@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Afilmory is a single-tenant gallery deployment.
+Afilmory Edge is a personal gallery deployment.
 One owner account manages one gallery on a single domain.
 
 - **apps/web**: React 19 + Vite SPA.
@@ -30,7 +30,7 @@ One owner account manages one gallery on a single domain.
 
 ## Key Traits
 
-- No tenant resolution, subdomains, billing or per-user storage configuration.
+- No workspace resolution, subdomains, billing or per-user storage configuration.
 - Registration is disabled; the owner account is created with `pnpm bootstrap:admin`.
 - Uploads use presigned OSS URLs; media is served through the Worker's `/media/*` proxy so the bucket stays private.
 - `packages/typing` is the single source of truth for manifest, EXIF, region, and video types shared by the SPA, dashboard, and Worker.

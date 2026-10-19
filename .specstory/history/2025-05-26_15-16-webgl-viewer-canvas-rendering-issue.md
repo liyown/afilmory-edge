@@ -2,54 +2,57 @@
 
 # WebGL Viewer Canvas Rendering Issue (2025-05-26 23:16:24)
 
-_**User**_
+**_User_**
 
 由于 worker 的原因，现在这个 webgl viewer 会渲染到一个错误的 canvas 上
 
 ---
 
-_**Assistant**_
+**_Assistant_**
 
-我来帮你分析和解决这个 WebGL viewer 渲染到错误 canvas 的问题。让我先查看相关的 worker 管理代码来理解问题的根源。
+我来帮你分析和解决这个 WebGL viewer 渲染到错误 canvas 的问题。
+让我先查看相关的 worker 管理代码来理解问题的根源。
 
 ---
 
 <details>
             <summary>Searched codebase "webglWorkerManager getWebGLWorkerManager initCanvas" • **25** results</summary>
-        
-| File | Lines |
-|------|-------|
-| `src/utils/webglWorkerManager.ts` | L85-124 |
-| `src/workers/webglRenderer.worker.ts` | L74-136 |
-| `src/workers/webglRenderer.worker.ts` | L136-148 |
-| `src/utils/webglWorkerManager.ts` | L27-39 |
-| `src/workers/webglRenderer.worker.ts` | L273-339 |
-| `src/utils/webglWorkerManager.ts` | L186-197 |
-| `src/workers/webglRenderer.worker.ts` | L238-249 |
-| `src/workers/webglRenderer.worker.ts` | L205-238 |
-| `src/components/ui/WebGLImageViewer.tsx` | L210-231 |
-| `src/utils/webglWorkerManager.ts` | L1-11 |
-| `src/utils/webglWorkerManager.ts` | L177-186 |
-| `src/utils/webglWorkerManager.ts` | L164-177 |
-| `src/components/ui/WebGLImageViewer.tsx` | L231-252 |
-| `src/workers/webglRenderer.worker.ts` | L21-74 |
-| `src/utils/webglWorkerManager.ts` | L54-85 |
-| `src/utils/webglWorkerManager.ts` | L17-27 |
-| `src/workers/webglRenderer.worker.ts` | L1-10 |
-| `src/workers/webglRenderer.worker.ts` | L185-205 |
-| `src/workers/webglRenderer.worker.ts` | L10-15 |
-| `src/components/ui/WebGLImageViewer.tsx` | L138-205 |
+
+| File                                     | Lines      |
+| ---------------------------------------- | ---------- |
+| `src/utils/webglWorkerManager.ts`        | L85-124    |
+| `src/workers/webglRenderer.worker.ts`    | L74-136    |
+| `src/workers/webglRenderer.worker.ts`    | L136-148   |
+| `src/utils/webglWorkerManager.ts`        | L27-39     |
+| `src/workers/webglRenderer.worker.ts`    | L273-339   |
+| `src/utils/webglWorkerManager.ts`        | L186-197   |
+| `src/workers/webglRenderer.worker.ts`    | L238-249   |
+| `src/workers/webglRenderer.worker.ts`    | L205-238   |
+| `src/components/ui/WebGLImageViewer.tsx` | L210-231   |
+| `src/utils/webglWorkerManager.ts`        | L1-11      |
+| `src/utils/webglWorkerManager.ts`        | L177-186   |
+| `src/utils/webglWorkerManager.ts`        | L164-177   |
+| `src/components/ui/WebGLImageViewer.tsx` | L231-252   |
+| `src/workers/webglRenderer.worker.ts`    | L21-74     |
+| `src/utils/webglWorkerManager.ts`        | L54-85     |
+| `src/utils/webglWorkerManager.ts`        | L17-27     |
+| `src/workers/webglRenderer.worker.ts`    | L1-10      |
+| `src/workers/webglRenderer.worker.ts`    | L185-205   |
+| `src/workers/webglRenderer.worker.ts`    | L10-15     |
+| `src/components/ui/WebGLImageViewer.tsx` | L138-205   |
 | `src/components/ui/WebGLImageViewer.tsx` | L1075-1099 |
-| `src/workers/webglRenderer.worker.ts` | L148-185 |
-| `src/utils/webglWorkerManager.ts` | L197-207 |
-| `src/workers/webglRenderer.worker.ts` | L249-273 |
-| `src/utils/webglWorkerManager.ts` | L152-164 |
+| `src/workers/webglRenderer.worker.ts`    | L148-185   |
+| `src/utils/webglWorkerManager.ts`        | L197-207   |
+| `src/workers/webglRenderer.worker.ts`    | L249-273   |
+| `src/utils/webglWorkerManager.ts`        | L152-164   |
 
 </details>
 
 ---
 
-现在我理解了问题所在。问题是在使用 WebGL worker 时，canvas 的控制权被转移到了 OffscreenCanvas，但是在某些情况下可能会出现渲染到错误 canvas 的问题。让我查看一下 WebGL worker 管理器的完整实现：
+现在我理解了问题所在。
+问题是在使用 WebGL worker 时，canvas 的控制权被转移到了 OffscreenCanvas，但是在某些情况下可能会出现渲染到错误 canvas 的问题。
+让我查看一下 WebGL worker 管理器的完整实现：
 
 ---
 
@@ -61,7 +64,9 @@ Read file: src/utils/webglWorkerManager.ts
 
 ---
 
-现在我明白了问题所在。主要问题是 WebGL worker 管理器使用了单例模式，这意味着多个 WebGLImageViewer 实例会共享同一个 worker 和 OffscreenCanvas。当一个 canvas 的控制权被转移到 OffscreenCanvas 后，其他的 canvas 就无法正常渲染了。
+现在我明白了问题所在。
+主要问题是 WebGL worker 管理器使用了单例模式，这意味着多个 WebGLImageViewer 实例会共享同一个 worker 和 OffscreenCanvas。
+当一个 canvas 的控制权被转移到 OffscreenCanvas 后，其他的 canvas 就无法正常渲染了。
 
 让我修复这个问题：
 
@@ -72,28 +77,28 @@ Read file: src/utils/webglWorkerManager.ts
     private pendingOperations: (() => void)[] = []
 -   private referenceCount = 0
 +   private canvasId: string
-  
+
 -   constructor() {
 +   constructor(canvasId: string) {
 +     this.canvasId = canvasId
       this.initWorker()
     }
-- 
+-
 -   addReference(): void {
 -     this.referenceCount++
 -   }
-- 
+-
 -   removeReference(): void {
 -     this.referenceCount--
 -     if (this.referenceCount <= 0) {
 -       this.destroy()
 -     }
 -   }
-- 
+-
 -   get hasReferences(): boolean {
 -     return this.referenceCount > 0
 -   }
-  
+
     private initWorker() {
 ```
 
@@ -104,7 +109,7 @@ Read file: src/utils/webglWorkerManager.ts
 +           console.error(`[WebGLWorker-${this.canvasId}] Error:`, error)
           }
         }
-  
+
         this.worker.onerror = (error) => {
 -         console.error('[WebGLWorker] Worker error:', error)
 +         console.error(`[WebGLWorker-${this.canvasId}] Worker error:`, error)
@@ -127,28 +132,28 @@ Read file: src/utils/webglWorkerManager.ts
 
 ```diff
   }
-  
+
 - // Singleton instance
 - let webglWorkerManager: WebGLWorkerManager | null = null
 + // Instance management
 + const workerInstances = new Map<string, WebGLWorkerManager>()
-  
+
 - export function getWebGLWorkerManager(): WebGLWorkerManager {
 -   if (!webglWorkerManager) {
 -     webglWorkerManager = new WebGLWorkerManager()
 + export function getWebGLWorkerManager(canvasId?: string): WebGLWorkerManager {
 +   // Generate a unique ID if not provided
 +   const id = canvasId || `canvas-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-+   
++
 +   if (!workerInstances.has(id)) {
 +     workerInstances.set(id, new WebGLWorkerManager(id))
     }
 -   webglWorkerManager.addReference()
 -   return webglWorkerManager
-+   
++
 +   return workerInstances.get(id)!
   }
-  
+
 - export function releaseWebGLWorkerManager() {
 -   if (webglWorkerManager) {
 -     webglWorkerManager.removeReference()
@@ -164,7 +169,7 @@ Read file: src/utils/webglWorkerManager.ts
 +     workerInstances.delete(canvasId)
 +   }
 + }
-+ 
++
 + // Clean up all instances
 + export function destroyAllWebGLWorkerManagers() {
 +   workerInstances.forEach((instance) => {
@@ -172,13 +177,13 @@ Read file: src/utils/webglWorkerManager.ts
 +   })
 +   workerInstances.clear()
   }
-  
+
   // Legacy function for backward compatibility
   export function destroyWebGLWorkerManager() {
 -   releaseWebGLWorkerManager()
 +   destroyAllWebGLWorkerManagers()
   }
-  
+
 ```
 
 ---
@@ -191,17 +196,17 @@ Read file: src/utils/webglWorkerManager.ts
     private imageLoaded = false
     private originalImageSrc = ''
 +   private canvasId: string
-  
+
     // Transform state
 ```
 
 ```diff
       this.onZoomChange = onZoomChange
       this.onImageCopied = onImageCopied
-+     
++
 +     // Generate unique canvas ID for this instance
 +     this.canvasId = `webgl-viewer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-  
+
       const gl = canvas.getContext('webgl', {
 ```
 
@@ -213,7 +218,7 @@ Read file: src/utils/webglWorkerManager.ts
 -       this.webglWorker = getWebGLWorkerManager()
 +       this.webglWorker = getWebGLWorkerManager(this.canvasId)
         this.useWorkerRendering = await this.webglWorker.initCanvas(this.canvas)
-  
+
         if (this.useWorkerRendering) {
 -         console.info('[WebGLImageViewer] Using Worker-based WebGL rendering')
 +         console.info(`[WebGLImageViewer-${this.canvasId}] Using Worker-based WebGL rendering`)
@@ -235,7 +240,7 @@ Read file: src/utils/webglWorkerManager.ts
 
 ```diff
       window.removeEventListener('resize', this.boundResizeCanvas)
-  
+
 -     // Clean up worker resources
 +     // Clean up worker resources with specific canvas ID
       if (this.webglWorker) {
@@ -270,8 +275,6 @@ Read file: src/utils/webglWorkerManager.ts
 
 ---
 
-
-
 ---
 
 让我检查当前的导入语句：
@@ -282,7 +285,9 @@ Read file: src/components/ui/WebGLImageViewer.tsx
 
 ---
 
-好的，导入语句已经正确了。现在让我检查一下是否还有其他需要修复的地方。让我看看 loadImage 方法中的 worker 使用：
+好的，导入语句已经正确了。
+现在让我检查一下是否还有其他需要修复的地方。
+让我看看 loadImage 方法中的 worker 使用：
 
 ---
 
@@ -295,11 +300,11 @@ Read file: src/components/ui/WebGLImageViewer.tsx
 ---
 
 ```diff
-  
+
       try {
 -       console.info('[WebGLImageViewer] loadImage', url)
 +       console.info(`[WebGLImageViewer-${this.canvasId}] loadImage`, url)
-  
+
         // Use worker for image processing if available
 ```
 
@@ -319,7 +324,7 @@ Read file: src/components/ui/WebGLImageViewer.tsx
 ---
 
 ```diff
-- 
+-
 + <!DOCTYPE html>
 + <html lang="en">
 + <head>
@@ -365,7 +370,7 @@ Read file: src/components/ui/WebGLImageViewer.tsx
 + <body>
 +     <h1>WebGL Image Viewer Test - Multiple Instances</h1>
 +     <p>This test verifies that multiple WebGL viewer instances can render correctly to their respective canvases.</p>
-+     
++
 +     <div class="container">
 +         <div class="viewer-container">
 +             <div class="viewer-title">Viewer 1</div>
@@ -376,25 +381,25 @@ Read file: src/components/ui/WebGLImageViewer.tsx
 +             <canvas id="canvas2"></canvas>
 +         </div>
 +     </div>
-+ 
++
 +     <script type="module">
 +         // This is a conceptual test - in a real React app, you would use the WebGLImageViewer component
 +         console.log('WebGL Viewer Test Page Loaded');
 +         console.log('Check browser console for WebGL worker initialization messages');
 +         console.log('Each viewer should have a unique canvas ID in the logs');
-+         
++
 +         // Simulate multiple canvas elements being initialized
 +         const canvas1 = document.getElementById('canvas1');
 +         const canvas2 = document.getElementById('canvas2');
-+         
++
 +         // In a real implementation, these would be WebGLImageViewer React components
 +         console.log('Canvas 1:', canvas1);
 +         console.log('Canvas 2:', canvas2);
-+         
++
 +         // Add some visual indication
 +         const ctx1 = canvas1.getContext('2d');
 +         const ctx2 = canvas2.getContext('2d');
-+         
++
 +         if (ctx1) {
 +             ctx1.fillStyle = '#ff6b6b';
 +             ctx1.fillRect(0, 0, canvas1.width, canvas1.height);
@@ -403,7 +408,7 @@ Read file: src/components/ui/WebGLImageViewer.tsx
 +             ctx1.textAlign = 'center';
 +             ctx1.fillText('Canvas 1', canvas1.width / 2, canvas1.height / 2);
 +         }
-+         
++
 +         if (ctx2) {
 +             ctx2.fillStyle = '#4ecdc4';
 +             ctx2.fillRect(0, 0, canvas2.width, canvas2.height);
@@ -414,7 +419,7 @@ Read file: src/components/ui/WebGLImageViewer.tsx
 +         }
 +     </script>
 + </body>
-+ </html> 
++ </html>
 ```
 
 ---
@@ -426,4 +431,3 @@ Read file: src/components/ui/WebGLImageViewer.tsx
 Cancelled
 
 ---
-

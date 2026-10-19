@@ -272,7 +272,7 @@
   "site.user.form.display.placeholder": "Optional, e.g., innei.photo",
   "site.user.form.name.helper": "Displayed publicly and in RSS author/editor fields.",
   "site.user.form.name.label": "Author name",
-  "site.user.form.name.placeholder": "e.g., Innei",
+  "site.user.form.name.placeholder": "e.g., Evan",
   "site.user.form.username.helper": "Used internally to identify the author. Not shown on the site.",
   "site.user.form.username.label": "Username (optional)",
   "site.user.form.username.placeholder": "e.g., innei",

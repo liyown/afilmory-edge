@@ -89,7 +89,7 @@ export function HeaderLogoSection() {
     }
 
     return docsIndex
-      .map(item => ({
+      .map((item) => ({
         item,
         score: rankRoute(item, trimmed),
       }))
@@ -108,7 +108,7 @@ export function HeaderLogoSection() {
     const handler = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
-        setIsSearchOpen(prev => !prev)
+        setIsSearchOpen((prev) => !prev)
       }
     }
 
@@ -138,12 +138,12 @@ export function HeaderLogoSection() {
           <div className="relative shrink-0">
             <img
               src="https://github.com/Afilmory/assets/blob/main/512-mac.png?raw=true"
-              alt="Afilmory"
+              alt="Afilmory Edge"
               className="h-10 w-10 rounded-lg"
             />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-base font-semibold text-zinc-900 dark:text-zinc-100">Afilmory</h2>
+            <h2 className="truncate text-base font-semibold text-zinc-900 dark:text-zinc-100">Afilmory Edge</h2>
             <p className="truncate text-xs text-zinc-500 dark:text-zinc-500">Documentation</p>
           </div>
         </div>
@@ -190,7 +190,7 @@ export function HeaderLogoSection() {
           </Command.Empty>
 
           <Command.Group heading="Docs" className="space-y-1 text-xs font-medium text-zinc-400 dark:text-zinc-500">
-            {results.map(item => (
+            {results.map((item) => (
               <Command.Item
                 key={item.path}
                 value={item.path}

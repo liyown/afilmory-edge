@@ -1,4 +1,4 @@
-# Afilmory Web Promo Video Specification
+# Afilmory Edge Web Promo Video Specification
 
 **Topic:** Social-media promo video for the web gallery
 **Date:** 2026-09-26
@@ -11,7 +11,7 @@
 
 A ~42 s, 16:9 (1920×1080) promo video of the `apps/web` gallery for social media (X, Bilibili, Xiaohongshu landscape posts). It shows real product footage, wrapped in polished typography and camera motion, and can be re-rendered after copy edits.
 
-- **Footage source:** the live gallery at `https://innei.afilmory.art` (redirect target of `afilmory.innei.in`). Footage reflects the deployed build, not local `main`.
+- **Footage source:** the live gallery at `https://photos.liuyaowen.cn`. Footage reflects the deployed build, not local `main`.
 - **Language:** Chinese captions only.
 - **Audio:** no voice-over. Optional music track dropped into `apps/promo/public/` and named in `copy.ts`; unset renders a silent video.
 - **Non-goals:** vertical/square cuts, English version.
@@ -20,12 +20,12 @@ A ~42 s, 16:9 (1920×1080) promo video of the `apps/web` gallery for social medi
 
 | Time | Scene id | Picture | Caption |
 |---|---|---|---|
-| 0–3 s | `intro` | Black, one large line of type, then the Afilmory logo | 你的照片，值得更好的展示 |
+| 0–3 s | `intro` | Black, one large line of type, then the Afilmory Edge logo | 你的照片，值得更好的展示 |
 | 3–12 s | `gallery` | Browser frame pushes in from afar → masonry scroll → click a photo, entry animation plays → WebGL zoom into detail | 流畅浏览，细节尽收眼底 |
 | 12–20 s | `exif` | Inspector opens: camera, lens, exposure params, histogram; camera pushes in toward the panel | 每一张照片的拍摄参数 |
 | 20–28 s | `map` | Globe slowly rotates → flies to a photo cluster → opens a photo | 在地图上重走旅程 |
 | 28–37 s | `search` | ⌘K palette, type a camera name → filtered results → open a photo, tap a reaction | 一搜即达，一键互动 |
-| 37–42 s | `outro` | Logo + 「开源 · 可自托管 · afilmory.art」 + GitHub URL | — |
+| 37–42 s | `outro` | Logo + 「个人 · Cloudflare · 自托管」 + GitHub URL | — |
 
 Visual language follows root `DESIGN.md`: dark background, system-blue accent. Type is the system stack (SF Pro + PingFang SC) since Geist has no CJK glyphs. The browser chrome is a simplified Safari window. Scene transitions use camera push/pull plus blur; no flashy effects.
 

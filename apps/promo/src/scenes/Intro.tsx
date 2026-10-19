@@ -65,7 +65,7 @@ export function Intro() {
               filter: `blur(${(1 - word) * 10}px)`,
             }}
           >
-            Afilmory
+            Afilmory Edge
           </span>
         </div>
       </AbsoluteFill>

@@ -230,7 +230,7 @@ function BaseCanvas({ padding, siteName, children }: BaseCanvasProps) {
           display: 'flex',
         }}
       >
-        {siteName} · Afilmory
+        {siteName} · Afilmory Edge
       </div>
 
       <div
