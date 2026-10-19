@@ -109,7 +109,7 @@ try {
 
     Write-Host ""
     Write-Host "下一步："
-    Write-Host "  afi login -s https://photos.liuyaowen.cn"
+    Write-Host "  afi login"
     Write-Host "  cd $HOME\Pictures\import; afi add"
 } finally {
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue

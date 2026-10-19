@@ -89,7 +89,7 @@ irm https://raw.githubusercontent.com/liyown/afilmory-edge/main/scripts/install-
 Then:
 
 ```bash
-afi login -s https://photos.example.com
+afi login
 cd ~/Pictures/import
 afi add
 afi ls

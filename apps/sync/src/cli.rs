@@ -86,7 +86,7 @@ pub enum Command {
     /// 浏览器授权登录
     #[command(alias = "in")]
     Login {
-        /// 服务器地址，例如 https://photos.example.com
+        /// 服务器地址，默认使用内置的 https://photos.liuyaowen.cn
         #[arg(short = 's', long)]
         server: Option<String>,
         /// 不自动打开浏览器，只打印链接

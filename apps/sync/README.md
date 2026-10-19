@@ -42,7 +42,13 @@ macOS arm64/x86_64 和 Linux arm64/x86_64。
 ## 登录
 
 ```bash
-afi login -s https://photos.liuyaowen.cn
+afi login
+```
+
+默认使用内置地址 `https://photos.liuyaowen.cn`。如果部署在别的域名：
+
+```bash
+afi login -s https://photos.example.com
 ```
 
 会打开浏览器。用 Google OAuth 或邮箱密码登录，确认授权后，CLI 只在
@@ -51,7 +57,7 @@ afi login -s https://photos.liuyaowen.cn
 没有桌面环境时：
 
 ```bash
-afi login -s https://photos.liuyaowen.cn -N
+afi login -N
 ```
 
 只打印授权链接，在另一台设备打开即可，CLI 会等待本地回调。

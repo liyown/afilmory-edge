@@ -18,7 +18,7 @@ const CALLBACK_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 pub async fn login(server_url: Option<String>, no_browser: bool) -> Result<Credentials> {
     let mut config = Config::load()?;
     let server = normalize_server_url(server_url.as_deref().unwrap_or(config.server_url.as_str()))
-        .context("先运行 `afi login -s https://你的域名`")?;
+        .context("服务器地址不合法")?;
 
     let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).context("无法启动本地回调端口")?;
     let port = listener.local_addr()?.port();

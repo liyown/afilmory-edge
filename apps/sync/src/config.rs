@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub const DEFAULT_STABLE_WAIT_MS: u64 = 2_000;
+pub const DEFAULT_SERVER_URL: &str = "https://photos.liuyaowen.cn";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
@@ -50,6 +51,7 @@ impl Config {
         let path = config_path();
         if !path.exists() {
             return Ok(Self {
+                server_url: DEFAULT_SERVER_URL.to_string(),
                 concurrency: default_concurrency(),
                 stable_wait_ms: default_stable_wait_ms(),
                 ..Self::default()
@@ -64,6 +66,9 @@ impl Config {
         }
         if config.stable_wait_ms == 0 {
             config.stable_wait_ms = default_stable_wait_ms();
+        }
+        if config.server_url.trim().is_empty() {
+            config.server_url = DEFAULT_SERVER_URL.to_string();
         }
         Ok(config)
     }

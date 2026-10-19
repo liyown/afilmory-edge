@@ -124,5 +124,5 @@ esac
 
 say ""
 say "下一步："
-say "  afi login -s https://photos.liuyaowen.cn"
+say "  afi login"
 say "  cd ~/Pictures/import && afi add"
