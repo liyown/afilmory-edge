@@ -3,8 +3,8 @@ import { stdout } from 'node:process'
 
 import { authUsers } from '@afilmory/db'
 import { env } from '@afilmory/env'
+import { DASHBOARD_BASENAME } from '@core/app.constants'
 import { DbAccessor } from '@core/database/database.provider'
-import { STATIC_DASHBOARD_BASENAME } from '@core/modules/infrastructure/static-web/static-dashboard.service'
 import { ROOT_TENANT_SLUG } from '@core/modules/platform/tenant/tenant.constants'
 import { createLogger } from '@tsuki-hono/common'
 import { eq } from 'drizzle-orm'
@@ -47,7 +47,8 @@ export class RootAccountProvisioner {
           .where(eq(authUsers.id, existing.id))
 
         log.info(`Existing account ${email} promoted to superadmin`)
-      } else {
+      }
+      else {
         log.info('Root account already exists, skipping provisioning')
       }
       await this.memberships.ensureOwnerMembership(existing.id, rootTenantId)
@@ -81,7 +82,8 @@ export class RootAccountProvisioner {
       await this.memberships.ensureOwnerMembership(userId, rootTenantId)
 
       this.printRootInstructions(email, username, password)
-    } catch (error) {
+    }
+    catch (error) {
       log.error('Failed to provision root account', error)
     }
   }
@@ -93,14 +95,14 @@ export class RootAccountProvisioner {
       '============================================================',
       'Root dashboard access provisioned.',
       `  Dashboard URL: ${urls.shift()}/root-login`,
-      ...(urls.length > 0 ? urls.map((url) => `  Alternate URL: ${url}`) : []),
+      ...(urls.length > 0 ? urls.map(url => `  Alternate URL: ${url}`) : []),
       `  Email: ${email}`,
       `  Username: ${username}`,
       `  Password: ${password}`,
       '============================================================',
       '',
     ]
-    lines.forEach((line) => stdout.write(`${line}\n`))
+    lines.forEach(line => stdout.write(`${line}\n`))
   }
 
   private buildDashboardUrls(): string[] {
@@ -113,6 +115,6 @@ export class RootAccountProvisioner {
       hosts.add(configuredHost)
     }
 
-    return Array.from(hosts).map((host) => `http://${host}:${port}${STATIC_DASHBOARD_BASENAME}`)
+    return Array.from(hosts).map(host => `http://${host}:${port}${DASHBOARD_BASENAME}`)
   }
 }

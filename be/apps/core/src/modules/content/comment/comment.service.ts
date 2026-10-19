@@ -16,10 +16,9 @@ import { SystemSettingService } from '@core/modules/configuration/system-setting
 import { CommentCreatedEvent } from '@core/modules/content/comment/events/comment-created.event'
 import { WorkspaceMembershipService } from '@core/modules/platform/auth/workspace-membership.service'
 import { requireTenantContext } from '@core/modules/platform/tenant/tenant.context'
-import { UserSafetyService } from '@core/modules/platform/user-safety/user-safety.service'
 import { HttpContext } from '@tsuki-hono/common'
 import { EventEmitterService } from '@tsuki-hono/event-emitter'
-import { and, asc, eq, gt, inArray, isNull, notInArray, or, sql } from 'drizzle-orm'
+import { and, asc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { inject, injectable } from 'tsyringe'
 
@@ -69,7 +68,6 @@ export class CommentService {
     private readonly eventEmitter: EventEmitterService,
     private readonly systemSettings: SystemSettingService,
     private readonly memberships: WorkspaceMembershipService,
-    private readonly userSafety: UserSafetyService,
   ) {}
 
   async createComment(
@@ -193,7 +191,6 @@ export class CommentService {
     const authUser = this.getAuthUser()
     const viewerUserId = authUser?.id ?? null
     const isAdmin = viewerUserId ? await this.memberships.isWorkspaceAdmin(viewerUserId, tenant.tenant.id) : false
-    const blockedUserIds = viewerUserId ? await this.userSafety.blockedUserIds(viewerUserId) : []
     const db = this.dbAccessor.get()
 
     const filters = [
@@ -201,9 +198,6 @@ export class CommentService {
       eq(comments.photoId, query.photoId),
       isNull(comments.deletedAt),
     ]
-    if (blockedUserIds.length > 0) {
-      filters.push(notInArray(comments.userId, blockedUserIds))
-    }
 
     let statusCondition
     if (isAdmin) {
@@ -280,12 +274,7 @@ export class CommentService {
         })
         .from(comments)
         .where(
-          and(
-            eq(comments.tenantId, tenant.tenant.id),
-            inArray(comments.id, parentIds),
-            isNull(comments.deletedAt),
-            blockedUserIds.length > 0 ? notInArray(comments.userId, blockedUserIds) : undefined,
-          ),
+          and(eq(comments.tenantId, tenant.tenant.id), inArray(comments.id, parentIds), isNull(comments.deletedAt)),
         )
 
       const parentReactions = await this.fetchReactionAggregations(
@@ -524,7 +513,6 @@ export class CommentService {
     const authUser = this.getAuthUser()
     const viewerUserId = authUser?.id ?? null
     const isAdmin = viewerUserId ? await this.memberships.isWorkspaceAdmin(viewerUserId, tenant.tenant.id) : false
-    const blockedUserIds = viewerUserId ? await this.userSafety.blockedUserIds(viewerUserId) : []
     const db = this.dbAccessor.get()
 
     const filters = [
@@ -532,9 +520,6 @@ export class CommentService {
       eq(comments.photoId, query.photoId),
       isNull(comments.deletedAt),
     ]
-    if (blockedUserIds.length > 0) {
-      filters.push(notInArray(comments.userId, blockedUserIds))
-    }
 
     let statusCondition
     if (isAdmin) {

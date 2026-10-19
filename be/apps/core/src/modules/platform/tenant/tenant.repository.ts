@@ -2,7 +2,6 @@ import { generateId, tenants } from '@afilmory/db'
 import { RESERVED_TENANT_SLUGS } from '@afilmory/utils'
 import { DbAccessor } from '@core/database/database.provider'
 import { BizException, ErrorCode } from '@core/errors'
-import type { BillingPlanId } from '@core/modules/platform/billing/plan/billing-plan.types'
 import { and, asc, count, desc, eq, ilike, isNotNull, notInArray, or } from 'drizzle-orm'
 import { injectable } from 'tsyringe'
 
@@ -34,7 +33,7 @@ export class TenantRepository {
   async createTenant(payload: {
     name: string
     slug: string
-    planId?: BillingPlanId
+    planId?: string
     storagePlanId?: string | null
     status?: TenantAggregate['tenant']['status']
   }): Promise<TenantAggregate> {

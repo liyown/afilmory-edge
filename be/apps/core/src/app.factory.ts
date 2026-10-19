@@ -11,8 +11,8 @@ import { PgPoolProvider } from './database/database.provider'
 import { AllExceptionsFilter } from './filters/all-exceptions.filter'
 import { LoggingInterceptor } from './interceptors/logging.interceptor'
 import { ResponseTransformInterceptor } from './interceptors/response-transform.interceptor'
-import { AppModules } from './modules/index.module'
 import { registerOpenApiRoutes } from './openapi'
+import { PersonalModule } from './personal.module'
 import { RedisProvider } from './redis/redis.provider'
 
 export interface BootstrapOptions {
@@ -36,7 +36,7 @@ export async function createConfiguredApp(options: BootstrapOptions): Promise<Ho
   const hono = new Hono()
   registerOpenApiRoutes(hono, { globalPrefix: options.globalPrefix })
   const app = await createApplication(
-    AppModules,
+    PersonalModule,
     {
       globalPrefix: options.globalPrefix,
     },
@@ -80,8 +80,8 @@ export async function createConfiguredApp(options: BootstrapOptions): Promise<Ho
     }
 
     if (typeof error === 'object' && error !== null && 'statusCode' in error) {
-      const statusCode =
-        typeof (error as { statusCode?: number }).statusCode === 'number'
+      const statusCode
+        = typeof (error as { statusCode?: number }).statusCode === 'number'
           ? (error as { statusCode?: number }).statusCode!
           : 500
 

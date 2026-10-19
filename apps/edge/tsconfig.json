@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": [
+      "es2024"
+    ],
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "paths": {
+      "@core/database/database.module": ["../../be/apps/core/src/database/database.d1.module.ts"],
+      "@core/database/database.provider": ["../../be/apps/core/src/database/database.d1.provider.ts"],
+      "@afilmory/db": ["../../be/packages/db/src/schema.sqlite.ts"],
+      "@core/*": ["../../be/apps/core/src/*"]
+    },
+    "types": [
+      "node"
+    ],
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src",
+    "cloudflare.config.ts",
+    ".cloudflare/types"
+  ]
+}

@@ -3,11 +3,13 @@ import { createOpenApiDocument } from '@tsuki-hono/openapi'
 import type { Hono } from 'hono'
 
 import { logger } from './helpers/logger.helper'
-import { AppModules } from './modules/index.module'
+import { PersonalModule } from './personal.module'
 
 interface RegisterOpenApiOptions {
   globalPrefix: string
 }
+
+const TRAILING_SLASH_PATTERN = /\/+$/
 
 function normalizePrefix(prefix: string): string {
   if (!prefix || prefix === '/') {
@@ -16,13 +18,13 @@ function normalizePrefix(prefix: string): string {
 
   const trimmed = prefix.trim()
   const withLeading = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
-  return withLeading.replace(/\/+$/, '')
+  return withLeading.replace(TRAILING_SLASH_PATTERN, '')
 }
 
 export function registerOpenApiRoutes(app: Hono, options: RegisterOpenApiOptions): void {
   const prefix = normalizePrefix(options.globalPrefix)
 
-  const document = createOpenApiDocument(AppModules, {
+  const document = createOpenApiDocument(PersonalModule, {
     title: 'Core Service API',
     version: '1.0.0',
     description: 'OpenAPI specification generated from decorators',
@@ -30,7 +32,7 @@ export function registerOpenApiRoutes(app: Hono, options: RegisterOpenApiOptions
     servers: prefix ? [{ url: prefix }] : undefined,
   })
 
-  app.get('/internal/openapi.json', (context) => context.json(document))
+  app.get('/internal/openapi.json', context => context.json(document))
 
   app.get('/internal/docs', (context) => {
     context.header('content-type', 'text/html; charset=utf-8')

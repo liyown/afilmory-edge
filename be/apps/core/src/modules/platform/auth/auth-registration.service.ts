@@ -16,7 +16,6 @@ import { TenantService } from '../tenant/tenant.service'
 import type { TenantRecord } from '../tenant/tenant.types'
 import type { AuthSession } from './auth.provider'
 import { AuthProvider } from './auth.provider'
-import { resolveRegistrationStorageDefaults } from './auth-registration-storage.policy'
 import { WorkspaceMembershipService } from './workspace-membership.service'
 
 const DIACRITIC_PATTERN = /[\u0300-\u036F]/g
@@ -198,7 +197,6 @@ export class AuthRegistrationService {
       })
     }
 
-    const storageDefaults = resolveRegistrationStorageDefaults(await this.systemSettings.getManagedStorageProvider())
     const db = this.dbAccessor.get()
     const now = new Date().toISOString()
     const [updatedTenant] = await db
@@ -206,7 +204,7 @@ export class AuthRegistrationService {
       .set({
         name: tenantName,
         status: 'active',
-        storagePlanId: storageDefaults?.storagePlanId ?? null,
+        storagePlanId: null,
         updatedAt: now,
       })
       .where(and(eq(tenants.id, tenantContext.tenant.id), eq(tenants.status, 'pending')))
@@ -219,7 +217,7 @@ export class AuthRegistrationService {
     }
 
     await this.memberships.createOwnerMembership(authSession.user.id, updatedTenant.id)
-    await this.applyInitialSettings(updatedTenant.id, settings, storageDefaults?.activeProvider ?? null)
+    await this.applyInitialSettings(updatedTenant.id, settings, null)
     await this.memberships.setSessionActiveWorkspace({
       sessionId: authSession.session.id,
       userId: authSession.user.id,
@@ -252,14 +250,13 @@ export class AuthRegistrationService {
     }
 
     const slug = await this.generateUniqueSlug(slugBase)
-    const storageDefaults = resolveRegistrationStorageDefaults(await this.systemSettings.getManagedStorageProvider())
     let tenantId: string | null = null
 
     try {
       const tenantAggregate = await this.tenantService.createTenant({
         name: tenantName,
         slug,
-        storagePlanId: storageDefaults?.storagePlanId ?? null,
+        storagePlanId: null,
       })
       tenantId = tenantAggregate.tenant.id
 
@@ -298,7 +295,7 @@ export class AuthRegistrationService {
       }
 
       await this.memberships.createOwnerMembership(userId, tenantId)
-      await this.applyInitialSettings(tenantId, settings, storageDefaults?.activeProvider ?? null)
+      await this.applyInitialSettings(tenantId, settings, null)
 
       if (authSession) {
         await this.memberships.setSessionActiveWorkspace({

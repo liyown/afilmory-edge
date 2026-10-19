@@ -28,5 +28,5 @@
     "skipLibCheck": true
   },
   "include": ["src/**/*", "*.d.ts"],
-  "exclude": []
+  "exclude": ["src/**/*.d1.*.ts"]
 }

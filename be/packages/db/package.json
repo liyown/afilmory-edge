@@ -7,14 +7,20 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./schema.sqlite": {
+      "types": "./src/schema.sqlite.ts",
+      "import": "./src/schema.sqlite.ts"
     }
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
     "db:generate": "drizzle-kit generate",
+    "db:generate:sqlite": "drizzle-kit generate --config=drizzle.config.sqlite.ts",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.4",

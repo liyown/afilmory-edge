@@ -1,17 +1,8 @@
-import {
-  authAccounts,
-  authSessions,
-  authUsers,
-  authVerifications,
-  creemSubscriptions,
-  generateId,
-  platformActivityEvents,
-} from '@afilmory/db'
+import { authAccounts, authSessions, authUsers, authVerifications, generateId } from '@afilmory/db'
 import { env } from '@afilmory/env'
 import { DrizzleProvider } from '@core/database/database.provider'
 import { BizException } from '@core/errors'
 import { SystemSettingService } from '@core/modules/configuration/system-setting/system-setting.service'
-import { CreemWebhookService } from '@core/modules/platform/billing/providers/creem/creem-webhook.service'
 import type { OnModuleInit } from '@tsuki-hono/common'
 import { createLogger, HttpContext } from '@tsuki-hono/common'
 import type { BetterAuthOptions } from 'better-auth'
@@ -60,7 +51,6 @@ export class AuthProvider implements OnModuleInit {
     private readonly memberships: WorkspaceMembershipService,
     private readonly appleAuthorizations: AppleAuthorizationService,
     private readonly appleClientSecrets: AppleClientSecretService,
-    private readonly creemWebhooks: CreemWebhookService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -215,7 +205,6 @@ export class AuthProvider implements OnModuleInit {
           session: authSessions,
           account: authAccounts,
           verification: authVerifications,
-          creem_subscription: creemSubscriptions,
         },
       }),
       socialProviders: socialProviders as BetterAuthOptions['socialProviders'],
@@ -232,7 +221,6 @@ export class AuthProvider implements OnModuleInit {
       user: {
         additionalFields: {
           role: { type: 'string', input: false },
-          creemCustomerId: { type: 'string', input: false },
           deletionRequestedAt: { type: 'date', input: false, required: false },
         },
       },
@@ -275,20 +263,10 @@ export class AuthProvider implements OnModuleInit {
             after: async (session) => {
               const occurredAt = new Date().toISOString()
               const surface = MOBILE_USER_AGENT_PATTERN.test(session.userAgent ?? '') ? 'mobile' : 'web'
-              await db.transaction(async (tx) => {
-                await tx
-                  .update(authUsers)
-                  .set({ lastSignedInAt: occurredAt, lastActiveAt: occurredAt, lastActiveSurface: surface })
-                  .where(eq(authUsers.id, session.userId))
-                await tx.insert(platformActivityEvents).values({
-                  userId: session.userId,
-                  tenantId: typeof session.activeTenantId === 'string' ? session.activeTenantId : null,
-                  sessionId: session.id,
-                  eventType: 'auth.signed_in',
-                  surface,
-                  occurredAt,
-                })
-              })
+              await db
+                .update(authUsers)
+                .set({ lastSignedInAt: occurredAt, lastActiveAt: occurredAt, lastActiveSurface: surface })
+                .where(eq(authUsers.id, session.userId))
             },
           },
         },
@@ -299,11 +277,7 @@ export class AuthProvider implements OnModuleInit {
           generateId: () => generateId(),
         },
       },
-      plugins: [
-        nativeOAuthSessionBridge(),
-        admin(AUTH_ADMIN_PLUGIN_OPTIONS),
-        ...this.creemWebhooks.createBetterAuthPlugins(),
-      ],
+      plugins: [nativeOAuthSessionBridge(), admin(AUTH_ADMIN_PLUGIN_OPTIONS)],
       hooks: {
         before: createAuthMiddleware(async (ctx) => {
           if (ctx.path !== '/sign-up/email') {
