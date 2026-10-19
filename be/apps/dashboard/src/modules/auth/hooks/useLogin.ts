@@ -6,7 +6,6 @@ import { useNavigate } from 'react-router'
 import { useSetAuthUser } from '~/atoms/auth'
 import { ROUTE_PATHS } from '~/constants/routes'
 import { AUTH_SESSION_QUERY_KEY, fetchSession } from '~/modules/auth/api/session'
-import { buildRootTenantUrl, buildTenantUrl, getTenantSlugFromHost } from '~/modules/auth/utils/domain'
 
 import { signInAuth } from '../auth-client'
 
@@ -14,7 +13,6 @@ export interface LoginRequest {
   email: string
   password: string
   rememberMe?: boolean
-  requireRootDomain?: boolean
 }
 
 export function useLogin() {
@@ -25,21 +23,10 @@ export function useLogin() {
 
   const loginMutation = useMutation({
     mutationFn: async (data: LoginRequest) => {
-      if (data.requireRootDomain) {
-        const slug = getTenantSlugFromHost(window.location.hostname)
-        if (slug !== 'root') {
-          const rootUrl = buildRootTenantUrl('/root-login')
-          window.location.replace(rootUrl)
-          throw new Error('Please use the root portal for superadmin login.')
-        }
-      }
-
-      const rememberMe = data.rememberMe ?? true
-
       await signInAuth.email({
         email: data.email,
         password: data.password,
-        rememberMe,
+        rememberMe: data.rememberMe ?? true,
       })
 
       const session = await queryClient.fetchQuery({
@@ -52,41 +39,10 @@ export function useLogin() {
       return session
     },
     onSuccess: (session) => {
-      // Update cache and atom
       queryClient.setQueryData(AUTH_SESSION_QUERY_KEY, session)
       setAuthUser(session.user)
       setErrorMessage(null)
-
-      const { activeWorkspace, requestedMembership, requestedWorkspace } = session
-      if (requestedWorkspace?.isPlaceholder) {
-        navigate(ROUTE_PATHS.WELCOME, { replace: true })
-        return
-      }
-
-      const canManageRequestedWorkspace
-        = requestedMembership?.status === 'active'
-          && (requestedMembership.role === 'admin' || requestedMembership.role === 'owner')
-      if (requestedWorkspace && !canManageRequestedWorkspace) {
-        navigate(ROUTE_PATHS.NO_ACCESS, { replace: true })
-        return
-      }
-
-      if (requestedWorkspace) {
-        navigate('/', { replace: true })
-        return
-      }
-
-      if (activeWorkspace?.slug) {
-        try {
-          window.location.replace(buildTenantUrl(activeWorkspace.slug, '/'))
-          return
-        }
-        catch (redirectError) {
-          console.error('Failed to redirect to the active workspace after login:', redirectError)
-        }
-      }
-
-      navigate(ROUTE_PATHS.WELCOME, { replace: true })
+      navigate(ROUTE_PATHS.DEFAULT_AUTHENTICATED, { replace: true })
     },
     onError: (error: Error) => {
       if (error instanceof FetchError) {

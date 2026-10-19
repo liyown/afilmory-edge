@@ -9,50 +9,19 @@
 </p>
 
 <p align="center">
-  <a href="https://afilmory.art/">Official SaaS</a> •
-  <a href="https://docs.afilmory.art/">Documentation</a> •
+  <a href="./docs/README.md">Documentation</a> •
   <a href="#-live-galleries">Live Examples</a> •
-  <a href="#-self-hosting">Self-Hosting</a>
-</p>
-
-<p align="center">
-  <a href="https://testflight.apple.com/join/ywnq5mns">
-    <img src="https://gist.githubusercontent.com/lexrus/eadc04582835d9f16ea4d4448d0e8b2c/raw/b8d0af68ca4be55fcc59876cec05de4206e0f191/available-on-testflight.svg" alt="Available on TestFlight" width="333" />
-  </a>
+  <a href="#-quick-start">Quick Start</a>
 </p>
 
 ---
 
-**Afilmory** (/əˈfɪlməri/, "uh-FIL-muh-ree") is a comprehensive photo gallery solution that combines **Auto Focus (AF)**, **Aperture** (light control), **Film** (vintage medium), and **Memory** (captured moments). Built with React + TypeScript, it offers automatic photo synchronization from multiple storage sources, a GPU-accelerated image viewer (WebGPU first, WebGL fallback) with HDR gain-map support, professional EXIF metadata display, and a native iOS companion app.
+**Afilmory** (/əˈfɪlməri/, "uh-FIL-muh-ree") is a comprehensive photo gallery solution that combines **Auto Focus (AF)**, **Aperture** (light control), **Film** (vintage medium), and **Memory** (captured moments). Built with React + TypeScript, it offers automatic photo synchronization from multiple storage sources, a GPU-accelerated image viewer (WebGPU first, WebGL fallback) with HDR gain-map support, and professional EXIF metadata display.
 
 ## 🚀 Quick Start
 
-### Option 1: Official SaaS (Recommended)
+Afilmory deploys as a single-tenant gallery on Cloudflare: one Worker serves the gallery SPA, the admin dashboard, and the API, backed by D1 + R2 + KV.
 
-**👉 [Get Started at afilmory.art](https://afilmory.art/)** - Zero setup, live in minutes!
-
-The easiest way to create your photo gallery. No deployment, no servers, no maintenance required.
-
-**Why Choose SaaS?**
-- ✅ **Zero Configuration** - Sign up and go live immediately
-- ✅ **Live CMS** - Edit photos, titles, and metadata in real-time
-- ✅ **Custom Domains** - Bind your own domain with DNS verification
-- ✅ **Auto Updates** - Always running the latest features
-- ✅ **Managed Infrastructure** - We handle scaling, backups, and maintenance
-
-[**Start Your Gallery Now →**](https://afilmory.art/)
-
-### Option 2: Self-Hosting
-
-For developers who need full control over their deployment:
-
-**Docker (Recommended)**
-```bash
-# See our Docker deployment guide
-https://github.com/Afilmory/docker
-```
-
-**Manual Installation**
 ```bash
 # 1. Clone and install
 git clone https://github.com/Afilmory/Afilmory.git
@@ -62,16 +31,26 @@ pnpm install
 # 2. Configure
 cp config.example.json config.json
 cp builder.config.default.ts builder.config.ts
-# Edit both files with your settings
+cp apps/edge/.dev.vars.example apps/edge/.dev.vars
+# Edit config.json, builder.config.ts, and apps/edge/.dev.vars.
+# The bulk builder also reads S3 credentials from .env (see .env.template).
 
-# 3. Build manifest and thumbnails
-pnpm run build:manifest
+# 3. Create the Cloudflare resources and apply the baseline migration
+cf d1 create afilmory-db
+cf r2 bucket create afilmory-photos
+cf kv namespace create AFILMORY_CACHE
+cf d1 migrations apply afilmory-db --remote
 
-# 4. Start the application
-pnpm dev
+# 4. Build and deploy
+pnpm build
+pnpm deploy:edge
+
+# 5. Create the owner account
+pnpm bootstrap:admin --email you@example.com \
+  --account-id <account-id> --database-id <database-id> --api-token <api-token>
 ```
 
-For detailed self-hosting instructions, see [DEVELOPMENT.md](./DEVELOPMENT.md) and [Documentation](https://docs.afilmory.art).
+See [Deployment](./docs/deployment.md) for binding setup, secrets, and backups.
 
 ## 📸 Live Galleries
 
@@ -93,7 +72,6 @@ See Afilmory in action:
 - ⚡ **Incremental Sync** - Smart change detection processes only new or modified photos
 - 🌐 **Internationalization** - English, 简体中文, 繁體中文 (HK/TW), 日本語, and 한국어
 - 🔗 **Social Sharing** - Dynamic OpenGraph images and SEO metadata for rich previews
-- 📲 **Native iOS App** - Swift/UIKit client for browsing galleries, with push notifications
 
 ### Image Processing
 
@@ -123,9 +101,7 @@ See Afilmory in action:
 afilmory/
 ├── apps/
 │   ├── web/              # Gallery SPA (Vite + React 19 + React Router 7)
-│   ├── edge/             # Cloudflare Worker: serves SPA, injects manifest, OG/SEO, cron
-│   ├── mobile/           # Native iOS app (Swift / UIKit, XcodeGen)
-│   ├── site/             # Marketing site (Astro)
+│   ├── edge/             # Cloudflare Worker: SPA + dashboard, core API, OG/SEO, cron
 │   ├── docs/             # Documentation site (Vite + MDX)
 │   └── promo/            # Promo videos (Remotion)
 ├── be/                   # Backend services
@@ -134,9 +110,8 @@ afilmory/
 │   │   ├── dashboard/    # Admin dashboard SPA
 │   │   └── oauth-gateway/# Standalone OAuth broker
 │   └── packages/
-│       ├── db/           # Database schemas & migrations (Drizzle ORM)
-│       ├── redis/        # Redis client
-│       ├── task-queue/   # Job queue
+│       ├── db/           # D1 schema & migrations (Drizzle ORM)
+│       ├── env/          # Worker binding access
 │       └── utils/        # Shared backend utilities
 ├── packages/
 │   ├── builder/          # Photo processing pipeline CLI
@@ -181,17 +156,13 @@ afilmory/
 
 - **Hono** - Ultra-fast web framework
 - **@tsuki-hono** - NestJS-style modules, controllers, and decorators on top of Hono, with `tsyringe` DI
-- **Drizzle ORM** - Type-safe database toolkit
-- **PostgreSQL** - Primary database
-- **Redis** - Caching and task queue
-- **Better Auth** - Authentication
-- **Server-Sent Events** - Real-time updates
-- **Satori + resvg** - OG image rendering
-
-### Mobile
-
-- **Swift 6 / UIKit** - Native iOS 18+ app, with Liquid Glass on newer iOS versions
-- **XcodeGen** - `project.yml` as the project source of truth
+- **Drizzle ORM** - Type-safe database toolkit over D1
+- **D1** - Relational database (SQLite)
+- **KV** - Cache and manifest revision storage
+- **R2** - Photo objects, manifest and backup storage
+- **Better Auth** - Authentication with the Drizzle SQLite adapter
+- **In-process events** - SSE progress for sync/upload jobs
+- **workers-og** - Dynamic OG image rendering
 
 ### Build Pipeline
 
@@ -217,8 +188,7 @@ Designed with adapter pattern for flexibility:
 ### Prerequisites
 
 - Node.js (current LTS)
-- pnpm 11+
-- Xcode 16+ (only for the iOS app)
+- pnpm 12+
 
 ### Project Setup
 
@@ -240,12 +210,14 @@ cp .env.template .env
 ```bash
 # Development
 pnpm dev                    # Start the Cloudflare Worker + web app
-pnpm dev:be                 # Start backend services
 pnpm --filter web dev       # Web app only
 pnpm dev:edge               # Cloudflare Worker only
 pnpm --filter @afilmory/dashboard dev  # Admin dashboard
-pnpm dev:mobile             # Build and run the iOS app in Simulator
-pnpm site:dev               # Marketing site
+
+# Data & deployment
+pnpm bootstrap:admin        # Create the owner account in D1
+pnpm restore:d1-backup      # Restore D1 from an R2 backup
+pnpm deploy:edge            # Deploy the Worker
 
 # Build
 pnpm build                  # Build web + dashboard + Cloudflare Worker
@@ -361,12 +333,11 @@ Register it in `builder.config.ts` under `plugins`.
 
 ## 📚 Documentation
 
-- **[Official Documentation](https://docs.afilmory.art/)** - Complete guides and API reference
-- **[Quick Start Guide](https://docs.afilmory.art/getting-started/quick-start)** - Get running in 5 minutes
-- **[SaaS Mode](https://docs.afilmory.art/saas)** - Learn about hosted galleries
-- **[Storage Providers](https://docs.afilmory.art/storage/providers)** - Setup guides for all storage options
-- **[Deployment Guides](https://docs.afilmory.art/deployment)** - Deploy to various platforms
-- **[API Reference](https://docs.afilmory.art/api)** - Backend API documentation
+- **[Architecture](./docs/architecture.md)** - Worker, D1, R2, and KV design
+- **[Deployment](./docs/deployment.md)** - Provision Cloudflare resources and deploy
+- **[Configuration](./docs/configuration.md)** - Worker secrets and runtime settings
+- **[Builder](./docs/builder.md)** - Photo pipeline, storage providers, and plugins
+- **[Backend](./be/README.md)** - API graph, database access, and testing
 
 ## 🤝 Contributing
 
@@ -390,8 +361,7 @@ See [LICENSE](./LICENSE) for more details.
 
 ## 🔗 Links
 
-- **[Official SaaS](https://afilmory.art/)** - Hosted gallery service
-- **[Documentation](https://docs.afilmory.art/)** - Full documentation
+- **[Documentation](./docs/README.md)** - Full documentation
 - **[GitHub](https://github.com/Afilmory/Afilmory)** - Source code
 - **[Creator's Website](https://innei.in)** - Project creator
 

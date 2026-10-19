@@ -3,8 +3,7 @@
 **Scope:** `apps/web` (the gallery SPA) and `packages/ui` (its primitives).
 
 **Out of scope:** `be/apps/dashboard` (a linear, data-first admin aesthetic — a deliberately
-different system, see `be/apps/dashboard/AGENTS.md`), `apps/mobile` (native Swift/UIKit,
-localized and styled natively), `apps/site` (Astro marketing site).
+different system, see `be/apps/dashboard/AGENTS.md`).
 
 **Authority.** This document is derived from the shipped code, not from intent. It is
 normative for new code. A handful of existing files predate it and contradict it — those are

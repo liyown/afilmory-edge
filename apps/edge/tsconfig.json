@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "target": "es2024",
+    "jsx": "react-jsx",
     "lib": [
       "es2024"
     ],
@@ -9,14 +10,6 @@
     "module": "preserve",
     "moduleResolution": "bundler",
     "paths": {
-      "@core/database/database.module": ["../../be/apps/core/src/database/database.d1.module.ts"],
-      "@core/database/database.provider": ["../../be/apps/core/src/database/database.d1.provider.ts"],
-      "@core/database/tokens": ["./src/modules/database/d1-tokens.ts"],
-      "@afilmory/db": ["../../be/packages/db/src/schema.sqlite.ts"],
-      "@afilmory/env": ["./src/env.ts"],
-      "@core/modules/platform/auth/apple-authorization.service": ["./src/personal-apple-authorization.service.ts"],
-      "@core/modules/infrastructure/cache/cache.module": ["./src/modules/cache/kv-cache.module.ts"],
-      "@core/modules/infrastructure/cache/cache.service": ["./src/modules/cache/kv-cache.service.ts"],
       "@core/*": ["../../be/apps/core/src/*"]
     },
     "types": [
@@ -24,6 +17,7 @@
     ],
     "allowImportingTsExtensions": true,
     "strict": true,
+    "noImplicitAny": false,
     "noEmit": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,

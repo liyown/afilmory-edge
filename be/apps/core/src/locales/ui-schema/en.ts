@@ -212,7 +212,7 @@ const enUiSchema = {
     title: 'Platform Settings',
     description: 'Manage registration flow, login strategy, and shared OAuth providers for the platform.',
     sections: {
-      'registration': {
+      registration: {
         title: 'Global registration policy',
         description: 'Control new user quotas and local account capabilities.',
         fields: {
@@ -224,13 +224,6 @@ const enUiSchema = {
             title: 'Enable email/password login',
             description: 'When disabled, users must sign in through third-party providers.',
           },
-          'base-domain': {
-            title: 'Base domain',
-            description:
-              'Used to resolve tenant subdomains (e.g., example.yourdomain.com). Update DNS and TLS before changing.',
-            helper: 'Leave empty to use the default domain afilmory.art.',
-            placeholder: 'afilmory.art',
-          },
           'max-users': {
             title: 'Maximum registrable users',
             description: 'Block new sign-ups when the limit is reached. Leave empty for unlimited.',
@@ -239,122 +232,16 @@ const enUiSchema = {
           },
         },
       },
-      'billing': {
-        title: 'Plan configuration',
-        description: 'Define quotas, display pricing, and Creem products per plan.',
-        fields: {
-          quota: {
-            'helper': 'Leave empty to inherit defaults or no limit; numbers override plan settings.',
-            'custom-domain': {
-              title: 'Custom domains',
-              description: 'Maximum branded domains a tenant can bind. Use 0 to make the feature unavailable.',
-              placeholder: 'e.g. 1',
-            },
-            'monthly-asset': {
-              title: 'Monthly new photos',
-              description: 'Stop new uploads once this monthly cap is reached. Empty means fallback or unlimited.',
-              placeholder: 'e.g. 300',
-            },
-            'library-limit': {
-              title: 'Library capacity',
-              description: 'Maximum total photos a tenant can manage. 0 blocks new uploads completely.',
-              placeholder: 'e.g. 500',
-            },
-            'upload-limit': {
-              title: 'Upload size limit (MB)',
-              description: 'Maximum size per upload from the dashboard. Empty falls back to default or unlimited.',
-              placeholder: 'e.g. 20',
-            },
-            'sync-limit': {
-              title: 'Sync object size limit (MB)',
-              description: 'Maximum file size allowed during Data Sync imports.',
-              placeholder: 'e.g. 50',
-            },
-          },
-          pricing: {
-            'monthly-price': {
-              title: 'Monthly price',
-              description: 'Displayed price or Creem product price override. Leave blank to keep defaults.',
-              placeholder: 'e.g. 49',
-              helper: 'Blank hides pricing information.',
-            },
-            'currency': {
-              title: 'Currency',
-              description: 'ISO currency code, e.g., CNY or USD.',
-              placeholder: 'CNY',
-              helper: 'Blank falls back to the default currency or hides the symbol.',
-            },
-          },
-          payment: {
-            'creem-product': {
-              title: 'Creem product ID',
-              description: 'Creem product used to create checkout sessions. Leave blank to hide the upgrade entry.',
-              placeholder: 'prod_xxx',
-            },
-            'app-store-product': {
-              title: 'App Store product ID',
-              description: 'Auto-renewable subscription product offered in the iOS application.',
-              placeholder: 'app.afilmory.subscription.pro',
-            },
-            'helper': 'Blank values hide the upgrade entry.',
-          },
-        },
-        plans: {
-          free: {
-            title: 'Free Plan (hobby)',
-            description: 'Default starter tier for individuals and trials.',
-          },
-          pro: {
-            title: 'Pro Plan (pro)',
-            description: 'Professional plan.',
-          },
-          friend: {
-            title: 'Friend Plan (friend)',
-            description: 'Internal unlimited tier available only to super administrators.',
-          },
-        },
-      },
-      'storage-plans': {
-        title: 'Storage plans',
-        description: 'Managed storage catalog, pricing, and Creem products for storage subscriptions.',
-        fields: {
-          'catalog': {
-            title: 'Plan catalog',
-            description:
-              'Manage storage plans for managed B2 space. Use the dashboard editor; JSON is no longer required.',
-            placeholder: 'Configured via dashboard',
-            helper: 'Plans include name/description/capacity and active flag.',
-          },
-          'pricing': {
-            title: 'Storage pricing',
-            description: 'Monthly price and currency per storage plan.',
-            placeholder: 'Configured via dashboard',
-            helper: 'Blank values fall back to defaults or hide pricing.',
-          },
-          'products': {
-            title: 'Creem products',
-            description: 'Creem product per storage plan for checkout and portal.',
-            placeholder: 'Configured via dashboard',
-            helper: 'Blank values hide the upgrade entry for that plan.',
-          },
-          'managed-provider': {
-            title: 'Managed provider key',
-            description: 'Provider ID from storage providers list that backs managed storage plans (e.g., b2-managed).',
-            placeholder: 'b2-managed',
-            helper: 'Used by backend to issue upload/read credentials for managed tenants.',
-          },
-        },
-      },
-      'oauth': {
+      oauth: {
         title: 'OAuth providers',
-        description: 'Configure shared third-party login providers for all tenants.',
+        description: 'Configure third-party login providers for the site.',
         fields: {
           gateway: {
             title: 'OAuth gateway URL',
             description:
-              'Unified callback endpoint for third-party logins (e.g., https://auth.afilmory.art). Leave blank to fall back to tenant domains.',
+              'Unified callback endpoint for third-party logins (e.g., https://auth.example.com). Leave blank to fall back to the site domain.',
             helper: 'Must include http/https; no trailing slash required.',
-            placeholder: 'https://auth.afilmory.art',
+            placeholder: 'https://auth.example.com',
           },
         },
         groups: {
@@ -397,14 +284,8 @@ const enUiSchema = {
             fields: {
               'web-client-id': {
                 title: 'Services ID',
-                description:
-                  'Apple Services ID used by the dashboard web login. Leave blank to keep Apple mobile-only.',
+                description: 'Apple Services ID used by the dashboard web login. Apple sign-in is disabled when blank.',
                 placeholder: 'art.afilmory.web',
-              },
-              'app-bundle-id': {
-                title: 'App bundle identifier',
-                description: 'Audience and client ID for the native iOS authorization flow.',
-                placeholder: 'app.afilmory',
               },
               'team-id': {
                 title: 'Team ID',

@@ -1,8 +1,6 @@
 import { logger } from '@core/helpers/logger.helper'
 import type { AuthSession } from '@core/modules/platform/auth/auth.provider'
 import { AuthProvider } from '@core/modules/platform/auth/auth.provider'
-import { getTenantContext } from '@core/modules/platform/tenant/tenant.context'
-import { TenantContextResolver } from '@core/modules/platform/tenant/tenant-context-resolver.service'
 import type { SupportedLanguage } from '@core/modules/ui/ui-schema/ui-schema.i18n'
 import { detectLanguageFromHeader } from '@core/modules/ui/ui-schema/ui-schema.i18n'
 import type { HttpMiddleware } from '@tsuki-hono/common'
@@ -15,14 +13,10 @@ import { injectable } from 'tsyringe'
 export class RequestContextMiddleware implements HttpMiddleware {
   private readonly log = logger.extend('RequestContextMiddleware')
 
-  constructor(
-    private readonly tenantContextResolver: TenantContextResolver,
-    private readonly authProvider: AuthProvider,
-  ) {}
+  constructor(private readonly authProvider: AuthProvider) {}
 
   async use(context: Context, next: Next): Promise<Response | void> {
     this.ensureLanguageContext(context)
-    await this.ensureTenantContext(context)
     await this.ensureAuthContext(context)
     return await next()
   }
@@ -40,25 +34,6 @@ export class RequestContextMiddleware implements HttpMiddleware {
 
     const acceptLanguage = context.req.header('accept-language')
     return detectLanguageFromHeader(acceptLanguage)
-  }
-
-  private async ensureTenantContext(context: Context): Promise<void> {
-    if (getTenantContext()) {
-      return
-    }
-
-    try {
-      const tenantContext = await this.tenantContextResolver.resolve(context, {
-        throwOnMissing: false,
-        skipInitializationCheck: true,
-      })
-      if (tenantContext) {
-        HttpContext.setValue('tenant', tenantContext)
-      }
-    }
-    catch (error) {
-      this.log.error(`Failed to resolve tenant context for ${context.req.method} ${context.req.path}`, error)
-    }
   }
 
   private async ensureAuthContext(context: Context): Promise<void> {

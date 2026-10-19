@@ -1,8 +1,11 @@
-import { RedisAccessor } from '@core/redis/redis.provider'
 import { createLogger } from '@tsuki-hono/common'
+import { env } from 'cloudflare:workers'
 import { injectable } from 'tsyringe'
 
 const log = createLogger('CacheService')
+
+// Workers KV rejects expirationTtl values below 60 seconds.
+const MIN_EXPIRATION_TTL_SECONDS = 60
 
 export interface CacheSetOptions {
   ttlSeconds?: number
@@ -14,12 +17,11 @@ export interface CacheRememberOptions<T> extends CacheSetOptions {
 
 @injectable()
 export class CacheService {
-  constructor(private readonly redisAccessor: RedisAccessor) {}
-
   async getString(key: string): Promise<string | null> {
     try {
-      return await this.redisAccessor.get().get(key)
-    } catch (error) {
+      return await env.CACHE.get(key)
+    }
+    catch (error) {
       log.warn(`Failed to read cache key "${key}": ${String(error)}`)
       return null
     }
@@ -27,21 +29,19 @@ export class CacheService {
 
   async setString(key: string, value: string, options?: CacheSetOptions): Promise<void> {
     try {
-      const client = this.redisAccessor.get()
-      if (options?.ttlSeconds && options.ttlSeconds > 0) {
-        await client.set(key, value, 'EX', options.ttlSeconds)
-      } else {
-        await client.set(key, value)
-      }
-    } catch (error) {
+      const expirationTtl = options?.ttlSeconds ? Math.max(options.ttlSeconds, MIN_EXPIRATION_TTL_SECONDS) : undefined
+      await env.CACHE.put(key, value, expirationTtl ? { expirationTtl } : undefined)
+    }
+    catch (error) {
       log.warn(`Failed to write cache key "${key}": ${String(error)}`)
     }
   }
 
   async delete(key: string): Promise<void> {
     try {
-      await this.redisAccessor.get().del(key)
-    } catch (error) {
+      await env.CACHE.delete(key)
+    }
+    catch (error) {
       log.warn(`Failed to delete cache key "${key}": ${String(error)}`)
     }
   }
@@ -54,7 +54,8 @@ export class CacheService {
 
     try {
       return JSON.parse(raw) as T
-    } catch (error) {
+    }
+    catch (error) {
       log.warn(`Failed to parse cache payload for key "${key}": ${String(error)}`)
       return null
     }
@@ -68,7 +69,8 @@ export class CacheService {
         return
       }
       await this.setString(key, payload, options)
-    } catch (error) {
+    }
+    catch (error) {
       log.warn(`Failed to serialize cache payload for key "${key}": ${String(error)}`)
     }
   }

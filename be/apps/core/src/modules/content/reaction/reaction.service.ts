@@ -2,8 +2,7 @@ import { reactions } from '@afilmory/db'
 import type { AnalysisResponse } from '@afilmory/sdk'
 import { DbAccessor } from '@core/database/database.provider'
 import { BizException, ErrorCode } from '@core/errors'
-import { requireTenantContext } from '@core/modules/platform/tenant/tenant.context'
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { injectable } from 'tsyringe'
 
 @injectable()
@@ -11,14 +10,12 @@ export class ReactionService {
   constructor(private readonly dbAccessor: DbAccessor) {}
 
   async addReaction(refKey: string, reaction: string, count = 1): Promise<void> {
-    const tenant = requireTenantContext()
     const db = this.dbAccessor.get()
 
     // Check if photo exists (you might want to validate this differently based on your photo storage)
     // For now, we'll just add the reaction assuming the refKey is valid
 
     const row = {
-      tenantId: tenant.tenant.id,
       refKey,
       reaction,
     }
@@ -35,7 +32,6 @@ export class ReactionService {
   }
 
   async getReactionAnalysis(refKey: string): Promise<AnalysisResponse> {
-    const tenant = requireTenantContext()
     const db = this.dbAccessor.get()
 
     const reactionRecords = await db
@@ -43,7 +39,7 @@ export class ReactionService {
         reaction: reactions.reaction,
       })
       .from(reactions)
-      .where(and(eq(reactions.refKey, refKey), eq(reactions.tenantId, tenant.tenant.id)))
+      .where(eq(reactions.refKey, refKey))
 
     const aggregated = reactionRecords.reduce(
       (acc, record) => {

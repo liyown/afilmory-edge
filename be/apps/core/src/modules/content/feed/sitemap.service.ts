@@ -2,13 +2,11 @@ import type { PhotoManifestItem } from '@afilmory/typing'
 import { SiteSettingService } from '@core/modules/configuration/site-setting/site-setting.service'
 import { ManifestService } from '@core/modules/content/manifest/manifest.service'
 import { CacheService } from '@core/modules/infrastructure/cache/cache.service'
-import { requireTenantContext } from '@core/modules/platform/tenant/tenant.context'
 import { HttpContext } from '@tsuki-hono/common'
 import type { Context } from 'hono'
 import { injectable } from 'tsyringe'
 
-const CACHE_PREFIX = 'core:sitemap'
-const CACHE_VERSION = 'v1'
+const CACHE_KEY = 'core:sitemap:v1'
 const CACHE_TTL_SECONDS = 300
 const TRAILING_SLASHES = /\/+$/
 
@@ -26,10 +24,7 @@ export class SitemapService {
   ) {}
 
   async getSitemapDocument(): Promise<SitemapDocument> {
-    const tenant = requireTenantContext()
-    const cacheKey = `${CACHE_PREFIX}:${CACHE_VERSION}:${tenant.tenant.id}`
-
-    return await this.cacheService.rememberJson(cacheKey, async () => await this.buildSitemapDocument(), {
+    return await this.cacheService.rememberJson(CACHE_KEY, async () => await this.buildSitemapDocument(), {
       ttlSeconds: CACHE_TTL_SECONDS,
     })
   }

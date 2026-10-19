@@ -1,9 +1,8 @@
 import { photoAssets } from '@afilmory/db'
 import { DbAccessor } from '@core/database/database.provider'
-import { desc, eq, sql } from 'drizzle-orm'
+import { desc, sql } from 'drizzle-orm'
 import { injectable } from 'tsyringe'
 
-import { requireTenantContext } from '../tenant/tenant.context'
 import type {
   DashboardAnalytics,
   DashboardOverview,
@@ -28,7 +27,6 @@ export class DashboardService {
   constructor(private readonly dbAccessor: DbAccessor) {}
 
   async getOverview(): Promise<DashboardOverview> {
-    const tenant = requireTenantContext()
     const db = this.dbAccessor.get()
 
     const [rawStats] = await db
@@ -43,7 +41,6 @@ export class DashboardService {
         conflicts: sql<number>`coalesce(sum(case when ${photoAssets.syncStatus} = 'conflict' then 1 else 0 end), 0)`,
       })
       .from(photoAssets)
-      .where(eq(photoAssets.tenantId, tenant.tenant.id))
 
     const stats = rawStats
       ? {
@@ -70,7 +67,6 @@ export class DashboardService {
         syncStatus: photoAssets.syncStatus,
       })
       .from(photoAssets)
-      .where(eq(photoAssets.tenantId, tenant.tenant.id))
       .orderBy(desc(photoAssets.createdAt))
       .limit(8)
 
@@ -101,7 +97,6 @@ export class DashboardService {
   }
 
   async getAnalytics(): Promise<DashboardAnalytics> {
-    const tenant = requireTenantContext()
     const db = this.dbAccessor.get()
 
     const uploadTrendResult = await db.execute<{ month: string | null, uploads: number | null }>(sql`
@@ -119,8 +114,7 @@ export class DashboardService {
         select substr(${photoAssets.createdAt}, 1, 7) as month,
                count(*) as uploads
         from ${photoAssets}
-        where ${photoAssets.tenantId} = ${tenant.tenant.id}
-          and substr(${photoAssets.createdAt}, 1, 7) >= strftime('%Y-%m', 'now', 'start of month', '-11 months')
+        where substr(${photoAssets.createdAt}, 1, 7) >= strftime('%Y-%m', 'now', 'start of month', '-11 months')
         group by month
       ) as upload_counts on upload_counts.month = months.month_start
       order by months.month_start
@@ -139,7 +133,6 @@ export class DashboardService {
         previousMonthBytes: sql<number>`coalesce(sum(case when substr(${photoAssets.createdAt}, 1, 7) = strftime('%Y-%m', 'now', '-1 month') then ${photoAssets.size} else 0 end), 0)`,
       })
       .from(photoAssets)
-      .where(eq(photoAssets.tenantId, tenant.tenant.id))
 
     const providerUsageRaw = await db
       .select({
@@ -148,7 +141,6 @@ export class DashboardService {
         photoCount: sql<number>`count(*)`,
       })
       .from(photoAssets)
-      .where(eq(photoAssets.tenantId, tenant.tenant.id))
       .groupBy(photoAssets.storageProvider)
 
     const providers: DashboardStorageProviderUsage[] = providerUsageRaw
@@ -164,7 +156,6 @@ export class DashboardService {
       from (
         select nullif(trim(tag_value.value), '') as tag
         from ${photoAssets}, json_each(json_extract(${photoAssets.manifest}, '$.data.tags')) as tag_value
-        where ${photoAssets.tenantId} = ${tenant.tenant.id}
       ) as tag_items
       where tag is not null
       group by tag
@@ -191,7 +182,6 @@ export class DashboardService {
         nullif(trim(json_extract(${photoAssets.manifest}, '$.data.exif.Model')), '') as model,
         count(*) as count
       from ${photoAssets}
-      where ${photoAssets.tenantId} = ${tenant.tenant.id}
       group by make, model
       order by count desc
       limit 20

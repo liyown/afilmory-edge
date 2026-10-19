@@ -1,117 +1,85 @@
 ---
 title: Quick Start
-description: Get your gallery running in about 5 minutes.
+description: Deploy a personal gallery on Cloudflare in about 10 minutes.
 createdAt: 2025-11-14T22:20:00+08:00
-lastModified: 2025-12-05T15:28:22+08:00
+lastModified: 2026-10-19T15:10:06+08:00
 order: 2
 ---
 
 # Quick Start
 
-This guide will help you deploy your first gallery in about 5 minutes. You'll need Git, pnpm, and Node.js 20+ installed.
+This guide provisions a personal Afilmory gallery on Cloudflare. You need Git, pnpm, Node.js 20+, and the `cf` CLI.
 
-## Step 1: Configure Your Site
-
-Copy the example configuration file:
+## Step 1: Configure the site
 
 ```bash
+pnpm install
 cp config.example.json config.json
+cp builder.config.default.ts builder.config.ts
+cp apps/edge/.dev.vars.example apps/edge/.dev.vars
 ```
 
-Edit `config.json` with your site information:
+Edit `config.json` with your gallery name, author, accent color, and map settings.
 
-```json
-{
-  "name": "My Photo Gallery",
-  "description": "A collection of my favorite photos",
-  "author": {
-    "name": "Your Name",
-    "url": "https://yourwebsite.com",
-    "avatar": "https://yourwebsite.com/avatar.jpg"
-  },
-  "social": {
-    "twitter": "@yourhandle",
-    "github": "yourusername"
-  }
-}
-```
+## Step 2: Choose storage
 
-## Step 2: Choose and Configure Storage
+The Worker's runtime uploads use R2 through the `PHOTOS` binding. If you also want to run the bulk builder, configure its storage provider in `builder.config.ts`:
 
-Pick a storage provider from the [Storage Providers](/storage/providers) section:
+- **S3** — recommended for large collections
+- **B2** — cost-effective object storage
+- **GitHub** — repository-backed storage
+- **Local** — development and testing
+- **Eagle** — import an Eagle library
 
-- **S3** - Recommended for production (scalable, CDN-friendly)
-- **GitHub** - Simplest setup, great for small collections
-- **Local** - Perfect for development and testing
-- **B2** - Cost-effective cloud storage
-- **Eagle** - Direct integration with Eagle 4 library
+See [Storage Providers](/storage/providers) for credentials and options.
 
-Configure your chosen provider in `builder.config.ts` and add credentials to `.env`. See the provider-specific guides for detailed setup instructions.
-
-## Step 3: Generate Thumbnails and Manifest
-
-Run the builder to process your photos:
+## Step 3: Provision Cloudflare resources
 
 ```bash
-pnpm run build:manifest              # Incremental build (only new/changed photos)
-pnpm run build:manifest -- --force  # Full rebuild (all photos)
+cf d1 create afilmory-db
+cf r2 bucket create afilmory-photos
+cf kv namespace create AFILMORY_CACHE
 ```
 
-This generates:
-- **Thumbnails**: `apps/web/public/thumbnails/`
-- **Manifest**: `apps/web/src/data/photos-manifest.json`
-
-## Step 4: Preview Locally
-
-Start the development server:
+Update the IDs in `apps/edge/cloudflare.config.ts` if you chose different names, then apply the D1 schema:
 
 ```bash
-pnpm dev
+cf d1 migrations apply afilmory-db --remote
 ```
 
-Your gallery will be available at `http://localhost:5173`.
+Set the Worker secrets (`CONFIG_ENCRYPTION_KEY`, R2 credentials, and so on). See [Deployment](/deployment) for the full list.
 
-## Step 5: Deploy
-
-Choose your deployment method:
-
-### Static Hosting
-
-Build the static site:
+## Step 4: Build and deploy
 
 ```bash
-pnpm --filter web build
+pnpm build
+pnpm deploy:edge
 ```
 
-Then publish the `apps/web/dist` folder along with `thumbnails` and `photos-manifest.json` to your static host. See [Deployment](/deployment) for platform-specific guides.
+`pnpm build` builds the gallery SPA and dashboard, syncs them into `apps/edge/public`, and bundles the Worker.
 
-### Server-Side Rendering (SSR)
-
-For better SEO and Open Graph support, deploy the Next.js wrapper:
+## Step 5: Create the owner account
 
 ```bash
-pnpm --filter @afilmory/ssr build
+pnpm bootstrap:admin --email you@example.com \
+  --account-id <account-id> --database-id <database-id> --api-token <api-token>
 ```
 
-Deploy to Vercel or any Node.js host. See [Vercel Deployment](/deployment/vercel) for details.
+Registration is disabled. Sign in at `/platform/` with the account you just created.
 
-## What You Have Now
+## Optional: bulk photo import
 
-- ✅ A working gallery with your photos
-- ✅ Thumbnails and metadata ready for deployment
-- ✅ Local preview running at `http://localhost:5173`
-- ✅ Deployment-ready build artifacts
+To process a large existing collection with the builder:
+
+```bash
+pnpm build:manifest               # incremental
+pnpm build:manifest -- --force    # full rebuild
+```
+
+This writes thumbnails and `apps/web/src/data/photos-manifest.json`. Runtime uploads from the dashboard do not require the builder.
 
 ## Next Steps
 
-- **Customize your gallery**: Edit `config.json` and `builder.config.ts`
-- **Add more photos**: Run `pnpm run build:manifest` again after adding photos
-- **Deploy**: Follow the [Deployment Guide](/deployment) for your platform
-- **Learn more**: Check out [Architecture](/architecture) and [Builder](/builder) documentation
-
-
-
-
-
-
-
+- [Deployment](/deployment) — secrets, backups, and production checklist
+- [Architecture](/architecture) — Worker, D1, R2, and KV design
+- [Builder](/builder) — pipeline commands and storage configuration

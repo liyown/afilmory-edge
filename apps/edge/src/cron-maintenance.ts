@@ -8,7 +8,7 @@ const ORPHAN_GRACE_MS = 24 * 60 * 60 * 1000
 const LIST_LIMIT = 1000
 const DELETE_BATCH = 500
 
-export type CronEnv = Pick<Env, 'DB' | 'PHOTOS' | 'CACHE'>
+export type CronEnv = Pick<Env, 'ASSETS' | 'DB' | 'PHOTOS' | 'CACHE'>
 
 interface PhotoAssetRow {
   storageKey: string

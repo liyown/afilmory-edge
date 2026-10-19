@@ -8,7 +8,10 @@
 import type { CronEnv } from './cron-maintenance'
 import { backupD1, cleanupOrphanUploads, deleteKeys, listAll } from './cron-maintenance'
 import { loadManifest } from './html'
-import { renderOgImage } from './og'
+import { renderHomepageOgImage, renderPhotoOgImage } from './og'
+import type { OgSiteConfig } from './og-site'
+import { loadOgSiteConfig } from './og-site'
+import type { OgPhoto } from './og-template'
 
 // Keep both literals in sync with cloudflare.config.ts (the dev server cannot
 // import Worker source from the config module).
@@ -16,19 +19,22 @@ export const HOURLY_CRON = '0 * * * *'
 export const DAILY_BACKUP_CRON = '30 2 * * *'
 
 const OG_PREFIX = 'og/'
+// Bump when the card template or font changes so cached PNGs are re-rendered.
+const OG_TEMPLATE_VERSION = 'v3'
 const MAX_OG_PER_RUN = 50
 const OG_CACHE_CONTROL = 'public, max-age=86400'
-
-interface ManifestPhoto {
-  id: string
-  title?: string
-  description?: string
-}
+// The assets binding resolves by pathname; the host only matters in local dev,
+// where request-driven renders pass the real origin instead.
+const OG_ASSETS_ORIGIN = 'https://assets.local'
 
 export interface OgResult {
   rendered: number
   removed: number
   skipped: number
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function log(event: string, payload: object): void {
@@ -47,26 +53,57 @@ export function shortHash(value: string): string {
   return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
-export function ogCacheKey(photo: ManifestPhoto): string {
-  const fingerprint = shortHash(`${photo.title ?? ''} ${photo.description ?? ''}`)
-  return `${OG_PREFIX}${encodeURIComponent(photo.id)}-${fingerprint}.png`
+export function photoOgCacheKey(photo: OgPhoto, site: OgSiteConfig): string {
+  const fingerprint = shortHash(
+    JSON.stringify({
+      title: photo.title ?? '',
+      description: photo.description ?? '',
+      tags: photo.tags ?? [],
+      dateTaken: photo.dateTaken ?? '',
+      format: photo.format ?? '',
+      width: photo.width ?? 0,
+      height: photo.height ?? 0,
+      s3Key: photo.s3Key ?? '',
+      exif: photo.exif ?? null,
+      site: { name: site.name, accentColor: site.accentColor },
+    }),
+  )
+  return `${OG_PREFIX}${encodeURIComponent(photo.id)}-${OG_TEMPLATE_VERSION}-${fingerprint}.png`
+}
+
+export function homepageOgCacheKey(site: OgSiteConfig, photos: OgPhoto[]): string {
+  const fingerprint = shortHash(
+    JSON.stringify({
+      site: {
+        name: site.name,
+        description: site.description,
+        accentColor: site.accentColor,
+        avatar: site.authorAvatar,
+      },
+      featured: photos.slice(0, 6).map(photo => `${photo.s3Key ?? ''}:${photo.lastModified ?? ''}`),
+    }),
+  )
+  return `${OG_PREFIX}homepage-${OG_TEMPLATE_VERSION}-${fingerprint}.png`
 }
 
 /**
  * Renders OG cards ahead of crawler traffic and removes cards whose photo or
- * presentation (title/description) changed.
+ * presentation changed.
  */
 export async function prewarmOgImages(env: CronEnv): Promise<OgResult> {
   const manifest = await loadManifest(env)
-  const photos = ((manifest.data ?? []) as ManifestPhoto[]).filter(photo => typeof photo?.id === 'string')
+  const photos = ((manifest.data ?? []) as OgPhoto[]).filter(photo => typeof photo?.id === 'string')
+  const cameras = Array.isArray(manifest.cameras) ? manifest.cameras.length : 0
+  const site = await loadOgSiteConfig(env)
 
-  const expected = new Set(photos.map(photo => ogCacheKey(photo)))
+  const homepageKey = homepageOgCacheKey(site, photos)
+  const expected = new Set([homepageKey, ...photos.map(photo => photoOgCacheKey(photo, site))])
   const existing = new Set((await listAll(env.PHOTOS, OG_PREFIX)).map(object => object.key))
 
   let rendered = 0
   let skipped = 0
   for (const photo of photos) {
-    const key = ogCacheKey(photo)
+    const key = photoOgCacheKey(photo, site)
     if (existing.has(key)) {
       continue
     }
@@ -74,11 +111,36 @@ export async function prewarmOgImages(env: CronEnv): Promise<OgResult> {
       skipped++
       continue
     }
-    const image = renderOgImage(photo)
-    await env.PHOTOS.put(key, await image.arrayBuffer(), {
-      httpMetadata: { contentType: 'image/png', cacheControl: OG_CACHE_CONTROL },
-    })
-    rendered++
+    try {
+      const image = await renderPhotoOgImage(env, photo, site, OG_ASSETS_ORIGIN)
+      await env.PHOTOS.put(key, image, {
+        httpMetadata: { contentType: 'image/png', cacheControl: OG_CACHE_CONTROL },
+      })
+      rendered++
+    }
+    catch (error) {
+      log('cron.og.photo.failed', { photoId: photo.id, message: errorMessage(error) })
+      skipped++
+    }
+  }
+
+  if (!existing.has(homepageKey)) {
+    if (rendered >= MAX_OG_PER_RUN) {
+      skipped++
+    }
+    else {
+      try {
+        const image = await renderHomepageOgImage(env, site, photos, cameras, OG_ASSETS_ORIGIN)
+        await env.PHOTOS.put(homepageKey, image, {
+          httpMetadata: { contentType: 'image/png', cacheControl: OG_CACHE_CONTROL },
+        })
+        rendered++
+      }
+      catch (error) {
+        log('cron.og.homepage.failed', { message: errorMessage(error) })
+        skipped++
+      }
+    }
   }
 
   const stale = [...existing].filter(key => !expected.has(key))

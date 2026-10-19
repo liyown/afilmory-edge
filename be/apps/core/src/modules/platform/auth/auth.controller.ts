@@ -1,13 +1,9 @@
-import { TextDecoder } from 'node:util'
-
 import { decodeGatewayState, encodeGatewayState } from '@afilmory/be-utils'
 import { authUsers } from '@afilmory/db'
 import { env } from '@afilmory/env'
 import { DbAccessor } from '@core/database/database.provider'
-import { AllowPlaceholderTenant } from '@core/decorators/allow-placeholder.decorator'
-import { SkipTenantGuard } from '@core/decorators/skip-tenant.decorator'
 import { BizException, ErrorCode } from '@core/errors'
-import { PlatformRoles, RequireAuth, TenantRoles } from '@core/guards/roles.decorator'
+import { PlatformRoles, RequireAuth } from '@core/guards/roles.decorator'
 import { BypassResponseTransform } from '@core/interceptors/response-transform.decorator'
 import { SystemSettingService } from '@core/modules/configuration/system-setting/system-setting.service'
 import { Body, ContextParam, Controller, createLogger, Get, HttpContext, Post } from '@tsuki-hono/common'
@@ -15,16 +11,7 @@ import { freshSessionMiddleware } from 'better-auth/api'
 import { eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 
-import { getTenantContext, isPlaceholderTenantContext } from '../tenant/tenant.context'
-import type { TenantRecord } from '../tenant/tenant.types'
-import { AuthProvider, MOBILE_AUTH_BROKER_SLUG } from './auth.provider'
-import { AuthRegistrationService } from './auth-registration.service'
-import {
-  buildNativeOAuthCallbackUrl,
-  parseNativeOAuthCallbackTarget,
-  readNativeOAuthError,
-} from './native-oauth.callback'
-import { WorkspaceMembershipService } from './workspace-membership.service'
+import { AuthProvider } from './auth.provider'
 
 const logger = createLogger('AuthController')
 
@@ -72,20 +59,6 @@ function buildProviderResponse(providerIds: readonly string[]) {
   })
 }
 
-type TenantSignUpRequest = {
-  account?: {
-    email?: string
-    password?: string
-    name?: string
-  }
-  tenant?: {
-    name?: string
-    slug?: string | null
-  }
-  settings?: Array<{ key?: string, value?: unknown }>
-  useSessionAccount?: boolean
-}
-
 type SocialSignInRequest = {
   provider: string
   requestSignUp?: boolean
@@ -124,157 +97,39 @@ export class AuthController {
     private readonly auth: AuthProvider,
     private readonly dbAccessor: DbAccessor,
     private readonly systemSettings: SystemSettingService,
-    private readonly registration: AuthRegistrationService,
-    private readonly memberships: WorkspaceMembershipService,
   ) {}
 
   private readonly gatewayStateSecret = env.AUTH_GATEWAY_STATE_SECRET ?? env.CONFIG_ENCRYPTION_KEY
 
-  @AllowPlaceholderTenant()
   @Get('/session')
-  @SkipTenantGuard()
   async getSession(@ContextParam() _context: Context) {
-    const tenantContext = getTenantContext()
     const authContext = HttpContext.getValue('auth')
 
     if (!authContext?.user || !authContext.session) {
       return null
     }
 
-    const membershipRecords = await this.memberships.listForUser(authContext.user.id)
-    const activeTenantId = (authContext.session as { activeTenantId?: string | null }).activeTenantId ?? null
-    const activeMembership = membershipRecords.find(
-      ({ status, workspace }) => status === 'active' && workspace.id === activeTenantId,
-    )
-    const requestedMembership = tenantContext
-      ? (membershipRecords.find(({ workspace }) => workspace.id === tenantContext.tenant.id) ?? null)
-      : null
-
     return {
       user: authContext.user,
       session: authContext.session,
-      activeWorkspace: activeMembership?.workspace ?? null,
-      requestedWorkspace: tenantContext
-        ? {
-            isPlaceholder: tenantContext.isPlaceholder,
-            requestedSlug: tenantContext.requestedSlug,
-            ...tenantContext.tenant,
-          }
-        : null,
-      requestedMembership: requestedMembership
-        ? {
-            id: requestedMembership.id,
-            role: requestedMembership.role,
-            status: requestedMembership.status,
-          }
-        : null,
-      memberships: membershipRecords,
     }
   }
 
-  @AllowPlaceholderTenant()
-  @Get('/workspaces')
-  @RequireAuth()
-  @SkipTenantGuard()
-  async listWorkspaces() {
-    const authContext = HttpContext.getValue('auth')
-    if (!authContext?.user) {
-      throw new BizException(ErrorCode.AUTH_UNAUTHORIZED)
-    }
-
-    return { memberships: await this.memberships.listActiveForUser(authContext.user.id) }
-  }
-
-  @AllowPlaceholderTenant()
-  @Post('/workspaces/switch')
-  @RequireAuth()
-  @SkipTenantGuard()
-  async switchWorkspace(@Body() body: { tenantId?: string }) {
-    const tenantId = body?.tenantId?.trim()
-    if (!tenantId) {
-      throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: 'A workspace ID is required.' })
-    }
-
-    const authContext = HttpContext.getValue('auth')
-    if (!authContext?.user || !authContext.session) {
-      throw new BizException(ErrorCode.AUTH_UNAUTHORIZED)
-    }
-
-    const membership = await this.memberships.switchActiveWorkspace({
-      sessionId: authContext.session.id,
-      userId: authContext.user.id,
-      tenantId,
-    })
-
-    return { activeWorkspace: membership.workspace, membership }
-  }
-
-  @AllowPlaceholderTenant()
   @Post('/sign-out')
-  @SkipTenantGuard()
   async signOut(@ContextParam() context: Context) {
     const auth = await this.auth.getAuth()
     const { headers } = context.req.raw
     return await auth.api.signOut({ headers, asResponse: true })
   }
 
-  @AllowPlaceholderTenant()
   @Get('/social/providers')
   @BypassResponseTransform()
-  @SkipTenantGuard()
   async getSocialProviders() {
     return { providers: buildProviderResponse(await this.auth.getWebProviderIds()) }
   }
 
-  @AllowPlaceholderTenant()
-  @Get('/native/oauth/complete')
-  @BypassResponseTransform()
-  @SkipTenantGuard()
-  async completeNativeOAuth(@ContextParam() context: Context) {
-    const target = parseNativeOAuthCallbackTarget(new URL(context.req.url))
-    if (!target) {
-      throw new BizException(ErrorCode.COMMON_BAD_REQUEST, {
-        message: 'Native OAuth callback target is invalid.',
-      })
-    }
-
-    try {
-      const auth = await this.auth.getAuth()
-      const result = await auth.api.generateOneTimeToken({ headers: context.req.raw.headers })
-      return this.redirectNativeOAuth(context, buildNativeOAuthCallbackUrl(target, { code: result.token }))
-    }
-    catch (error) {
-      logger.warn('[AuthController] Native OAuth session exchange could not be prepared.', error)
-      return this.redirectNativeOAuth(
-        context,
-        buildNativeOAuthCallbackUrl(target, {
-          error: 'native_session_missing',
-          errorDescription: 'Authentication completed without an active browser session.',
-        }),
-      )
-    }
-  }
-
-  @AllowPlaceholderTenant()
-  @Get('/native/oauth/error')
-  @BypassResponseTransform()
-  @SkipTenantGuard()
-  async failNativeOAuth(@ContextParam() context: Context) {
-    const requestUrl = new URL(context.req.url)
-    const target = parseNativeOAuthCallbackTarget(requestUrl)
-    if (!target) {
-      throw new BizException(ErrorCode.COMMON_BAD_REQUEST, {
-        message: 'Native OAuth callback target is invalid.',
-      })
-    }
-
-    return this.redirectNativeOAuth(context, buildNativeOAuthCallbackUrl(target, readNativeOAuthError(requestUrl)))
-  }
-
-  @AllowPlaceholderTenant()
   @Get('/social/accounts')
   @RequireAuth()
-  @SkipTenantGuard()
   async getSocialAccounts(@ContextParam() context: Context) {
     const auth = await this.auth.getAuth()
     const { headers } = context.req.raw
@@ -287,19 +142,15 @@ export class AuthController {
     }
   }
 
-  @AllowPlaceholderTenant()
   @Post('/social/link')
   @RequireAuth()
-  @SkipTenantGuard()
   async linkSocialAccount(@ContextParam() context: Context, @Body() body: LinkSocialAccountRequest) {
     return await this.handleLinkSocialAccount(context, body)
   }
 
   // Compatibility for Better Auth client default path
-  @AllowPlaceholderTenant()
   @Post('/link-social')
   @RequireAuth()
-  @SkipTenantGuard()
   async linkSocialAccountCompat(@ContextParam() context: Context, @Body() body: LinkSocialAccountRequest) {
     return await this.handleLinkSocialAccount(context, body)
   }
@@ -319,7 +170,6 @@ export class AuthController {
     const errorCallbackURL = this.normalizeCallbackUrl(body?.errorCallbackURL)
 
     const auth = await this.auth.getAuth()
-    const tenantSlug = getTenantContext()?.requestedSlug ?? null
 
     const response = await auth.api.linkSocialAccount({
       headers,
@@ -329,21 +179,16 @@ export class AuthController {
         disableRedirect: body?.disableRedirect ?? true,
         ...(callbackURL ? { callbackURL } : {}),
         ...(errorCallbackURL ? { errorCallbackURL } : {}),
-        additionalData: {
-          ...body?.additionalData,
-          tenantSlug,
-        },
+        additionalData: body?.additionalData,
       },
       asResponse: true,
     })
 
-    return await this.rewriteOAuthState(response, tenantSlug)
+    return await this.rewriteOAuthState(response)
   }
 
-  @AllowPlaceholderTenant()
   @Post('/social/unlink')
   @RequireAuth()
-  @SkipTenantGuard()
   async unlinkSocialAccount(@ContextParam() context: Context, @Body() body: UnlinkSocialAccountRequest) {
     const providerId = body?.providerId?.trim()
     if (!providerId) {
@@ -389,7 +234,7 @@ export class AuthController {
   }
 
   @Get('/permissions/dashboard')
-  @TenantRoles('admin')
+  @PlatformRoles('superadmin')
   checkDashboardPermission() {
     return { allowed: true }
   }
@@ -400,8 +245,6 @@ export class AuthController {
     return { allowed: true }
   }
 
-  @AllowPlaceholderTenant()
-  @SkipTenantGuard()
   @Post('/sign-in/email')
   async signInEmail(@ContextParam() context: Context, @Body() body: { email: string, password: string }) {
     const email = body.email.trim().toLowerCase()
@@ -438,18 +281,12 @@ export class AuthController {
     return response
   }
 
-  // SkipTenantGuard: the mobile login broker host resolves to no tenant at all,
-  // and AllowPlaceholderTenant alone cannot rescue a missing tenant context.
-  @AllowPlaceholderTenant()
-  @SkipTenantGuard()
   @Post('/social')
   async signInSocial(@ContextParam() context: Context, @Body() body: SocialSignInRequest) {
     return await this.handleSocialSignIn(context, body)
   }
 
   // Compatibility for Better Auth client default path
-  @AllowPlaceholderTenant()
-  @SkipTenantGuard()
   @Post('/sign-in/social')
   async signInSocialCompat(@ContextParam() context: Context, @Body() body: SocialSignInRequest) {
     return await this.handleSocialSignIn(context, body)
@@ -462,16 +299,7 @@ export class AuthController {
     }
 
     const { headers } = context.req.raw
-    const tenantContext = getTenantContext()
-    let tenantSlug = tenantContext?.requestedSlug ?? tenantContext?.tenant?.slug ?? null
-    if (!tenantSlug && (await this.auth.isBrokerRequest())) {
-      // The broker host has no tenant context; without this marker the gateway
-      // would bounce the OAuth callback to the bare base domain and the broker
-      // instance would never see it.
-      tenantSlug = MOBILE_AUTH_BROKER_SLUG
-    }
 
-    // Identity registration is global and does not create a workspace membership.
     const shouldAllowSignUp = body.requestSignUp ?? true
 
     const auth = await this.auth.getAuth()
@@ -480,119 +308,31 @@ export class AuthController {
         ...body,
         provider,
         requestSignUp: shouldAllowSignUp,
-        additionalData: {
-          ...body.additionalData,
-          tenantSlug,
-        },
+        additionalData: body.additionalData,
       },
       headers,
       asResponse: true,
     })
 
-    return await this.rewriteOAuthState(response, tenantSlug)
+    return await this.rewriteOAuthState(response)
   }
 
-  @SkipTenantGuard()
-  @AllowPlaceholderTenant()
-  @Post('/sign-up/email')
-  async signUpEmail(@ContextParam() context: Context, @Body() body: TenantSignUpRequest) {
-    // T3.2: the personal deployment has exactly one administrator, created by
-    // `bootstrap:admin`. Self-service workspace registration is not available.
-    if (env.PERSONAL_DEPLOYMENT) {
-      throw new BizException(ErrorCode.AUTH_FORBIDDEN, { message: '个人部署已关闭注册。' })
-    }
-
-    const useSessionAccount = body?.useSessionAccount ?? false
-
-    if (!body?.account && !useSessionAccount) {
-      throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: '缺少注册账号信息' })
-    }
-
-    const tenantContext = getTenantContext()
-    const isPlaceholderTenant = isPlaceholderTenantContext(tenantContext)
-    if ((!tenantContext || isPlaceholderTenant) && !body.tenant) {
-      throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: '缺少租户信息' })
-    }
-    if (tenantContext && !isPlaceholderTenant && useSessionAccount) {
-      throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: '当前操作不支持使用已登录账号' })
-    }
-
-    const { headers } = context.req.raw
-
-    const result = await this.registration.registerTenant(
-      {
-        account: body.account
-          ? {
-              email: body.account.email ?? '',
-              password: body.account.password ?? '',
-              name: body.account.name ?? '',
-            }
-          : undefined,
-        tenant: body.tenant
-          ? {
-              name: body.tenant.name ?? '',
-              slug: body.tenant.slug ?? null,
-            }
-          : undefined,
-        settings: body.settings?.filter(
-          (s): s is { key: string, value: unknown } => typeof s.key === 'string' && s.key.length > 0,
-        ),
-        useSessionAccount,
-      },
-      headers,
-    )
-
-    if (result.success && result.tenant) {
-      return await this.attachTenantMetadata(result.response, result.tenant)
-    }
-
-    return result.response
-  }
-
-  @Get('/admin-only')
-  @TenantRoles('admin')
-  async adminOnly(@ContextParam() _context: Context) {
-    return { ok: true }
-  }
-
-  @AllowPlaceholderTenant()
-  @SkipTenantGuard()
   @Get('/callback/*')
   async callback(@ContextParam() context: Context) {
     const reqUrl = new URL(context.req.url)
 
     let didRewriteState = false
-    let didRewriteHost = false
     const wrappedState = reqUrl.searchParams.get('state')
-    let tenantSlugFromState: string | null = null
     if (this.gatewayStateSecret && wrappedState) {
       const decoded = decodeGatewayState(wrappedState, { secret: this.gatewayStateSecret })
       if (decoded?.innerState) {
         reqUrl.searchParams.set('gatewayState', wrappedState)
         reqUrl.searchParams.set('state', decoded.innerState)
         didRewriteState = decoded.innerState !== wrappedState
-        tenantSlugFromState = decoded.tenantSlug ?? null
       }
     }
 
-    if (tenantSlugFromState) {
-      const { hostname } = reqUrl
-      if (!hostname.startsWith(`${tenantSlugFromState}.`)) {
-        reqUrl.hostname = `${tenantSlugFromState}.${hostname}`
-        didRewriteHost = true
-      }
-    }
-
-    const tenantSlug = reqUrl.searchParams.get('tenantSlug')
-
-    if (tenantSlug) {
-      reqUrl.hostname = `${tenantSlug}.${reqUrl.hostname}`
-      reqUrl.searchParams.delete('tenantSlug')
-
-      return context.redirect(reqUrl.toString(), 302)
-    }
-
-    if (didRewriteState || didRewriteHost) {
+    if (didRewriteState) {
       return context.redirect(reqUrl.toString(), 302)
     }
 
@@ -604,8 +344,6 @@ export class AuthController {
    * The gateway state therefore has to be unwrapped in the request body instead
    * of by issuing a redirect, which would discard the one-time authorization code.
    */
-  @AllowPlaceholderTenant()
-  @SkipTenantGuard()
   @Post('/callback/*')
   async callbackPost(@ContextParam() context: Context) {
     const request = context.req.raw
@@ -643,16 +381,12 @@ export class AuthController {
     )
   }
 
-  @AllowPlaceholderTenant()
-  @SkipTenantGuard()
   @BypassResponseTransform()
   @Get('/*')
   async passthroughGet(@ContextParam() context: Context) {
     return await this.auth.handler(context)
   }
 
-  @AllowPlaceholderTenant()
-  @SkipTenantGuard()
   @BypassResponseTransform()
   @Post('/*')
   async passthroughPost(@ContextParam() context: Context) {
@@ -683,13 +417,6 @@ export class AuthController {
     }
   }
 
-  private redirectNativeOAuth(context: Context, location: string): Response {
-    const response = context.redirect(location, 302)
-    response.headers.set('cache-control', 'no-store')
-    response.headers.set('pragma', 'no-cache')
-    return response
-  }
-
   private serializeSocialAccount(account: {
     id: string
     providerId: string
@@ -716,66 +443,12 @@ export class AuthController {
     return Number.isNaN(date.getTime()) ? value : date.toISOString()
   }
 
-  private async attachTenantMetadata(source: Response, tenant: TenantRecord): Promise<Response> {
-    const headers = new Headers(source.headers)
-    headers.delete('content-length')
-
-    let payload: unknown = null
-    let isJson = false
-    let text: string | null = null
-
-    try {
-      const buffer = await source.arrayBuffer()
-      if (buffer.byteLength > 0) {
-        text = new TextDecoder().decode(buffer)
-      }
-    }
-    catch {
-      text = null
-    }
-
-    if (text && text.length > 0) {
-      try {
-        payload = JSON.parse(text)
-        isJson = true
-      }
-      catch {
-        payload = text
-      }
-    }
-
-    const tenantPayload = {
-      id: tenant.id,
-      slug: tenant.slug,
-      name: tenant.name,
-    }
-
-    const responseBody
-      = isJson && payload && typeof payload === 'object' && !Array.isArray(payload)
-        ? {
-            ...(payload as Record<string, unknown>),
-            tenant: tenantPayload,
-          }
-        : {
-            tenant: tenantPayload,
-            data: payload,
-          }
-
-    headers.set('content-type', 'application/json; charset=utf-8')
-
-    return new Response(JSON.stringify(responseBody), {
-      status: source.status,
-      statusText: source.statusText,
-      headers,
-    })
-  }
-
   /**
-   * Wraps the Better Auth `state` parameter with tenant metadata so the OAuth gateway
-   * can route callbacks without dynamic redirect URIs. Preserves cookies/headers from
-   * the upstream Better Auth response.
+   * Wraps the Better Auth `state` parameter so the OAuth gateway can forward the
+   * callback without dynamic redirect URIs. Preserves cookies/headers from the
+   * upstream Better Auth response.
    */
-  private async rewriteOAuthState(response: Response, tenantSlug: string | null): Promise<Response> {
+  private async rewriteOAuthState(response: Response): Promise<Response> {
     if (!this.gatewayStateSecret) {
       return response
     }
@@ -795,7 +468,7 @@ export class AuthController {
 
     const location = response.headers.get('location')
     if (location) {
-      const wrappedLocation = this.wrapGatewayState(location, tenantSlug)
+      const wrappedLocation = this.wrapGatewayState(location)
       if (wrappedLocation !== location) {
         headers.set('location', wrappedLocation)
       }
@@ -816,7 +489,7 @@ export class AuthController {
         const payloadRecord = payload as Record<string, unknown>
         const url = typeof payloadRecord.url === 'string' ? payloadRecord.url : null
         if (url) {
-          const wrappedUrl = this.wrapGatewayState(url, tenantSlug)
+          const wrappedUrl = this.wrapGatewayState(url)
           if (wrappedUrl !== url) {
             headers.set('content-type', 'application/json; charset=utf-8')
             body = JSON.stringify({ ...payloadRecord, url: wrappedUrl })
@@ -837,7 +510,7 @@ export class AuthController {
     })
   }
 
-  private wrapGatewayState(url: string, tenantSlug: string | null): string {
+  private wrapGatewayState(url: string): string {
     if (!this.gatewayStateSecret) {
       return url
     }
@@ -852,7 +525,6 @@ export class AuthController {
 
       const wrapped = encodeGatewayState({
         secret: this.gatewayStateSecret,
-        tenantSlug,
         innerState: state,
       })
       parsed.searchParams.set('state', wrapped)

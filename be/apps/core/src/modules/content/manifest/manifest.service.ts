@@ -1,20 +1,15 @@
 import { createHash } from 'node:crypto'
 
-import { migrateManifest } from '@afilmory/builder/manifest/migrate.js'
-import type { ManifestVersion } from '@afilmory/builder/manifest/version.js'
-import { CURRENT_MANIFEST_VERSION } from '@afilmory/builder/manifest/version.js'
-import type { PhotoAssetManifest } from '@afilmory/db'
 import { CURRENT_PHOTO_MANIFEST_VERSION, photoAssets } from '@afilmory/db'
-import type { AfilmoryManifest, CameraInfo, LensInfo, PhotoManifestItem } from '@afilmory/typing'
+import type { AfilmoryManifest, CameraInfo, LensInfo, ManifestVersion, PhotoManifestItem } from '@afilmory/typing'
 import { DbAccessor } from '@core/database/database.provider'
-import { requireTenantContext } from '@core/modules/platform/tenant/tenant.context'
-import { createLogger } from '@tsuki-hono/common'
 import { and, eq, inArray } from 'drizzle-orm'
 import { injectable } from 'tsyringe'
 
 import { ManifestSyncService } from '../manifest-sync/manifest-sync.service'
 import { revisionETag } from '../manifest-sync/manifest-sync.types'
-import { ensureCurrentPhotoAssetManifest } from './manifest-migration.helper'
+
+const MANIFEST_VERSION = CURRENT_PHOTO_MANIFEST_VERSION as ManifestVersion
 
 export function computeManifestETag(maxUpdatedAt: string | null, photoCount: number): string {
   const hash = createHash('sha256')
@@ -47,8 +42,6 @@ export interface AfilmorySearchResult {
 
 @injectable()
 export class ManifestService {
-  private readonly logger = createLogger('ManifestService')
-
   constructor(
     private readonly dbAccessor: DbAccessor,
     private readonly manifestSyncService: ManifestSyncService,
@@ -63,7 +56,6 @@ export class ManifestService {
   }
 
   async getManifest(): Promise<AfilmoryManifest> {
-    const tenant = requireTenantContext()
     const db = this.dbAccessor.get()
 
     const records = await db
@@ -72,46 +64,23 @@ export class ManifestService {
         manifest: photoAssets.manifest,
       })
       .from(photoAssets)
-      .where(and(eq(photoAssets.tenantId, tenant.tenant.id), inArray(photoAssets.syncStatus, ['synced', 'conflict'])))
-
-    if (records.length === 0) {
-      return {
-        // The SQLite schema widens ManifestVersion to string so the Worker
-        // bundle does not pull the builder package just for a literal type.
-        version: CURRENT_PHOTO_MANIFEST_VERSION as ManifestVersion,
-        data: [],
-        cameras: [],
-        lenses: [],
-      }
-    }
+      .where(inArray(photoAssets.syncStatus, ['synced', 'conflict']))
 
     const items: PhotoManifestItem[] = []
-    const upgrades: Array<{ id: string, manifest: PhotoAssetManifest }> = []
-
     for (const record of records) {
-      const { manifest, changed } = ensureCurrentPhotoAssetManifest(record.manifest)
-      if (!manifest) {
+      if (!record.manifest?.data) {
         continue
       }
-
-      if (changed) {
-        upgrades.push({ id: record.id, manifest })
-      }
-
-      items.push(structuredClone(manifest.data))
-    }
-
-    if (upgrades.length > 0) {
-      await this.persistManifestUpgrades(upgrades)
+      items.push(structuredClone(record.manifest.data))
     }
 
     const sorted = this.sortByDateDesc(items)
-    const manifest = this.ensureCurrentManifestVersion({
-      version: upgrades.length > 0 ? CURRENT_MANIFEST_VERSION : this.resolveManifestVersion(records),
+    const manifest: AfilmoryManifest = {
+      version: MANIFEST_VERSION,
       data: sorted,
       cameras: [],
       lenses: [],
-    })
+    }
 
     const cameras = this.buildCameraCollection(manifest.data)
     const lenses = this.buildLensCollection(manifest.data)
@@ -127,7 +96,6 @@ export class ManifestService {
     if (photoIds.length === 0) {
       return []
     }
-    const tenant = requireTenantContext()
     const db = this.dbAccessor.get()
 
     const records = await db
@@ -136,36 +104,20 @@ export class ManifestService {
         manifest: photoAssets.manifest,
       })
       .from(photoAssets)
-      .where(
-        and(
-          eq(photoAssets.tenantId, tenant.tenant.id),
-          inArray(photoAssets.photoId, photoIds),
-          inArray(photoAssets.syncStatus, ['synced', 'conflict']),
-        ),
-      )
+      .where(and(inArray(photoAssets.photoId, photoIds), inArray(photoAssets.syncStatus, ['synced', 'conflict'])))
 
     if (records.length === 0) {
       return []
     }
 
     const itemMap = new Map<string, PhotoManifestItem>()
-    const upgrades: Array<{ id: string, manifest: PhotoAssetManifest }> = []
 
     for (const record of records) {
-      const { manifest, changed } = ensureCurrentPhotoAssetManifest(record.manifest)
-      if (!manifest) {
+      if (!record.manifest?.data) {
         continue
       }
-      if (changed) {
-        upgrades.push({ id: record.id, manifest })
-      }
-
-      const normalized = structuredClone(manifest.data)
-      itemMap.set(normalized.id, normalized)
-    }
-
-    if (upgrades.length > 0) {
-      await this.persistManifestUpgrades(upgrades)
+      const item = structuredClone(record.manifest.data)
+      itemMap.set(item.id, item)
     }
 
     return photoIds.map(id => itemMap.get(id)).filter((p): p is PhotoManifestItem => Boolean(p))
@@ -239,7 +191,6 @@ export class ManifestService {
   }
 
   async getPhoto(photoId: string): Promise<PhotoManifestItem | null> {
-    const tenant = requireTenantContext()
     const db = this.dbAccessor.get()
 
     const records = await db
@@ -248,78 +199,15 @@ export class ManifestService {
         manifest: photoAssets.manifest,
       })
       .from(photoAssets)
-      .where(
-        and(
-          eq(photoAssets.tenantId, tenant.tenant.id),
-          eq(photoAssets.photoId, photoId),
-          inArray(photoAssets.syncStatus, ['synced', 'conflict']),
-        ),
-      )
+      .where(and(eq(photoAssets.photoId, photoId), inArray(photoAssets.syncStatus, ['synced', 'conflict'])))
       .limit(1)
 
     if (records.length === 0) {
       return null
     }
 
-    const record = records[0]!
-    const { manifest, changed } = ensureCurrentPhotoAssetManifest(record.manifest)
-    if (!manifest) {
-      return null
-    }
-
-    if (changed) {
-      await this.persistManifestUpgrades([{ id: record.id, manifest }])
-    }
-
-    return structuredClone(manifest.data)
-  }
-
-  private resolveManifestVersion(
-    records: Array<{ manifest: { version: ManifestVersion | string } | null }>,
-  ): ManifestVersion {
-    for (const record of records) {
-      const version = record.manifest?.version
-      if (typeof version === 'string' && version.length > 0) {
-        return version as ManifestVersion
-      }
-    }
-    return CURRENT_PHOTO_MANIFEST_VERSION as ManifestVersion
-  }
-
-  private ensureCurrentManifestVersion(manifest: AfilmoryManifest): AfilmoryManifest {
-    if (manifest.version === CURRENT_MANIFEST_VERSION) {
-      return manifest
-    }
-
-    try {
-      return migrateManifest(manifest, CURRENT_MANIFEST_VERSION)
-    }
-    catch (error) {
-      this.logger.warn('Manifest migration failed; returning original payload', { error })
-      return manifest
-    }
-  }
-
-  private async persistManifestUpgrades(upgrades: Array<{ id: string, manifest: PhotoAssetManifest }>): Promise<void> {
-    if (upgrades.length === 0) {
-      return
-    }
-
-    const db = this.dbAccessor.get()
-    for (const entry of upgrades) {
-      try {
-        await db
-          .update(photoAssets)
-          .set({
-            manifest: entry.manifest,
-            manifestVersion: entry.manifest.version,
-          })
-          .where(eq(photoAssets.id, entry.id))
-      }
-      catch (error) {
-        this.logger.warn('Failed to persist manifest upgrade', { photoAssetId: entry.id, error })
-      }
-    }
+    const manifest = records[0]!.manifest
+    return manifest?.data ? structuredClone(manifest.data) : null
   }
 
   private sortByDateDesc(items: PhotoManifestItem[]): PhotoManifestItem[] {

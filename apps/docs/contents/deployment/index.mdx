@@ -1,159 +1,80 @@
 ---
 title: Deployment
-description: Deploy your gallery to static hosting, SSR platforms, or Docker.
+description: Provision Cloudflare resources and deploy the Worker.
 createdAt: 2025-07-20T22:35:03+08:00
-lastModified: 2025-11-23T20:44:02+08:00
+lastModified: 2026-10-19T15:10:06+08:00
 order: 50
 ---
 
 # Deployment
 
-Afilmory supports multiple deployment options, from simple static hosting to full server-side rendering. Choose the method that best fits your needs.
+Afilmory deploys as one Cloudflare Worker with D1, R2, and KV bindings. The same Worker serves the gallery, the dashboard, and the API.
 
-**Recommendation:** For most users, deploy with our Docker image (see [Docker guide](/deployment/docker)) to get SSR-grade SEO and proper social sharing OG images. The pure SPA build cannot surface new photos until you rebuild. If you need real-time updates and a full CMS/backoffice, use the SaaS stack ([SaaS Deployment](/saas/deployment))—one install can host many tenants. Official SaaS demo: https://afilmory.art/.
-
-## Deployment Options
-
-### Static Hosting
-
-Deploy as a static site to any CDN or static host. No server required.
-
-**Best for:**
-- Simple deployments
-- Cost-effective hosting
-- Maximum performance with CDN caching
-
-**Platforms:**
-- [GitHub Pages](/deployment/github-pages)
-- [Cloudflare Pages](/deployment/cloudflare-pages)
-
-### Server-Side Rendering (SSR)
-
-Deploy the Next.js wrapper for enhanced SEO and social sharing.
-
-**Best for:**
-- Better SEO and search visibility
-- Rich social media previews
-- Dynamic meta tag generation
-
-**Platforms:**
-- [Vercel](/deployment/vercel) (recommended)
-
-### Docker
-
-Bundle everything in a container for self-hosting or cloud deployment.
-
-**Best for:**
-- Self-hosting
-- Consistent deployments
-- Full control over environment
-
-**Guide:**
-- [Docker](/deployment/docker)
-
-### Multi-tenant SaaS
-
-- See the dedicated chapter: [SaaS Mode](/saas) and [SaaS Deployment](/saas/deployment)
-
-## Deployment Workflow
-
-### 1. Build Assets
-
-Generate thumbnails and manifest:
+## 1. Create resources
 
 ```bash
-pnpm run build:manifest
+cf d1 create afilmory-db
+cf r2 bucket create afilmory-photos
+cf kv namespace create AFILMORY_CACHE
 ```
 
-### 2. Build Application
+Bindings are declared in `apps/edge/cloudflare.config.ts` (`DB`, `PHOTOS`, `CACHE`, `ASSETS`).
 
-**For static hosting:**
+## 2. Configure secrets
 
 ```bash
-pnpm --filter web build
+cf secret put CONFIG_ENCRYPTION_KEY
+cf secret put BETTER_AUTH_SECRET          # optional; falls back to CONFIG_ENCRYPTION_KEY
+cf secret put R2_ACCOUNT_ID
+cf secret put R2_ACCESS_KEY_ID
+cf secret put R2_SECRET_ACCESS_KEY
+cf secret put R2_BUCKET_NAME
+cf secret put R2_PUBLIC_BASE_URL
 ```
 
-**For SSR:**
+If the R2 S3 credentials are omitted, uploads are proxied through the Worker instead of using presigned URLs. For local development, copy `apps/edge/.dev.vars.example` to `apps/edge/.dev.vars`.
+
+## 3. Apply the D1 schema
 
 ```bash
-pnpm --filter @afilmory/ssr build
+cf d1 migrations apply afilmory-db --remote
 ```
 
-### 3. Deploy
+Migrations are generated from `be/packages/db/src/schema.ts`:
 
-Follow the platform-specific guide for your chosen deployment method.
+```bash
+pnpm -C be/packages/db db:generate
+```
 
-## What to Deploy
+## 4. Build and deploy
 
-### Static Hosting
+```bash
+pnpm build          # gallery SPA + dashboard + Worker
+pnpm deploy:edge
+```
 
-Deploy these files and directories:
+`pnpm build` builds the web and dashboard SPAs, syncs their output into `apps/edge/public`, and bundles the Worker with `cf build`.
 
-- `apps/web/dist/` - Built application
-- `apps/web/public/thumbnails/` - Thumbnails
-- `apps/web/src/data/photos-manifest.json` - Manifest
+## 5. Create the owner account
 
-### SSR
+```bash
+pnpm bootstrap:admin --email you@example.com \
+  --account-id <account-id> --database-id <database-id> --api-token <api-token>
+```
 
-Deploy the Next.js build output:
+Use `--local` to target the local D1 database created by `pnpm dev`. The script is idempotent; rerun it with `--password` to rotate the password.
 
-- `.next/` - Next.js build output
-- `public/` - Static assets
-- Server configuration (varies by platform)
+## Backups
 
-### Docker
+The Worker runs a daily cron that exports D1 into R2 under `backups/d1/`. Restore with:
 
-Use the provided Dockerfile or create your own based on the [Docker guide](/deployment/docker).
+```bash
+cf r2 object get backups/d1/<file>.json.gz --file ./backup.json.gz
+pnpm restore:d1-backup --file ./backup.json.gz --local
+```
 
-## Environment Variables
+## Next Steps
 
-Set these in your deployment platform:
-
-**Storage credentials:**
-- `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (for S3)
-- `B2_KEY_ID`, `B2_KEY` (for B2)
-- `GIT_TOKEN` (for GitHub storage)
-
-**Optional:**
-- `GIT_TOKEN`, `BUILDER_REPO_URL`, `BUILDER_REPO_BRANCH` (for repo cache)
-
-See your storage provider's documentation for required variables.
-
-## Continuous Deployment
-
-Most platforms support automatic deployments:
-
-- **GitHub Pages**: Push to `gh-pages` branch
-- **Cloudflare Pages**: Connect repository for auto-deploy
-- **Vercel**: Connect repository for auto-deploy on push
-
-Configure your platform to:
-1. Install dependencies (`pnpm install`)
-2. Run builder (`pnpm run build:manifest`)
-3. Build application (`pnpm --filter web build` or `pnpm --filter @afilmory/ssr build`)
-4. Deploy output
-
-## Custom Domains
-
-All platforms support custom domains:
-
-1. Add your domain in the platform's settings
-2. Configure DNS records as instructed
-3. SSL certificates are automatically provisioned
-
-## Troubleshooting
-
-**Build failures:**
-- Check storage credentials are set correctly
-- Verify all dependencies are installed
-- Review build logs for specific errors
-
-**Missing photos:**
-- Ensure thumbnails and manifest are included in deployment
-- Verify storage is accessible from deployment platform
-- Check file paths are correct
-
-**Performance issues:**
-- Use CDN for static assets
-- Enable caching headers
-- Optimize thumbnail sizes
+- [Architecture](/architecture) — how the Worker, D1, R2, and KV interact
+- [Storage Providers](/storage/providers) — configure the photo pipeline
+- [Builder](/builder) — bulk photo processing commands

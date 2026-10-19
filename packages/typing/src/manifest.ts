@@ -2,6 +2,8 @@ import type { PhotoManifestItem } from './photo'
 
 export type ManifestVersion = `v${number}`
 
+export const CURRENT_MANIFEST_VERSION: ManifestVersion = 'v10'
+
 export interface CameraInfo {
   make: string // e.g., "Canon", "Sony", "Fujifilm"
   model: string // e.g., "EOS R5", "α7R V", "X-T5"

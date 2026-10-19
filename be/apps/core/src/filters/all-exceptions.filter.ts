@@ -1,3 +1,4 @@
+import { env } from '@afilmory/env'
 import { BizException } from '@core/errors'
 import { toUri } from '@core/helpers/url.helper'
 import type { ArgumentsHost, ExceptionFilter } from '@tsuki-hono/common'
@@ -15,7 +16,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     this.logger.error(`--- ${ctx.req.method} ${toUri(ctx.req.url)} --->\n`, error)
 
-    if (process.env.NODE_ENV === 'development') {
+    if (env.NODE_ENV === 'development') {
       this.logger.error(error)
     }
     if (exception instanceof BizException) {

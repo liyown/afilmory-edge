@@ -1,5 +1,9 @@
-import { DEFAULT_BASE_DOMAIN } from '@afilmory/utils'
+import process from 'node:process'
+
 import { z } from 'zod'
+
+const HOSTNAME_PATTERN = /^[a-z0-9.-]+$/i
+const TRAILING_SLASHES = /\/+$/
 
 const booleanSchema = z
   .union([z.boolean(), z.string()])
@@ -19,24 +23,17 @@ const envSchema = z.object({
   HOST: z.string().trim().min(1).default('0.0.0.0'),
   PORT: z.coerce.number().int().min(1).max(65_535).default(8790),
   BASE_DOMAIN: z
-    .string()
+    .string({ error: 'AUTH_GATEWAY_BASE_DOMAIN is required.' })
     .trim()
-    .min(1)
-    .regex(/^[a-z0-9.-]+$/i, { message: 'BASE_DOMAIN must be a valid hostname.' })
-    .default(DEFAULT_BASE_DOMAIN),
+    .min(1, { message: 'AUTH_GATEWAY_BASE_DOMAIN is required.' })
+    .regex(HOSTNAME_PATTERN, { message: 'BASE_DOMAIN must be a valid hostname.' }),
   FORCE_HTTPS: booleanSchema.default(true),
   CALLBACK_BASE_PATH: z
     .string()
     .trim()
     .default('/api/auth/callback')
-    .transform((value) => value.replace(/\/+$/, '') || '/api/auth/callback'),
+    .transform(value => value.replace(TRAILING_SLASHES, '') || '/api/auth/callback'),
 
-  ROOT_SLUG: z
-    .string()
-    .trim()
-    .min(1)
-    .regex(/^[a-z0-9-]+$/i)
-    .default('root'),
   STATE_SECRET: z
     .string()
     .trim()
@@ -57,7 +54,6 @@ const parsed = envSchema.parse({
   FORCE_HTTPS: process.env.AUTH_GATEWAY_FORCE_HTTPS,
   CALLBACK_BASE_PATH: process.env.AUTH_GATEWAY_CALLBACK_BASE_PATH,
   ALLOW_CUSTOM_HOST: process.env.AUTH_GATEWAY_ALLOW_CUSTOM_HOST,
-  ROOT_SLUG: process.env.AUTH_GATEWAY_ROOT_SLUG,
   STATE_SECRET: resolvedStateSecret,
 })
 
@@ -67,7 +63,6 @@ export const gatewayConfig = {
   baseDomain: parsed.BASE_DOMAIN.toLowerCase(),
   forceHttps: Boolean(parsed.FORCE_HTTPS),
   callbackBasePath: parsed.CALLBACK_BASE_PATH,
-  rootSlug: parsed.ROOT_SLUG.toLowerCase(),
   stateSecret: parsed.STATE_SECRET,
 } as const
 

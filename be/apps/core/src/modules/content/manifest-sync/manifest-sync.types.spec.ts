@@ -45,7 +45,6 @@ describe('isPublishedSyncStatus', () => {
 describe('toPhotoChange', () => {
   it('copies payload fields onto the wire change', () => {
     const change = toPhotoChange({
-      tenantId: 'tenant-1',
       revision: 3,
       payload: {
         operation: 'upsert',
@@ -69,7 +68,6 @@ describe('toPhotoChange', () => {
     })
 
     expect(change).toMatchObject({
-      tenantId: 'tenant-1',
       revision: 3,
       operation: 'upsert',
       photoId: 'photo-1',

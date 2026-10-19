@@ -8,14 +8,12 @@ export interface SystemSettings {
   maxPhotoUploadSizeMb: number | null
   maxPhotoLibraryItems: number | null
   localProviderEnabled: boolean
-  baseDomain: string
   oauthGatewayUrl: string | null
   oauthGoogleClientId: string | null
   oauthGoogleClientSecret: string | null
   oauthGithubClientId: string | null
   oauthGithubClientSecret: string | null
   oauthAppleWebClientId: string | null
-  oauthAppleAppBundleId: string
   oauthAppleTeamId: string | null
   oauthAppleKeyId: string | null
 }
@@ -39,7 +37,7 @@ export type UpdateSystemSettingsInput = Partial<SystemSettings>
 
 export { type SystemSettingField } from './system-setting.constants'
 
-declare module '@tsuki-hono/event-emitter' {
+declare module '@core/modules/infrastructure/event/events' {
   interface Events {
     'system.setting.updated': { key: SystemSettingKey, value: unknown }
   }

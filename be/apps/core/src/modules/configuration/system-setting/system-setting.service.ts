@@ -62,14 +62,6 @@ export class SystemSettingService {
       SYSTEM_SETTING_DEFINITIONS.localProviderEnabled.defaultValue,
     )
 
-    const baseDomainRaw = this.parseSetting(
-      rawValues[SYSTEM_SETTING_DEFINITIONS.baseDomain.key],
-      SYSTEM_SETTING_DEFINITIONS.baseDomain.schema,
-      SYSTEM_SETTING_DEFINITIONS.baseDomain.defaultValue,
-    )
-
-    const baseDomain = baseDomainRaw.trim().toLowerCase()
-
     const oauthGatewayUrl = this.normalizeGatewayUrl(
       this.parseSetting(
         rawValues[SYSTEM_SETTING_DEFINITIONS.oauthGatewayUrl.key],
@@ -103,11 +95,6 @@ export class SystemSettingService {
       SYSTEM_SETTING_DEFINITIONS.oauthAppleWebClientId.schema,
       SYSTEM_SETTING_DEFINITIONS.oauthAppleWebClientId.defaultValue,
     )
-    const oauthAppleAppBundleId = this.parseSetting(
-      rawValues[SYSTEM_SETTING_DEFINITIONS.oauthAppleAppBundleId.key],
-      SYSTEM_SETTING_DEFINITIONS.oauthAppleAppBundleId.schema,
-      SYSTEM_SETTING_DEFINITIONS.oauthAppleAppBundleId.defaultValue,
-    )
     const oauthAppleTeamId = this.parseSetting(
       rawValues[SYSTEM_SETTING_DEFINITIONS.oauthAppleTeamId.key],
       SYSTEM_SETTING_DEFINITIONS.oauthAppleTeamId.schema,
@@ -124,14 +111,12 @@ export class SystemSettingService {
       maxPhotoUploadSizeMb,
       maxPhotoLibraryItems,
       localProviderEnabled,
-      baseDomain,
       oauthGatewayUrl,
       oauthGoogleClientId,
       oauthGoogleClientSecret,
       oauthGithubClientId,
       oauthGithubClientSecret,
       oauthAppleWebClientId,
-      oauthAppleAppBundleId,
       oauthAppleTeamId,
       oauthAppleKeyId,
     }
@@ -207,16 +192,6 @@ export class SystemSettingService {
       enqueueUpdate('maxPhotoLibraryItems', normalized)
     }
 
-    if (patch.baseDomain !== undefined) {
-      const sanitized = patch.baseDomain === null ? null : String(patch.baseDomain).trim().toLowerCase()
-      if (!sanitized) {
-        enqueueUpdate('baseDomain', SYSTEM_SETTING_DEFINITIONS.baseDomain.defaultValue)
-      }
-      else if (sanitized !== current.baseDomain) {
-        enqueueUpdate('baseDomain', sanitized)
-      }
-    }
-
     if (patch.oauthGatewayUrl !== undefined) {
       const sanitized = this.normalizeGatewayUrl(patch.oauthGatewayUrl)
       if (sanitized !== current.oauthGatewayUrl) {
@@ -256,13 +231,6 @@ export class SystemSettingService {
       const sanitized = normalizeNullableString(patch.oauthAppleWebClientId)
       if (sanitized !== current.oauthAppleWebClientId) {
         enqueueUpdate('oauthAppleWebClientId', sanitized)
-      }
-    }
-
-    if (patch.oauthAppleAppBundleId !== undefined) {
-      const sanitized = String(patch.oauthAppleAppBundleId).trim()
-      if (sanitized && sanitized !== current.oauthAppleAppBundleId) {
-        enqueueUpdate('oauthAppleAppBundleId', sanitized)
       }
     }
 
@@ -330,13 +298,11 @@ export class SystemSettingService {
   }
 
   async getAuthModuleConfig(): Promise<{
-    baseDomain: string
     socialProviders: SocialProvidersConfig
     oauthGatewayUrl: string | null
   }> {
     const settings = await this.getSettings()
     return {
-      baseDomain: settings.baseDomain,
       socialProviders: this.buildSocialProviders(settings),
       oauthGatewayUrl: settings.oauthGatewayUrl,
     }

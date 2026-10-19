@@ -6,7 +6,6 @@ export interface BetterAuthUser {
   name: string | null
   image: string | null
   role: BetterAuthUserRole
-  creemCustomerId?: string | null
 }
 
 export interface BetterAuthSession {
@@ -14,7 +13,6 @@ export interface BetterAuthSession {
   expiresAt: string
   token: string
   userId: string
-  activeTenantId: string | null
   createdAt: string
   updatedAt: string
 }

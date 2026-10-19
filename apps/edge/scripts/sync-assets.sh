@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 WEB_DIST="$ROOT_DIR/apps/web/dist"
 DASHBOARD_DIST="$ROOT_DIR/be/apps/dashboard/dist"
+STATIC_DIR="$ROOT_DIR/apps/edge/static"
 PUBLIC_DIR="$ROOT_DIR/apps/edge/public"
 
 for dist in "$WEB_DIST" "$DASHBOARD_DIST"; do
@@ -20,5 +21,9 @@ mkdir -p "$PUBLIC_DIR/platform"
 # The gallery SPA owns the Worker root; the dashboard is built with base /platform/.
 cp -R "$WEB_DIST"/. "$PUBLIC_DIR"/
 cp -R "$DASHBOARD_DIST"/. "$PUBLIC_DIR/platform"/
+
+# Worker-only static assets (the CJK font used by OG rendering) live outside
+# the SPA builds.
+cp -R "$STATIC_DIR"/. "$PUBLIC_DIR"/
 
 echo "Synced assets into $PUBLIC_DIR"

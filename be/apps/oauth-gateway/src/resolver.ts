@@ -1,48 +1,6 @@
 import type { GatewayConfig } from './config'
 
-export interface TargetResolutionInput {
-  tenantSlug?: string | null
-}
-
-const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i
-const HOST_PATTERN = /^[a-z0-9.-]+(?::\d{1,5})?$/i
-
-export function sanitizeTenantSlug(slug: string | null | undefined): string | null {
-  if (!slug) {
-    return null
-  }
-  const trimmed = slug.trim().toLowerCase()
-  if (!SLUG_PATTERN.test(trimmed)) {
-    return null
-  }
-  return trimmed
-}
-
-export function sanitizeExplicitHost(host: string | null | undefined): string | null {
-  if (!host) {
-    return null
-  }
-  const normalized = host.trim().toLowerCase()
-  let value = normalized
-  if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
-    try {
-      value = new URL(normalized).host
-    } catch {
-      return null
-    }
-  }
-  if (!HOST_PATTERN.test(value)) {
-    return null
-  }
-  return value
-}
-
-export function resolveTargetHost(config: GatewayConfig, input: TargetResolutionInput): string | null {
-  const slug = input.tenantSlug
-  if (slug && slug !== config.rootSlug) {
-    return `${slug}.${config.baseDomain}`
-  }
-
+export function resolveTargetHost(config: GatewayConfig): string {
   return config.baseDomain
 }
 

@@ -6,7 +6,6 @@ import { useAuthUserValue } from '~/atoms/auth'
 
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { UserMenu } from './UserMenu'
-import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 
 const navigationTabs = [
   { labelKey: 'nav.overview', path: '/' },
@@ -50,12 +49,7 @@ export function Header() {
         {/* Right side - User Menu */}
         <div className="ml-2 flex items-center gap-2 sm:ml-auto sm:gap-3 sm:border-l sm:border-fill-tertiary/50 sm:pl-4">
           <LanguageSwitcher />
-          {user && (
-            <>
-              <WorkspaceSwitcher />
-              <UserMenu user={user} />
-            </>
-          )}
+          {user && <UserMenu user={user} />}
         </div>
       </div>
     </header>

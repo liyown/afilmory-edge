@@ -1,40 +1,20 @@
-import type { BuilderConfig, PhotoManifestItem, StorageConfig } from '@afilmory/builder'
-import type { PhotoAssetConflictPayload, PhotoAssetManifest } from '@afilmory/db'
+import type { PhotoManifestItem } from '@afilmory/typing'
 import type { PhotoChange } from '@core/modules/content/manifest-sync/manifest-sync.types'
 
-export enum ConflictResolutionStrategy {
-  PREFER_STORAGE = 'prefer-storage',
-  PREFER_DATABASE = 'prefer-database',
-}
-
 export type DataSyncActionType = 'insert' | 'update' | 'delete' | 'conflict' | 'noop' | 'error'
-
-export interface SyncObjectSnapshot {
-  size: number | null
-  etag: string | null
-  lastModified: string | null
-  metadataHash: string | null
-}
-
-export type ConflictType = PhotoAssetConflictPayload['type']
-
-export interface ConflictPayload extends Omit<PhotoAssetConflictPayload, 'storageSnapshot' | 'recordSnapshot'> {
-  storageSnapshot?: SyncObjectSnapshot | null
-  recordSnapshot?: SyncObjectSnapshot | null
-}
 
 export interface DataSyncAction {
   type: DataSyncActionType
   storageKey: string
   photoId: string | null
   applied: boolean
-  resolution?: ConflictResolutionStrategy
+  resolution?: string
   reason?: string
   conflictId?: string | null
-  conflictPayload?: ConflictPayload | null
+  conflictPayload?: Record<string, unknown> | null
   snapshots?: {
-    before?: SyncObjectSnapshot | null
-    after?: SyncObjectSnapshot | null
+    before?: Record<string, unknown> | null
+    after?: Record<string, unknown> | null
   }
   manifestBefore?: PhotoManifestItem | null
   manifestAfter?: PhotoManifestItem | null
@@ -57,45 +37,6 @@ export interface DataSyncResult {
   actions: DataSyncAction[]
 }
 
-export interface DataSyncRunRecord {
-  id: string
-  dryRun: boolean
-  summary: DataSyncResultSummary
-  actionsCount: number
-  startedAt: string
-  completedAt: string
-}
-
-export interface DataSyncStatus {
-  lastRun: DataSyncRunRecord | null
-}
-
-export interface DataSyncOptions {
-  builderConfig?: BuilderConfig
-  storageConfig?: StorageConfig
-  dryRun: boolean
-}
-
-export interface DataSyncConflict {
-  id: string
-  storageKey: string
-  photoId: string | null
-  reason: string | null
-  payload: ConflictPayload | null
-  manifestVersion: string
-  manifest: PhotoAssetManifest
-  storageProvider: string
-  syncedAt: string
-  updatedAt: string
-}
-
-export interface ResolveConflictOptions {
-  strategy: ConflictResolutionStrategy
-  builderConfig?: BuilderConfig
-  storageConfig?: StorageConfig
-  dryRun?: boolean
-}
-
 export type DataSyncProgressStage = 'missing-in-db' | 'orphan-in-db' | 'metadata-conflicts' | 'status-reconciliation'
 
 export interface DataSyncStageTotals {
@@ -105,23 +46,12 @@ export interface DataSyncStageTotals {
   'status-reconciliation': number
 }
 
-export type DataSyncLogLevel = 'info' | 'success' | 'warn' | 'error'
-
-export interface DataSyncLogPayload {
-  level: DataSyncLogLevel
-  message: string
-  timestamp: string
-  stage?: DataSyncProgressStage | null
-  storageKey?: string
-  details?: Record<string, unknown> | null
-}
-
 export interface DataSyncStartEvent {
   type: 'start'
   payload: {
     summary: DataSyncResultSummary
     totals: DataSyncStageTotals
-    options: Pick<DataSyncOptions, 'dryRun'>
+    options: { dryRun: boolean }
   }
 }
 
@@ -160,17 +90,7 @@ export interface DataSyncErrorEvent {
   }
 }
 
-export interface DataSyncLogEvent {
-  type: 'log'
-  payload: DataSyncLogPayload
-}
-
 export type DataSyncProgressEvent
-  = | DataSyncStartEvent
-    | DataSyncStageEvent
-    | DataSyncActionEvent
-    | DataSyncCompleteEvent
-    | DataSyncErrorEvent
-    | DataSyncLogEvent
+  = DataSyncStartEvent | DataSyncStageEvent | DataSyncActionEvent | DataSyncCompleteEvent | DataSyncErrorEvent
 
 export type DataSyncProgressEmitter = (event: DataSyncProgressEvent) => Promise<void> | void

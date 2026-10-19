@@ -1,4 +1,4 @@
-import { RequireAuth, TenantRoles } from '@core/guards/roles.decorator'
+import { PlatformRoles, RequireAuth } from '@core/guards/roles.decorator'
 import { Body, ContextParam, Controller, Delete, Get, Param, Post, Query } from '@tsuki-hono/common'
 import type { Context } from 'hono'
 
@@ -32,7 +32,7 @@ export class CommentController {
   }
 
   @Get('/all')
-  @TenantRoles('admin')
+  @PlatformRoles('superadmin')
   async listAllComments(@Query() query: ListAllCommentsQueryDto) {
     return await this.commentService.listAllComments(query)
   }

@@ -1,13 +1,5 @@
-import { redirect } from 'react-router'
-
-import type { PhotoPageTab } from '~/modules/photos'
-
-const DEFAULT_TAB: PhotoPageTab = 'library'
+import { PhotoPage } from '~/modules/photos'
 
 export function Component() {
-  return null
-}
-
-export const loader = () => {
-  return redirect(`/photos/${DEFAULT_TAB}`)
+  return <PhotoPage />
 }

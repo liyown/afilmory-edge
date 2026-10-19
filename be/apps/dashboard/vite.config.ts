@@ -17,10 +17,8 @@ import PKG from './package.json'
 
 const ROOT = fileURLToPath(new URL('./', import.meta.url))
 
-const isSaas = process.env.SAAS === '1'
-
 export default defineConfig({
-  base: isSaas ? 'https://static.afilmory.art/platform/' : '/platform/',
+  base: '/platform/',
   plugins: [
     codeInspectorPlugin({
       bundler: 'vite',
@@ -70,7 +68,7 @@ export default defineConfig({
             const originalHost = req.headers.host
             if (originalHost) {
               const normalizedHost = Array.isArray(originalHost) ? originalHost[0] : originalHost
-              // Preserve SPA host for tenant resolution regardless of changeOrigin behaviour
+              // Preserve the original SPA host for cookie/session handling regardless of changeOrigin behaviour
               proxyReq.setHeader('host', normalizedHost)
               proxyReq.setHeader('x-forwarded-host', normalizedHost)
             }
@@ -87,10 +85,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        'main': resolve(ROOT, 'index.html'),
-        'tenant-missing': resolve(ROOT, 'tenant-missing.html'),
-        'tenant-restricted': resolve(ROOT, 'tenant-restricted.html'),
-        'tenant-suspended': resolve(ROOT, 'tenant-suspended.html'),
+        main: resolve(ROOT, 'index.html'),
       },
     },
   },

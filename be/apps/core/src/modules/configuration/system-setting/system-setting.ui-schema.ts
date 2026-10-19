@@ -41,18 +41,6 @@ export function createSystemSettingUiSchema(t: UiSchemaTFunction): UiSchema<Syst
           },
           {
             type: 'field',
-            id: 'platform-base-domain',
-            title: t('system.sections.registration.fields.base-domain.title'),
-            description: t('system.sections.registration.fields.base-domain.description'),
-            helperText: t('system.sections.registration.fields.base-domain.helper'),
-            key: 'baseDomain',
-            component: {
-              type: 'text',
-              placeholder: t('system.sections.registration.fields.base-domain.placeholder'),
-            },
-          },
-          {
-            type: 'field',
             id: 'registration-max-users',
             title: t('system.sections.registration.fields.max-users.title'),
             description: t('system.sections.registration.fields.max-users.description'),
@@ -167,17 +155,6 @@ export function createSystemSettingUiSchema(t: UiSchemaTFunction): UiSchema<Syst
                 component: {
                   type: 'text',
                   placeholder: t('system.sections.oauth.groups.apple.fields.web-client-id.placeholder'),
-                },
-              },
-              {
-                type: 'field',
-                id: 'oauth-apple-app-bundle-id',
-                title: t('system.sections.oauth.groups.apple.fields.app-bundle-id.title'),
-                description: t('system.sections.oauth.groups.apple.fields.app-bundle-id.description'),
-                key: 'oauthAppleAppBundleId',
-                component: {
-                  type: 'text',
-                  placeholder: t('system.sections.oauth.groups.apple.fields.app-bundle-id.placeholder'),
                 },
               },
               {

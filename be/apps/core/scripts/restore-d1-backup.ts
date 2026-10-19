@@ -1,4 +1,4 @@
-// T7.3: restore the gzipped JSON document produced by the daily cron backup
+// Restore the gzipped JSON document produced by the daily cron backup
 // (`apps/edge/src/cron.ts`) into a local D1 SQLite file.
 //
 // Download the object first, e.g. `cf r2 object get backups/d1/<name>.json.gz`
@@ -194,8 +194,10 @@ export function runRestoreCli(argv: readonly string[]): void {
   }
 
   const sqlite = new DatabaseSync(path)
-  const hasTenantTable = sqlite.prepare('select name from sqlite_master where type = \'table\' and name = \'tenant\'').get()
-  if (!hasTenantTable) {
+  const hasManifestState = sqlite
+    .prepare('select name from sqlite_master where type = \'table\' and name = \'manifest_state\'')
+    .get()
+  if (!hasManifestState) {
     stdout.write('Target has no schema; applying SQLite migrations first.\n')
     applySqliteMigrations(sqlite)
   }

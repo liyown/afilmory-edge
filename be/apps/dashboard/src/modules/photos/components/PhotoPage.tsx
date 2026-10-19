@@ -1,27 +1,26 @@
-import { useParams } from 'react-router'
+import { useTranslation } from 'react-i18next'
 
-import type { PhotoPageTab } from './PhotoPageTabs'
-import { PHOTO_TABS } from './PhotoPageTabs'
-import { PhotoLibraryTab } from './tabs/PhotoLibraryTab'
-import { PhotoStorageTab } from './tabs/PhotoStorageTab'
+import { MainPageLayout } from '~/components/layouts/MainPageLayout'
 
-const DEFAULT_TAB: PhotoPageTab = 'library'
-
-function isPhotoPageTab(value?: string): value is PhotoPageTab {
-  return Boolean(value && PHOTO_TABS.includes(value as PhotoPageTab))
-}
+import { PhotoLibraryProvider } from './library/photo-library'
+import { PhotoLibraryActionBar } from './library/PhotoLibraryActionBar'
+import { PhotoLibraryDropUpload } from './library/PhotoLibraryDropUpload'
+import { PhotoLibraryGrid } from './library/PhotoLibraryGrid'
 
 export function PhotoPage() {
-  const { tab } = useParams<{ tab?: string }>()
-  const activeTab = isPhotoPageTab(tab) ? (tab as PhotoPageTab) : DEFAULT_TAB
+  const { t } = useTranslation()
+  return (
+    <PhotoLibraryProvider isActive>
+      <MainPageLayout title={t('photos.page.title')} description={t('photos.page.description')}>
+        <MainPageLayout.Actions>
+          <PhotoLibraryActionBar />
+        </MainPageLayout.Actions>
 
-  switch (activeTab) {
-    case 'storage': {
-      return <PhotoStorageTab />
-    }
-    case 'library': {
-      return <PhotoLibraryTab />
-    }
-  }
-  return <PhotoLibraryTab />
+        <div className="space-y-4 sm:space-y-6">
+          <PhotoLibraryDropUpload />
+          <PhotoLibraryGrid />
+        </div>
+      </MainPageLayout>
+    </PhotoLibraryProvider>
+  )
 }

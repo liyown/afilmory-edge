@@ -2,17 +2,18 @@ import { env } from 'cloudflare:workers'
 
 import { getCoreApp } from './core-app'
 import { getDatabaseHealthApp } from './core-database'
-import { ogCacheKey, runScheduled } from './cron'
-import { runDecoratorSpike } from './decorator-spike'
+import { homepageOgCacheKey, photoOgCacheKey, runScheduled } from './cron'
 import { loadManifest, serveAppShell, servePhotoShell } from './html'
-import { renderOgImage } from './og'
+import { renderHomepageOgImage, renderPhotoOgImage } from './og'
+import { loadOgSiteConfig } from './og-site'
+import type { OgPhoto } from './og-template'
 
 const DASHBOARD_BASENAME = '/platform'
 const DASHBOARD_ALIAS = '/dashboard'
 const ASSET_EXTENSION_PATTERN = /\.[a-z0-9]+$/i
 
 /**
- * T3.3: the dashboard is a separate SPA built with `base: '/platform/'`.
+ * The dashboard is a separate SPA built with `base: '/platform/'`.
  * Existing files are served verbatim; client-side routes fall back to its
  * index.html instead of the gallery shell.
  */
@@ -24,66 +25,12 @@ async function serveDashboardAsset(request: Request): Promise<Response> {
   return await env.ASSETS.fetch(target)
 }
 
-// T0.3: prove every planned binding is reachable from the Worker in local mode.
-async function runBindingSpike() {
-  const result: Record<string, unknown> = {}
-
-  try {
-    const row = await env.DB.prepare('select 1 as ok').first()
-    result.d1 = row
-  }
-  catch (error) {
-    result.d1 = { error: error instanceof Error ? error.message : String(error) }
-  }
-
-  try {
-    const key = `spike/${Date.now()}.txt`
-    await env.PHOTOS.put(key, 'hello-r2')
-    const object = await env.PHOTOS.get(key)
-    result.r2 = { key, body: object ? await object.text() : null }
-  }
-  catch (error) {
-    result.r2 = { error: error instanceof Error ? error.message : String(error) }
-  }
-
-  try {
-    await env.CACHE.put('spike:kv', 'hello-kv', { expirationTtl: 60 })
-    result.kv = { value: await env.CACHE.get('spike:kv') }
-  }
-  catch (error) {
-    result.kv = { error: error instanceof Error ? error.message : String(error) }
-  }
-
-  return result
-}
-
-/** Dev-only helper: drop a tiny manifest into R2 so injection can be verified. */
-async function seedManifest() {
-  const manifest = {
-    version: 'v0',
-    data: [
-      {
-        id: 'spike-photo',
-        title: 'Spike photo',
-        description: 'A seeded photo used to verify SSR meta injection.',
-        thumbnailUrl: '/favicon-32x32.png',
-        tags: ['spike'],
-      },
-    ],
-    cameras: [],
-    lenses: [],
-  }
-  await env.PHOTOS.put('manifest.json', JSON.stringify(manifest))
-  await env.CACHE.delete('manifest:cache')
-  return manifest
-}
-
 function writeLog(payload: Record<string, unknown>): void {
   // eslint-disable-next-line no-console
   console.log(JSON.stringify(payload))
 }
 
-/** T7.2: structured access log for HTML/API traffic (skip bytes and assets). */
+/** Structured access log for HTML/API traffic (skip bytes and assets). */
 function shouldLogRequest(pathname: string): boolean {
   return (
     pathname === '/'
@@ -93,7 +40,6 @@ function shouldLogRequest(pathname: string): boolean {
     || pathname.startsWith('/photos/')
     || pathname.startsWith('/og/')
     || pathname.startsWith('/share/')
-    || pathname.startsWith('/.well-known/')
   )
 }
 
@@ -104,13 +50,11 @@ async function handleRequest(request: Request): Promise<Response> {
     return Response.json({
       ok: true,
       worker: 'afilmory-edge',
-      world: env.WORLD,
       ts: new Date().toISOString(),
     })
   }
 
-  // T3.3: keep the legacy `/dashboard` path working by pointing it at the
-  // dashboard's native base path.
+  // Redirect the legacy `/dashboard` path to the dashboard's native base path.
   if (url.pathname === DASHBOARD_ALIAS || url.pathname.startsWith(`${DASHBOARD_ALIAS}/`)) {
     const target = new URL(request.url)
     const suffix = url.pathname.slice(DASHBOARD_ALIAS.length)
@@ -122,69 +66,42 @@ async function handleRequest(request: Request): Promise<Response> {
     return await serveDashboardAsset(request)
   }
 
-  // T0.2 gate: proves tsyringe can resolve constructor injection inside workerd
-  // (i.e. SWC emitted design:paramtypes and reflect-metadata survived the bundle).
-  if (url.pathname === '/api/spike/decorators') {
-    return Response.json(runDecoratorSpike())
-  }
-
-  // T2.2: core DI graph running against the D1 binding.
   if (url.pathname === '/api/health') {
     const app = await getDatabaseHealthApp()
     return app.getInstance().fetch(request)
   }
 
-  // T3.1: better-auth (SQLite/D1 adapter) and the local session routes.
-  if (
-    url.pathname === '/api/auth'
-    || url.pathname.startsWith('/api/auth/')
-    || url.pathname === '/api/mobile-auth'
-    || url.pathname.startsWith('/api/mobile-auth/')
-  ) {
+  if (url.pathname === '/api/auth' || url.pathname.startsWith('/api/auth/')) {
     const app = await getCoreApp()
     return app.getInstance().fetch(request)
-  }
-
-  if (url.pathname === '/api/spike/bindings') {
-    return Response.json(await runBindingSpike())
-  }
-
-  if (url.pathname === '/api/spike/seed-manifest') {
-    return Response.json(await seedManifest())
   }
 
   if (url.pathname === '/api/manifest') {
     return Response.json(await loadManifest(env))
   }
 
-  // T3.3: the dashboard calls the same-origin core API.
   if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
     const app = await getCoreApp()
     return app.getInstance().fetch(request)
   }
 
-  // T5.2: feed, sitemap and well-known responses are generated by the core
-  // graph instead of being served from static assets.
-  // T5.3: share iframe and embed script are rendered by the same graph.
+  // Feed, sitemap, and embed responses are generated by the core graph.
   if (
     url.pathname === '/feed.xml'
     || url.pathname === '/sitemap.xml'
     || url.pathname === '/share/iframe'
     || url.pathname === '/share/embed.js'
-    || url.pathname === '/.well-known/apple-app-site-association'
-    || url.pathname === '/apple-app-site-association'
   ) {
     const app = await getCoreApp()
     return app.getInstance().fetch(request)
   }
 
-  // T1.3: HTML shell with injected manifest (only for the routes listed in
-  // `runWorkerFirst`; everything else is served as a static asset).
+  // HTML shell with injected manifest. Only paths listed in `runWorkerFirst`
+  // reach this code; everything else is served as a static asset.
   if (url.pathname === '/' || url.pathname === '/index.html') {
     return serveAppShell(request, env)
   }
 
-  // T1.4: photo detail shell with og/twitter meta.
   const photoMatch = /^\/photos\/([^/]+)\/?$/.exec(url.pathname)
   if (photoMatch) {
     return servePhotoShell(request, env, decodeURIComponent(photoMatch[1]))
@@ -205,45 +122,56 @@ async function handleRequest(request: Request): Promise<Response> {
     return new Response(object.body, { headers })
   }
 
-  // T1.5: OG image for a photo.
+  // Homepage card. Kept separate from the photo route so `/og/` is a valid
+  // canonical URL for crawlers.
+  if (url.pathname === '/og' || url.pathname === '/og/') {
+    const manifest = await loadManifest(env)
+    const photos = ((manifest.data ?? []) as OgPhoto[]).filter(photo => typeof photo?.id === 'string')
+    const cameras = Array.isArray(manifest.cameras) ? manifest.cameras.length : 0
+    const site = await loadOgSiteConfig(env)
+    return await serveOgImage(env, homepageOgCacheKey(site, photos), async () =>
+      renderHomepageOgImage(env, site, photos, cameras, url.origin))
+  }
+
   const ogMatch = /^\/og\/([^/]+)\/?$/.exec(url.pathname)
   if (ogMatch) {
     const manifest = await loadManifest(env)
     const photoId = decodeURIComponent(ogMatch[1])
-    const photo = ((manifest.data ?? []) as Array<{ id: string, title?: string, description?: string }>).find(
-      item => item.id === photoId,
-    )
+    const photo = ((manifest.data ?? []) as OgPhoto[]).find(item => item.id === photoId)
 
     if (!photo) {
       return new Response('Not Found', { status: 404 })
     }
 
-    // T7.1: serve the pre-rendered card when cron (or a previous request)
-    // produced one; otherwise render and cache it for the next visitor.
-    const cacheKey = ogCacheKey(photo)
-    const cached = await env.PHOTOS.get(cacheKey)
-    if (cached) {
-      const headers = new Headers()
-      cached.writeHttpMetadata(headers)
-      headers.set('etag', cached.httpEtag)
-      headers.set('cache-control', 'public, max-age=86400')
-      headers.set('x-og-cache', 'hit')
-      return new Response(cached.body, { headers })
-    }
-
-    const image = renderOgImage(photo)
-    const body = await image.arrayBuffer()
-    await env.PHOTOS.put(cacheKey, body, {
-      httpMetadata: { contentType: 'image/png', cacheControl: 'public, max-age=86400' },
-    })
-    return new Response(body, {
-      status: image.status,
-      headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400', 'x-og-cache': 'miss' },
-    })
+    const site = await loadOgSiteConfig(env)
+    return await serveOgImage(env, photoOgCacheKey(photo, site), async () =>
+      renderPhotoOgImage(env, photo, site, url.origin))
   }
 
-  return new Response(`Hello ${env.WORLD}!`, {
-    headers: { 'content-type': 'text/plain;charset=utf-8' },
+  return new Response('Not Found', { status: 404 })
+}
+
+/**
+ * Serve the pre-rendered card when cron (or a previous request) produced one;
+ * otherwise render and cache it for the next visitor.
+ */
+async function serveOgImage(env: Env, cacheKey: string, render: () => Promise<Uint8Array>): Promise<Response> {
+  const cached = await env.PHOTOS.get(cacheKey)
+  if (cached) {
+    const headers = new Headers()
+    cached.writeHttpMetadata(headers)
+    headers.set('etag', cached.httpEtag)
+    headers.set('cache-control', 'public, max-age=86400')
+    headers.set('x-og-cache', 'hit')
+    return new Response(cached.body, { headers })
+  }
+
+  const body = await render()
+  await env.PHOTOS.put(cacheKey, body, {
+    httpMetadata: { contentType: 'image/png', cacheControl: 'public, max-age=86400' },
+  })
+  return new Response(body, {
+    headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400', 'x-og-cache': 'miss' },
   })
 }
 
@@ -277,7 +205,6 @@ export default {
     }
   },
 
-  // T7.1: hourly maintenance and the daily D1 export (see cron.ts).
   async scheduled(controller: ScheduledController, runtimeEnv: Env): Promise<void> {
     try {
       await runScheduled(controller.cron, runtimeEnv)

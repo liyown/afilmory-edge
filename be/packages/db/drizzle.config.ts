@@ -1,20 +1,21 @@
-import 'dotenv/config'
+import process from 'node:process'
 
-import { createEnv } from '@t3-oss/env-core'
 import { defineConfig } from 'drizzle-kit'
-import z from 'zod'
 
-const env = createEnv({
-  server: {
-    DATABASE_URL: z.string(),
-  },
-  runtimeEnv: process.env,
-})
+const isD1 = process.env.D1_REMOTE === '1'
+
 export default defineConfig({
   schema: './src/schema.ts',
   out: './migrations',
-  dialect: 'postgresql',
-  dbCredentials: {
-    url: env.DATABASE_URL,
-  },
+  dialect: 'sqlite',
+  ...(isD1
+    ? {
+        driver: 'd1-http',
+        dbCredentials: {
+          accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
+          databaseId: process.env.CLOUDFLARE_DATABASE_ID!,
+          token: process.env.CLOUDFLARE_D1_TOKEN!,
+        },
+      }
+    : {}),
 })

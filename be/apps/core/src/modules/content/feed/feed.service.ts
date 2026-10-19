@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
 
 import type { FeedSiteConfig } from '@afilmory/utils'
@@ -7,15 +8,14 @@ import { SITE_SETTING_KEYS } from '@core/modules/configuration/site-setting/site
 import { ManifestService } from '@core/modules/content/manifest/manifest.service'
 import type { CacheRememberOptions } from '@core/modules/infrastructure/cache/cache.service'
 import { CacheService } from '@core/modules/infrastructure/cache/cache.service'
-import { requireTenantContext } from '@core/modules/platform/tenant/tenant.context'
+import { EventEmitterService } from '@core/modules/infrastructure/event/event-emitter.service'
 import type { OnModuleDestroy, OnModuleInit } from '@tsuki-hono/common'
 import { createLogger, HttpContext } from '@tsuki-hono/common'
-import { EventEmitterService } from '@tsuki-hono/event-emitter'
 import type { Context } from 'hono'
 import { injectable } from 'tsyringe'
 
-const CACHE_PREFIX = 'core:feed:rss'
-const CACHE_VERSION = 'v1'
+const TRAILING_SLASHES = /\/+$/
+const CACHE_KEY = 'core:feed:rss:v1'
 const CACHE_TTL_SECONDS = 300
 const CACHE_STALE_SECONDS = 120
 
@@ -51,27 +51,24 @@ export class FeedService implements OnModuleInit, OnModuleDestroy {
     this.eventEmitter.off('photo.manifest.changed', this.handleManifestChanged)
   }
 
-  private readonly handleSettingMutated = ({ tenantId, key }: { tenantId: string; key: string }) => {
+  private readonly handleSettingMutated = ({ key }: { key: string }) => {
     if (!SITE_SETTING_KEY_SET.has(key)) {
       return
     }
-    void this.invalidateCacheForTenant(tenantId, 'site-setting-updated')
+    void this.invalidateCache('site-setting-updated')
   }
 
-  private readonly handleManifestChanged = ({ tenantId }: { tenantId: string }) => {
-    void this.invalidateCacheForTenant(tenantId, 'photo-manifest-changed')
+  private readonly handleManifestChanged = () => {
+    void this.invalidateCache('photo-manifest-changed')
   }
 
   async getFeedDocument(): Promise<FeedDocument> {
-    const tenant = requireTenantContext()
-    const cacheKey = this.createCacheKey(tenant.tenant.id)
-
     const options: CacheRememberOptions<FeedDocument> = {
       ttlSeconds: CACHE_TTL_SECONDS,
-      skipCacheWhen: (value) => !value || value.xml.length === 0,
+      skipCacheWhen: value => !value || value.xml.length === 0,
     }
 
-    return await this.cacheService.rememberJson(cacheKey, async () => await this.buildFeedDocument(), options)
+    return await this.cacheService.rememberJson(CACHE_KEY, async () => await this.buildFeedDocument(), options)
   }
 
   createOkResponse(document: FeedDocument): Response {
@@ -92,17 +89,9 @@ export class FeedService implements OnModuleInit, OnModuleDestroy {
     })
   }
 
-  private createCacheKey(tenantId: string): string {
-    return `${CACHE_PREFIX}:${CACHE_VERSION}:${tenantId}`
-  }
-
-  private async invalidateCacheForTenant(tenantId: string, reason: string): Promise<void> {
-    if (!tenantId) {
-      return
-    }
-    const cacheKey = this.createCacheKey(tenantId)
-    await this.cacheService.delete(cacheKey)
-    logger.debug('Invalidated feed cache for tenant', { tenantId, reason, cacheKey })
+  private async invalidateCache(reason: string): Promise<void> {
+    await this.cacheService.delete(CACHE_KEY)
+    logger.debug('Invalidated feed cache', { reason })
   }
 
   private async buildFeedDocument(): Promise<FeedDocument> {
@@ -198,7 +187,8 @@ export class FeedService implements OnModuleInit, OnModuleDestroy {
   private getHttpContext(): Context | null {
     try {
       return (HttpContext.getValue('hono') as Context | undefined) ?? null
-    } catch {
+    }
+    catch {
       return null
     }
   }
@@ -216,7 +206,8 @@ export class FeedService implements OnModuleInit, OnModuleDestroy {
     try {
       const url = new URL(context.req.url)
       return `${url.protocol}//${url.host}`
-    } catch {
+    }
+    catch {
       return null
     }
   }
@@ -225,6 +216,6 @@ export class FeedService implements OnModuleInit, OnModuleDestroy {
     if (!host) {
       return null
     }
-    return host.trim().replace(/\/+$/, '') || null
+    return host.trim().replace(TRAILING_SLASHES, '') || null
   }
 }

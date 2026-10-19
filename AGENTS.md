@@ -13,7 +13,7 @@ This repo already has detailed `AGENTS.md` files. Read the one closest to the co
 - `be/apps/core/AGENTS.md` — backend core service architecture.
 - `DEVELOPMENT.md` — self-host quick start and config field reference (`builder.config.ts`, `config.json`).
 - `.cursor/rules/*.mdc` — code quality, color (Apple UIKit Tailwind classes), i18n, project description.
-- `docs/superpowers/specs/*.md` — dated design specs (`YYYY-MM-DD-<topic>-design.md`) for most non-trivial features; `docs/superpowers/plans/` holds their execution plans. Check for an existing spec before redesigning something.
+- `docs/superpowers/specs/*.md` — dated design specs (`YYYY-MM-DD-<topic>-design.md`) for most non-trivial features. Check for an existing spec before redesigning something.
 
 When those files contradict anything below, prefer them (except where flagged stale above).
 
@@ -24,10 +24,7 @@ When those files contradict anything below, prefer them (except where flagged st
 pnpm dev                          # Cloudflare Worker (edge) + SPA on :5173
 pnpm --filter web dev             # SPA only
 pnpm dev:edge                     # Cloudflare Worker only
-pnpm dev:be                       # Backend (be/apps/core) via nodemon
 pnpm --filter @afilmory/dashboard dev  # Admin dashboard
-pnpm dev:mobile                   # Build + run the native iOS app (Local variant) in Simulator
-pnpm site:dev                     # Astro marketing site (127.0.0.1:4325)
 pnpm docs:dev                     # Docs site
 
 # Build
@@ -47,11 +44,6 @@ pnpm lint                         # eslint --fix (append paths to scope it: `pnp
 pnpm format                       # prettier (apps, packages, be)
 pnpm type-check                   # recursive `pnpm -r type-check`
 pnpm --filter web type-check      # type-check just the SPA
-
-# Local infra
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
-# docker-compose.yml owns postgres/redis; docker-compose.dev.yml adds only rustfs (S3) on :9300/:9301.
-# Never redefine `db`/`redis` in the dev file — same project name silently recreates them on different volumes.
 ```
 
 ### Tests
@@ -60,8 +52,8 @@ There is no repo-wide test runner; tests are per-package and use two different h
 
 ```bash
 pnpm --filter @afilmory/be test                    # recursive across be/*
-pnpm --filter @afilmory/task-queue test            # vitest run --coverage
-pnpm --filter core exec vitest run <file>          # be/apps/core has vitest.config.ts but no `test` script
+pnpm --filter core test                            # be/apps/core vitest suite (node:sqlite harness)
+pnpm --filter @afilmory/oauth-gateway test         # oauth-gateway vitest suite
 pnpm --filter @afilmory/viewer-motion test         # node:test via `tsx --test src/*.test.ts`
 pnpm exec tsx --test apps/web/src/modules/viewer/entry-animation-state.test.ts  # web's node:test files
 ```
@@ -69,7 +61,7 @@ pnpm exec tsx --test apps/web/src/modules/viewer/entry-animation-state.test.ts  
 Single vitest test: `pnpm --filter core exec vitest run src/guards/auth.guard.spec.ts -t "test name"`.
 For everything else, verify via `pnpm build`, `pnpm type-check`, `pnpm lint`, and (for image processing) `pnpm build:manifest`.
 
-Package manager is **pnpm 11** (`packageManager` pin in root `package.json`). Workspace globs in `pnpm-workspace.yaml`: `apps/**/*`, `packages/*`, `packages/*/*`, `be`, `be/packages/*`, `be/apps/*`. Pinned versions live in the pnpm `catalog:` (`tailwindcss`, `typescript`, `zod`, `motion`, …) — prefer `catalog:` over a literal version when adding a shared dep.
+Package manager is **pnpm 12** (`packageManager` pin in root `package.json`). Workspace globs in `pnpm-workspace.yaml`: `apps/**/*`, `packages/*`, `packages/*/*`, `be`, `be/packages/*`, `be/apps/*`. Pinned versions live in the pnpm `catalog:` (`tailwindcss`, `typescript`, `zod`, `motion`, …) — prefer `catalog:` over a literal version when adding a shared dep.
 
 ## Architecture (Big Picture)
 
@@ -83,31 +75,24 @@ Afilmory is a photo gallery composed of several deployable layers plus a builder
 └────────────────────────────────┬─────────────────────────────────────┘
                                  │
                 writes apps/web/src/data/photos-manifest.json
-                                 │
+                                 │ (standalone builds / demo data)
 ┌────────────────────────────────▼─────────────────────────────────────┐
 │  apps/web (Vite + React 19 SPA)                                      │
 │    PhotoLoader reads window.__MANIFEST__ (data, cameras, lenses)     │
 │    Standalone fallback: bundled manifest JSON                        │
 └────────────────────────────────▲─────────────────────────────────────┘
                                  │ injects __MANIFEST__
-        ┌────────────────────────┼─────────────────────────┐
-        │                                                  │
-┌───────┴───────────────┐                       ┌──────────┴──────────┐
-│ apps/edge (Worker)    │                       │ be/apps/core (Hono) │
-│ D1 + R2 bindings      │                       │ DB-backed manifest  │
-│ + OG / SEO / cron     │                       │ + dashboard / API   │
-└───────────────────────┘                       └──────────┬──────────┘
-                                                           │ REST + SSE
-                                                ┌──────────┴──────────┐
-                                                │ apps/mobile (Swift) │
-                                                │ native iOS client   │
-                                                └─────────────────────┘
+┌────────────────────────────────┴─────────────────────────────────────┐
+│  apps/edge (Cloudflare Worker)                                       │
+│    be/apps/core API graph + dashboard API                            │
+│    D1 · R2 · KV · OG/SEO · cron · static assets                      │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 Key implications when changing things:
 
-- **`apps/web` is the only web UI codebase.** It must work in *both* the static/SSR flow and the full backend flow. Don't assume a backend is present — feature-detect on `window.__MANIFEST__` shape.
-- **The SPA has two build modes**, switched by env, not by config file: `BUILD_FOR_SERVER_SERVE=1` moves the Vite `base` to `/static/web/` and drops the static-web plugins; `AFILMORY_EMBED_MANIFEST=false` stops inlining the manifest so the server can inject it. `be/apps/core` sets both when it builds the SPA it serves (see `static-web.service.ts`).
+- **`apps/web` is the only web UI codebase.** It must work in *both* the standalone static build and the Worker-served flow. Don't assume an API is present in the static build — feature-detect on `window.__MANIFEST__` shape.
+- **The Worker build owns the production SPAs.** `apps/edge` builds `apps/web` (base `/`) and `be/apps/dashboard` (base `/platform/`), then syncs both into `apps/edge/public`. `apps/edge/src/html.ts` rewrites `window.__MANIFEST__` per request from D1/KV, so the web build's embedded manifest is only a placeholder.
 - **`packages/data`** owns `PhotoLoader` (the singleton that wraps the manifest into lookup maps). Anything photo-related goes through it. Shared types live in `packages/typing`.
 - **`packages/builder`** is the only place that talks to storage providers (S3/B2/GitHub/Eagle/local). It is configured by `builder.config.ts` (infrastructure) which is separate from `site.config.ts` + `config.json` (presentation/branding).
 - **`be/`** uses a NestJS-inspired Hono framework (`@tsuki-hono/core`): `@Module`, `@Controller`, `@Get/@Post/...`, `@injectable()`, request context via `AsyncLocalStorage`. Don't reach for raw Hono primitives in feature code — use the framework decorators (see `be/AGENTS.md`).
@@ -120,13 +105,11 @@ Key implications when changing things:
 | --- | --- |
 | `apps/web` | Vite + React 19 SPA — the gallery UI (the only web UI codebase) |
 | `apps/edge` | Cloudflare Worker: serves SPA/dashboard, injects manifest, dynamic OG/SEO, cron (backup/cleanup) |
-| `apps/mobile` | Native Swift/UIKit iOS app (see below) |
-| `apps/site` | Astro marketing/landing site |
 | `apps/docs` | Vite-based documentation site |
-| `be/apps/core` | Hono backend: DB-backed manifest, REST API, serves SPA |
-| `be/apps/dashboard` | Admin SPA for the backend |
+| `be/apps/core` | Hono API graph: DB-backed manifest, REST API, auth, uploads |
+| `be/apps/dashboard` | Admin SPA (served by the Worker under `/platform/`) |
 | `be/apps/oauth-gateway` | Standalone OAuth broker (own Dockerfile) |
-| `be/packages/{db,redis,task-queue,utils,env}` | Drizzle schema/migrations, Redis client, job queue, shared backend utils, env validation |
+| `be/packages/{db,env,utils}` | Drizzle D1 schema/migrations, Worker env validation, shared backend utils |
 | `packages/builder` | Photo pipeline CLI (the only storage-provider consumer) |
 | `packages/data` | `PhotoLoader` singleton + bundled manifest |
 | `packages/typing` | Shared photo/manifest types |
@@ -136,19 +119,6 @@ Key implications when changing things:
 | `packages/sdk` | `@afilmory/sdk` — public SDK + share embed script |
 | `packages/{ui,hooks,utils}` | Shared UI elements, React hooks, utilities |
 
-## Mobile App (`apps/mobile`)
-
-**Read `apps/mobile/CLAUDE.md` before touching mobile code** — it covers the architecture in depth. The essentials:
-
-- **iOS only, forever.** Never spend effort on Android compatibility, fallbacks, or testing.
-- **It is a pure native Swift/UIKit app.** Expo / React Native was deleted in `66fae030`; there is no Metro, no JS runtime, no CocoaPods, and no npm dependencies. `package.json` only wraps XcodeGen and xcodebuild.
-- **`project.yml` (XcodeGen) is the source of truth**; `Afilmory.xcodeproj` is generated output that is nonetheless committed. Source roots are filesystem-synchronized folders (Xcode 16 buildable folders), so adding/deleting `.swift` files needs no regeneration — run `pnpm --filter @afilmory/mobile native:generate` only when `project.yml` changes. Never edit the project through the Xcode UI.
-- **iOS 18 deployment target**, Swift 6. Post-18 APIs need an availability guard and an iOS 18 fallback — Liquid Glass goes through `Afilmory/DesignSystem/AdaptiveGlass.swift`.
-- **Two variants from one source tree**: `Afilmory Local` (`app.afilmory.local`, `localhost:1841`, no entitlements) and `Afilmory` (production). Capability differences are gated centrally in `AfilmoryBuildConfiguration`.
-- **Run/build/test**: `pnpm --filter @afilmory/mobile ios:local` / `ios:production` / `native:test`. TestFlight goes through `.github/workflows/mobile-testflight.yml`; see `apps/mobile/RELEASE.md`.
-- **Simulator automation**: use `axe` (`brew install cameroncooke/axe/axe`) for tap/swipe HID injection + `xcrun simctl io <udid> screenshot`; never control the user's mouse (cliclick/AppleScript). Run the memory guard during Simulator verification — see `apps/mobile/AGENTS.md`.
-- **UIGlassEffect gotcha**: `isInteractive = true` swallows touches meant for buttons hosted in the effect view's `contentView` — keep it off for tappable glass controls; floating control clusters need `UIGlassContainerEffect` hosting per-element `UIGlassEffect` views to get real refraction and merge behavior.
-
 ## Project Conventions That Matter
 
 - **No feature flags or backwards-compat shims.** App is unreleased — change code in place. (Stated explicitly at the bottom of root `AGENTS.md`.)
@@ -157,7 +127,6 @@ Key implications when changing things:
 - **Push state down**, not up. Feature-local stores/providers; switching tabs should unmount unused logic.
 - **Tailwind colors must use the Apple UIKit palette** (`text-text-secondary`, `bg-fill`, `bg-material-thick`, `border-accent/20`, …). Full rules in root `DESIGN.md` §2; `.cursor/rules/color.mdc` has the token list. No raw hex or `gray-*`/`zinc-*` ramps for chrome; `color-mix()` in an inline style is only for multi-stop gradients and layered shadows.
 - **i18n: flat keys with `.` separators**, no nested objects. Two namespaces under `locales/`: `app/` (SPA) with `en, zh-CN, zh-HK, zh-TW, jp, ko`, and `dashboard/` (en + zh-CN only). Edit `en.json` of the relevant namespace first; ESLint auto-strips keys missing from English in other locales. **Never let a key be both a leaf string and a parent path** (`a.b` cannot coexist with `a.b.c`); the build flattens dots into nested objects and will collide. Use `_one`/`_other` for plurals.
-- **The iOS app does not use `locales/`.** It localizes natively through String Catalogs — `apps/mobile/Afilmory/Resources/Localizable.xcstrings` (keys are the English source text, auto-extracted from `String(localized:)` / `Text(_:)` at build time), `ExifValues.xcstrings` (dotted keys for EXIF values looked up dynamically), and `apps/mobile/targets/share/Localizable.xcstrings` for the share extension.
 - **No bare global `location`** — an ESLint `no-restricted-globals` rule forbids it (the router instance differs between Electron and browser). Use `useLocation()` or `getReadonlyRoute()`.
 - **Decorators are enabled** (`emitDecoratorMetadata`, `experimentalDecorators`) for the backend framework.
 - **`motion` / `motion-dom` are pinned** via pnpm `overrides` (currently `12.38.0`) — don't bump them casually. Same for the security-driven `overrides` on `hono`, `vite`, `esbuild`, `qs`, etc.
@@ -167,6 +136,6 @@ Key implications when changing things:
 Two configs, two purposes — don't conflate them:
 
 - `builder.config.ts` (+ `builder.config.default.ts` template) → **infrastructure**: storage provider, concurrency, worker/cluster mode, repo sync plugin. Consumed only by `packages/builder`.
-- `site.config.ts` + `config.json` → **presentation**: name, description, author, social, accent color, map provider/style/projection, feed, beian. Consumed by SPA, SSR, and backend for consistent branding.
+- `site.config.ts` + `config.json` → **presentation**: name, description, author, social, accent color, map provider/style/projection, feed, beian. Consumed by the gallery SPA and dashboard for consistent branding.
 
-Environment variables flow through `env.ts` (root — S3 + `PG_CONNECTION_STRING` + `GIT_TOKEN`) and `@afilmory/env` (backend) — both validate via Zod / `@t3-oss/env-core`.
+Environment variables flow through `env.ts` (root — S3 + `GIT_TOKEN` for the builder CLI) and `@afilmory/env` (Worker bindings and secrets) — both validate via Zod / `@t3-oss/env-core`.

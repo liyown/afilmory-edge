@@ -1,3 +1,5 @@
+import type { Buffer } from 'node:buffer'
+
 // 扫描进度接口
 export interface ScanProgress {
   currentPath: string
@@ -42,7 +44,6 @@ export interface StorageProvider {
   /**
    * 从存储中获取文件
    * @param key 文件的键值/路径
-   * @param logger 可选的日志记录器
    * @returns 文件的 Buffer 数据，如果不存在则返回 null
    */
   getFile: (key: string) => Promise<Buffer | null>
@@ -194,28 +195,28 @@ export type LocalConfig = {
   maxFileLimit?: number // 最大文件数量限制
 }
 
-export type EagleRule =
+export type EagleRule
+  = | {
+    type: 'tag'
+    name: string
+  }
   | {
-      type: 'tag'
-      name: string
-    }
+    type: 'folder'
+    /**
+     * Only a folder name, not the full path.
+     */
+    name: string
+    /**
+     * Defaults to `false`.
+     */
+    includeSubfolder?: boolean
+  }
   | {
-      type: 'folder'
-      /**
-       * Only a folder name, not the full path.
-       */
-      name: string
-      /**
-       * Defaults to `false`.
-       */
-      includeSubfolder?: boolean
-    }
-  | {
-      /**
-       * Smart folders are not yet supported.
-       */
-      type: 'smartFolder'
-    }
+    /**
+     * Smart folders are not yet supported.
+     */
+    type: 'smartFolder'
+  }
 
 export type EagleConfig = {
   provider: 'eagle'
@@ -275,14 +276,6 @@ export const LOCAL_STORAGE_PROVIDERS: readonly LocalStorageProviderName[] = ['ea
 export type RemoteStorageConfig = S3CompatibleConfig | B2Config | GitHubConfig
 export type LocalStorageConfig = EagleConfig | LocalConfig
 
-export type ManagedStorageConfig = {
-  provider: 'managed'
-  tenantId: string
-  providerKey?: string | null
-  basePrefix?: string | null
-  upstream: RemoteStorageConfig
-}
-
-export type StorageConfig = RemoteStorageConfig | LocalStorageConfig | ManagedStorageConfig | CustomStorageConfig
+export type StorageConfig = RemoteStorageConfig | LocalStorageConfig | CustomStorageConfig
 
 export type StorageProviderCategory = 'remote' | 'local'

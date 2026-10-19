@@ -1,9 +1,6 @@
 import { BizException, ErrorCode } from '@core/errors'
-import { TenantRoles } from '@core/guards/roles.decorator'
+import { PlatformRoles } from '@core/guards/roles.decorator'
 import { BypassResponseTransform } from '@core/interceptors/response-transform.decorator'
-import type { DataSyncProgressEvent } from '@core/modules/infrastructure/data-sync/data-sync.types'
-import { createProgressSseResponse } from '@core/modules/shared/http/sse'
-import { describeStreamError } from '@core/modules/shared/http/sse-error'
 import { Body, ContextParam, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@tsuki-hono/common'
 import type { Context } from 'hono'
 
@@ -25,7 +22,7 @@ interface UploadCompleteBody extends UploadCompleteInput {
 }
 
 @Controller('photos')
-@TenantRoles('admin')
+@PlatformRoles('superadmin')
 export class PersonalPhotoController {
   constructor(private readonly photos: PersonalPhotoService) {}
 
@@ -38,24 +35,6 @@ export class PersonalPhotoController {
   @Get('assets/summary')
   async getSummary() {
     return await this.photos.getSummary()
-  }
-
-  // Compatibility channel for the iOS app, which still uploads a whole asset
-  // per multipart request and expects an SSE progress stream.
-  @Post('assets/upload')
-  @BypassResponseTransform()
-  async uploadAssets(@ContextParam() context: Context): Promise<Response> {
-    return createProgressSseResponse<DataSyncProgressEvent>({
-      context,
-      handler: async ({ sendEvent, abortSignal }) => {
-        try {
-          await this.photos.uploadMultipart(context.req.raw, { progress: sendEvent, abortSignal })
-        }
-        catch (error) {
-          await sendEvent({ type: 'error', payload: describeStreamError(error) })
-        }
-      },
-    })
   }
 
   @Post('upload-intent')

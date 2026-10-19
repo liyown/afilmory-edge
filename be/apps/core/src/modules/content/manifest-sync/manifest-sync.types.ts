@@ -1,16 +1,15 @@
 import type { ManifestChangeOperation, ManifestChangePayload } from '@afilmory/db'
 import type { PhotoManifestItem } from '@afilmory/typing'
 
-declare module '@tsuki-hono/event-emitter' {
+declare module '@core/modules/infrastructure/event/events' {
   interface Events {
-    'photo.manifest.changed': { tenantId: string, revision?: number }
+    'photo.manifest.changed': { revision?: number }
   }
 }
 
 export type PhotoChangeAsset = NonNullable<ManifestChangePayload['asset']>
 
 export interface PhotoChange {
-  tenantId: string
   revision: number
   operation: ManifestChangeOperation
   photoId: string
@@ -71,13 +70,8 @@ export function isPublishedSyncStatus(status: string): boolean {
   return status === 'synced' || status === 'conflict'
 }
 
-export function toPhotoChange(input: {
-  tenantId: string
-  revision: number
-  payload: ManifestChangePayload
-}): PhotoChange {
+export function toPhotoChange(input: { revision: number, payload: ManifestChangePayload }): PhotoChange {
   return {
-    tenantId: input.tenantId,
     revision: input.revision,
     operation: input.payload.operation,
     photoId: input.payload.photoId,

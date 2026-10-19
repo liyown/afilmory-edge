@@ -1,6 +1,6 @@
 import { systemSettings } from '@afilmory/db'
 import { DbAccessor } from '@core/database/database.provider'
-import { EventEmitterService } from '@tsuki-hono/event-emitter'
+import { EventEmitterService } from '@core/modules/infrastructure/event/event-emitter.service'
 import { eq, inArray } from 'drizzle-orm'
 import { injectable } from 'tsyringe'
 
@@ -35,7 +35,7 @@ export class SystemSettingStore {
     const db = this.dbAccessor.get()
     const records = await db.select().from(systemSettings).where(inArray(systemSettings.key, uniqueKeys))
 
-    const map = new Map<SystemSettingStoreKey, SystemSettingRecord>(records.map((record) => [record.key, record]))
+    const map = new Map<SystemSettingStoreKey, SystemSettingRecord>(records.map(record => [record.key, record]))
     return uniqueKeys.reduce(
       (acc, key) => {
         acc[key] = map.get(key)?.value ?? null

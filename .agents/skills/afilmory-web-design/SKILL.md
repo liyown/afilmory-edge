@@ -7,8 +7,7 @@ description: >
   on choosing colors, backdrop blur, border radius, shadows, z-index, spacing,
   or transitions; on adding an icon; and on any request to "make it look right",
   match the glass aesthetic, or audit UI against the design system. Does NOT
-  apply to be/apps/dashboard (separate admin system), apps/mobile (native
-  Swift), or apps/site (Astro marketing).
+  apply to be/apps/dashboard (separate admin system).
 ---
 
 # Afilmory Web Design System

@@ -3,7 +3,6 @@ import { env } from '@afilmory/env'
 import { DrizzleProvider } from '@core/database/database.provider'
 import { BizException } from '@core/errors'
 import { SystemSettingService } from '@core/modules/configuration/system-setting/system-setting.service'
-import { AppleAuthorizationService } from '@core/modules/platform/auth/apple-authorization.service'
 import type { OnModuleInit } from '@tsuki-hono/common'
 import { createLogger, HttpContext } from '@tsuki-hono/common'
 import type { BetterAuthOptions } from 'better-auth'
@@ -15,32 +14,19 @@ import { eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { injectable } from 'tsyringe'
 
-import { extractTenantSlugFromHost } from '../tenant/tenant-host.utils'
 import { AppleClientSecretService } from './apple-client-secret.service'
 import type { AuthModuleOptions, SocialProviderOptions, SocialProvidersConfig } from './auth.config'
 import { AuthConfig } from './auth.config'
 import { AUTH_ACCOUNT_POLICY } from './auth-account.policy'
 import { AUTH_ADMIN_PLUGIN_OPTIONS } from './auth-admin.policy'
 import { AUTH_COOKIE_POLICY } from './auth-cookie.policy'
-import { nativeOAuthSessionBridge } from './native-oauth.plugin'
-import { WorkspaceMembershipService } from './workspace-membership.service'
 
 type BetterAuthBaseInstance = ReturnType<typeof betterAuth>
 
-export type BetterAuthInstance = BetterAuthBaseInstance & {
-  api: BetterAuthBaseInstance['api'] & {
-    generateOneTimeToken: (input: { headers: Headers }) => Promise<{ token: string }>
-  }
-}
+export type BetterAuthInstance = BetterAuthBaseInstance
 
 const logger = createLogger('Auth')
 const TRAILING_SLASHES_PATTERN = /\/+$/
-const MOBILE_USER_AGENT_PATTERN = /Afilmory|Expo|CFNetwork/i
-
-// The reserved `api` slug never resolves to a tenant, which makes its host the
-// natural home for the mobile login broker: OAuth completes there and the
-// provider identity is matched globally without requiring a workspace.
-export const MOBILE_AUTH_BROKER_SLUG = 'api'
 
 @injectable()
 export class AuthProvider implements OnModuleInit {
@@ -48,56 +34,11 @@ export class AuthProvider implements OnModuleInit {
     private readonly config: AuthConfig,
     private readonly drizzleProvider: DrizzleProvider,
     private readonly systemSettings: SystemSettingService,
-    private readonly memberships: WorkspaceMembershipService,
-    private readonly appleAuthorizations: AppleAuthorizationService,
     private readonly appleClientSecrets: AppleClientSecretService,
   ) {}
 
   async onModuleInit(): Promise<void> {
     await this.config.getOptions()
-  }
-
-  private resolveTenantIdFromContext(): string | null {
-    try {
-      const tenantContext = HttpContext.getValue('tenant') as { tenant?: { id?: string | null } } | undefined
-      const tenantId = tenantContext?.tenant?.id
-      return tenantId ?? null
-    }
-    catch {
-      return null
-    }
-  }
-
-  private resolveTenantSlugFromContext(): string | null {
-    try {
-      const tenantContext = HttpContext.getValue('tenant')
-      const slug = tenantContext?.requestedSlug ?? tenantContext?.tenant?.slug
-      return slug ? slug.toLowerCase() : null
-    }
-    catch {
-      return null
-    }
-  }
-
-  private resolveRequestEndpoint(): { host: string | null, protocol: string | null } {
-    try {
-      const hono = HttpContext.getValue('hono') as Context | undefined
-      if (!hono) {
-        return { host: null, protocol: null }
-      }
-
-      const forwardedHost = hono.req.header('x-forwarded-host')
-      const forwardedProto = hono.req.header('x-forwarded-proto')
-      const hostHeader = hono.req.header('host')
-
-      return {
-        host: (forwardedHost ?? hostHeader ?? '').trim() || null,
-        protocol: (forwardedProto ?? '').trim() || null,
-      }
-    }
-    catch {
-      return { host: null, protocol: null }
-    }
   }
 
   private async buildBetterAuthProvidersForHost(
@@ -120,19 +61,10 @@ export class AuthProvider implements OnModuleInit {
     }, {})
 
     if (apple) {
-      const redirectUri = apple.webEnabled ? this.buildRedirectUri('apple', oauthGatewayUrl) : null
+      const redirectUri = this.buildRedirectUri('apple', oauthGatewayUrl)
       result.apple = {
-        appBundleIdentifier: apple.appBundleIdentifier,
-        audience: [apple.clientId, apple.appBundleIdentifier],
         clientId: apple.clientId,
         clientSecret: await this.appleClientSecrets.generate(apple),
-        mapProfileToUser: async (profile: { email?: string, name?: string, sub: string }) => {
-          const existing = await this.appleAuthorizations.resolveExistingProfile(profile.sub)
-          return {
-            email: profile.email || existing?.email,
-            name: profile.name || existing?.name || 'Apple User',
-          }
-        },
         ...(redirectUri ? { redirectURI: redirectUri } : {}),
       }
     }
@@ -170,40 +102,19 @@ export class AuthProvider implements OnModuleInit {
     }
   }
 
-  private async buildTrustedOrigins(): Promise<string[]> {
-    const mobileOrigins = ['afilmory://', 'https://appleid.apple.com']
-
+  private buildTrustedOrigins(): string[] {
     if (env.NODE_ENV !== 'production') {
-      return [
-        'http://*.localhost:*',
-        'https://*.localhost:*',
-        'http://localhost:*',
-        'https://localhost:*',
-        'afilmory-local://',
-        ...mobileOrigins,
-      ]
+      return ['http://localhost:*', 'https://localhost:*']
     }
 
-    const settings = await this.systemSettings.getSettings()
-    const origins = [
-      `https://*.${settings.baseDomain}`,
-      `http://*.${settings.baseDomain}`,
-      `https://${settings.baseDomain}`,
-      `http://${settings.baseDomain}`,
-      ...mobileOrigins,
-    ]
-
-    // A personal deployment can be reached through the workers.dev host or a
-    // custom domain that is not derived from `baseDomain`.
+    // The personal deployment is reachable through a workers.dev host or a
+    // custom domain, so trust the request origin rather than a configured
+    // wildcard.
     const requestOrigin = this.resolveRequestOrigin()
-    return requestOrigin ? [...new Set([requestOrigin, ...origins])] : origins
+    return requestOrigin ? [requestOrigin] : []
   }
 
-  private async createAuthForEndpoint(
-    _tenantSlug: string | null,
-    options: AuthModuleOptions,
-    explicitTenantId?: string | null,
-  ): Promise<BetterAuthInstance> {
+  private async createAuth(options: AuthModuleOptions): Promise<BetterAuthInstance> {
     const db = this.drizzleProvider.getDb()
     const socialProviders = await this.buildBetterAuthProvidersForHost(
       options.socialProviders,
@@ -211,10 +122,9 @@ export class AuthProvider implements OnModuleInit {
       options.apple,
     )
 
-    const requestedTenantId = explicitTenantId ?? this.resolveTenantIdFromContext()
     const auth = betterAuth({
       database: drizzleAdapter(db, {
-        provider: env.PERSONAL_DEPLOYMENT ? 'sqlite' : 'pg',
+        provider: 'sqlite',
         schema: {
           user: authUsers,
           session: authSessions,
@@ -228,16 +138,12 @@ export class AuthProvider implements OnModuleInit {
       emailAndPassword: {
         enabled: true,
         requireEmailVerification: false,
-        // Defence in depth: the custom route returns a 403 first, but Better
-        // Auth's own `/sign-up/email` must not create users either.
-        disableSignUp: env.PERSONAL_DEPLOYMENT,
+        // The administrator is created explicitly with `bootstrap:admin`.
+        disableSignUp: true,
       },
-      trustedOrigins: await this.buildTrustedOrigins(),
+      trustedOrigins: this.buildTrustedOrigins(),
       session: {
         freshAge: 0,
-        additionalFields: {
-          activeTenantId: { type: 'string', input: false },
-        },
       },
       account: AUTH_ACCOUNT_POLICY,
 
@@ -272,23 +178,13 @@ export class AuthProvider implements OnModuleInit {
               if (user?.deletionRequestedAt) {
                 throw new APIError('FORBIDDEN', { message: 'This account is being deleted.' })
               }
-              const activeTenantId = await this.memberships.resolveInitialActiveTenantId(
-                session.userId,
-                requestedTenantId,
-              )
-              return {
-                data: {
-                  ...session,
-                  activeTenantId,
-                },
-              }
+              return { data: session }
             },
             after: async (session) => {
               const occurredAt = new Date().toISOString()
-              const surface = MOBILE_USER_AGENT_PATTERN.test(session.userAgent ?? '') ? 'mobile' : 'web'
               await db
                 .update(authUsers)
-                .set({ lastSignedInAt: occurredAt, lastActiveAt: occurredAt, lastActiveSurface: surface })
+                .set({ lastSignedInAt: occurredAt, lastActiveAt: occurredAt })
                 .where(eq(authUsers.id, session.userId))
             },
           },
@@ -300,7 +196,7 @@ export class AuthProvider implements OnModuleInit {
           generateId: () => generateId(),
         },
       },
-      plugins: [nativeOAuthSessionBridge(), admin(AUTH_ADMIN_PLUGIN_OPTIONS)],
+      plugins: [admin(AUTH_ADMIN_PLUGIN_OPTIONS)],
       hooks: {
         before: createAuthMiddleware(async (ctx) => {
           if (ctx.path !== '/sign-up/email') {
@@ -326,22 +222,9 @@ export class AuthProvider implements OnModuleInit {
     return auth as unknown as BetterAuthInstance
   }
 
-  private resolveRequestSlug(options: AuthModuleOptions): string | null {
-    const endpoint = this.resolveRequestEndpoint()
-    const fallbackHost = options.baseDomain.trim().toLowerCase()
-    const requestedHost = (endpoint.host ?? fallbackHost).trim().toLowerCase()
-    return this.resolveTenantSlugFromContext() ?? extractTenantSlugFromHost(requestedHost, options.baseDomain)
-  }
-
-  async isBrokerRequest(): Promise<boolean> {
-    const options = await this.config.getOptions()
-    return this.resolveRequestSlug(options) === MOBILE_AUTH_BROKER_SLUG
-  }
-
   async getAuth(): Promise<BetterAuthInstance> {
     const options = await this.config.getOptions()
-    const tenantSlug = this.resolveRequestSlug(options)
-    return await this.createAuthForEndpoint(tenantSlug, options)
+    return await this.createAuth(options)
   }
 
   async getEnabledProviderIds(): Promise<string[]> {
@@ -350,18 +233,11 @@ export class AuthProvider implements OnModuleInit {
   }
 
   async getWebProviderIds(): Promise<string[]> {
-    const options = await this.config.getOptions()
-    return [...Object.keys(options.socialProviders), ...(options.apple?.webEnabled ? ['apple'] : [])]
+    return await this.getEnabledProviderIds()
   }
 
   async isProviderEnabled(provider: string): Promise<boolean> {
     return (await this.getEnabledProviderIds()).includes(provider)
-  }
-
-  async getAuthForTenant(tenant: { id: string, slug?: string | null }): Promise<BetterAuthInstance> {
-    const options = await this.config.getOptions()
-    const tenantSlug = tenant.slug ?? null
-    return await this.createAuthForEndpoint(tenantSlug, options, tenant.id)
   }
 
   async handler(context: Context): Promise<Response> {
@@ -390,4 +266,4 @@ export class AuthProvider implements OnModuleInit {
 }
 
 export type AuthInstance = BetterAuthInstance
-export type AuthSession = BetterAuthInstance['$Infer']['Session']
+export type AuthSession = NonNullable<Awaited<ReturnType<BetterAuthBaseInstance['api']['getSession']>>>

@@ -210,7 +210,7 @@ const zhCnUiSchema = {
     title: '平台设置',
     description: '管理整个平台的注册入口、登录策略与 OAuth 配置。',
     sections: {
-      'registration': {
+      registration: {
         title: '全局注册策略',
         description: '控制新用户注册配额以及本地账号能力。',
         fields: {
@@ -222,12 +222,6 @@ const zhCnUiSchema = {
             title: '启用本地登录（邮箱/密码）',
             description: '关闭后普通用户只能使用第三方登录渠道。',
           },
-          'base-domain': {
-            title: '平台基础域名',
-            description: '用于解析子域名租户，如 example.domain.com。更新后请确保证书和 DNS 已配置。',
-            helper: '留空使用默认域名 afilmory.art。',
-            placeholder: 'afilmory.art',
-          },
           'max-users': {
             title: '全局可注册用户上限',
             description: '达到上限后阻止新的注册，留空表示不限制。',
@@ -236,120 +230,15 @@ const zhCnUiSchema = {
           },
         },
       },
-      'billing': {
-        title: '订阅计划配置',
-        description: '为每个订阅计划定义资源限制、价格展示与 Creem 商品映射。',
-        fields: {
-          quota: {
-            'helper': '留空表示遵循默认或不限，填写数字后将覆盖对应计划。',
-            'custom-domain': {
-              title: '自定义域名数量',
-              description: '限制租户可绑定的品牌域名数量，0 表示不提供此功能。',
-              placeholder: '例如 1',
-            },
-            'monthly-asset': {
-              title: '每月可新增照片（张）',
-              description: '达到上限后将阻止新增照片。留空表示回退到默认值或不限。',
-              placeholder: '例如 300',
-            },
-            'library-limit': {
-              title: '图库容量限制（张）',
-              description: '限制单个租户可管理的照片数量，0 表示完全禁止新增。',
-              placeholder: '例如 500',
-            },
-            'upload-limit': {
-              title: '后台上传大小上限（MB）',
-              description: '单次上传的最大文件体积，留空表示默认或无限制。',
-              placeholder: '例如 20',
-            },
-            'sync-limit': {
-              title: '同步素材大小上限（MB）',
-              description: 'Data Sync 导入时允许的最大文件尺寸。',
-              placeholder: '例如 50',
-            },
-          },
-          pricing: {
-            'monthly-price': {
-              title: '月度定价',
-              description: '用于展示的价格或 Creem 产品价格，留空保留默认值。',
-              placeholder: '例如 49',
-              helper: '留空表示暂不展示定价信息。',
-            },
-            'currency': {
-              title: '币种',
-              description: 'ISO 货币代码，如 CNY、USD 等。',
-              placeholder: 'CNY',
-              helper: '留空表示使用默认币种或不展示。',
-            },
-          },
-          payment: {
-            'creem-product': {
-              title: 'Creem Product ID',
-              description: '用于创建结算会话的 Creem 商品 ID。留空表示该计划不会显示升级入口。',
-              placeholder: 'prod_xxx',
-            },
-            'app-store-product': {
-              title: 'App Store 商品 ID',
-              description: '在 iOS 应用内提供的自动续期订阅商品。',
-              placeholder: 'app.afilmory.subscription.pro',
-            },
-            'helper': '为空将隐藏升级入口。',
-          },
-        },
-        plans: {
-          free: {
-            title: 'Free 计划（hobby）',
-            description: '默认入门方案，适用于个人与试用场景。',
-          },
-          pro: {
-            title: 'Pro 计划（pro）',
-            description: '专业方案',
-          },
-          friend: {
-            title: 'Friend 计划（friend）',
-            description: '内部使用的好友方案，没有任何限制，仅超级管理员可设置。',
-          },
-        },
-      },
-      'storage-plans': {
-        title: '存储计划',
-        description: '管理托管存储方案的目录、定价以及 Creem 商品映射。',
-        fields: {
-          'catalog': {
-            title: '计划目录',
-            description: '存储计划的名称/描述/容量与启用状态，建议在控制台中编辑，无需手填 JSON。',
-            placeholder: '通过控制台编辑',
-            helper: '包含 plan id、name、description、capacityBytes、isActive 等字段。',
-          },
-          'pricing': {
-            title: '存储定价',
-            description: '每个存储计划的月费与币种。',
-            placeholder: '通过控制台编辑',
-            helper: '留空回退到默认值或隐藏价格。',
-          },
-          'products': {
-            title: 'Creem 商品',
-            description: '为存储计划绑定 Creem 商品 ID，用于结算与用户门户。',
-            placeholder: '通过控制台编辑',
-            helper: '留空则该计划不会展示升级入口。',
-          },
-          'managed-provider': {
-            title: '托管存储 Provider Key',
-            description: '与存储提供商列表中的配置项对应（例如 b2-managed）。',
-            placeholder: 'b2-managed',
-            helper: '后端将用该 Provider 为托管存储租户发放上传/读取权限。',
-          },
-        },
-      },
-      'oauth': {
+      oauth: {
         title: 'OAuth 登录渠道',
-        description: '统一配置所有租户可用的第三方登录渠道。',
+        description: '配置站点可用的第三方登录渠道。',
         fields: {
           gateway: {
             title: 'OAuth 网关地址',
-            description: '所有第三方登录统一走该回调入口（例如 https://auth.afilmory.art）。留空则回退到租户域名。',
+            description: '所有第三方登录统一走该回调入口（例如 https://auth.example.com）。留空则回退到站点域名。',
             helper: '必须包含 http/https 协议，结尾无需斜杠。',
-            placeholder: 'https://auth.afilmory.art',
+            placeholder: 'https://auth.example.com',
           },
         },
         groups: {
@@ -391,13 +280,8 @@ const zhCnUiSchema = {
             fields: {
               'web-client-id': {
                 title: 'Services ID',
-                description: '后台网页登录使用的 Apple Services ID。留空时仅启用移动端 Apple 登录。',
+                description: '后台网页登录使用的 Apple Services ID。留空时关闭 Apple 登录。',
                 placeholder: 'art.afilmory.web',
-              },
-              'app-bundle-id': {
-                title: 'App Bundle Identifier',
-                description: '原生 iOS 授权流程使用的 audience 与 client ID。',
-                placeholder: 'app.afilmory',
               },
               'team-id': {
                 title: 'Team ID',

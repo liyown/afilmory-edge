@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 
-import { tenants } from '@afilmory/db'
+import { manifestStates } from '@afilmory/db'
 import { DatabaseModule } from '@core/database/database.module'
 import { DbAccessor } from '@core/database/database.provider'
 import { Controller, Get, Module } from '@tsuki-hono/common'
@@ -38,18 +38,18 @@ function elapsed(started: number): number {
 export class DatabaseHealthController {
   constructor(private readonly dbAccessor: DbAccessor) {}
 
-  // T7.2: liveness probe covering every storage binding the Worker depends on.
+  // Liveness probe covering every storage binding the Worker depends on.
   @Get('/')
   async check() {
     const db = this.dbAccessor.get()
 
     const [database, storage, cache] = await Promise.all([
       probe(async () => {
-        const [tenant] = await db
-          .select({ id: tenants.id, slug: tenants.slug, status: tenants.status })
-          .from(tenants)
+        const [state] = await db
+          .select({ id: manifestStates.id, revision: manifestStates.revision })
+          .from(manifestStates)
           .limit(1)
-        return { tenant: tenant ?? null }
+        return { manifest: state ?? null }
       }),
       probe(async () => {
         const listed = await workerEnv.PHOTOS.list({ limit: 1 })

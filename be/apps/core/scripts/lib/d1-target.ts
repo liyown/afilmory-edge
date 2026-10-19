@@ -1,12 +1,14 @@
-import { readFileSync } from 'node:fs'
-import process from 'node:process'
+import { readdirSync, readFileSync } from 'node:fs'
+import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { fileURLToPath } from 'node:url'
 
-import { generateId } from '@afilmory/db/schema.sqlite'
+import { generateId } from '@afilmory/db'
 
-export const DEFAULT_TENANT_NAME = process.env.PERSONAL_TENANT_NAME ?? 'Afilmory'
-
-const SQLITE_MIGRATION_PATH = new URL('../../../../packages/db/migrations-sqlite/0000_heavy_skin.sql', import.meta.url)
+const SQLITE_MIGRATIONS_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../../packages/db/migrations',
+)
 
 export type SqlValue = null | number | string
 
@@ -31,16 +33,11 @@ export interface SeedOptions {
   adminEmail: string
   adminName?: string
   now?: string
-  slug: string
-  tenantName?: string
 }
 
 export interface SeedResult {
-  tenantId: string
   userId: string
-  createdTenant: boolean
   createdUser: boolean
-  createdMembership: boolean
 }
 
 function insertStatement(table: string, values: Record<string, SqlValue>): D1Statement {
@@ -51,21 +48,14 @@ function insertStatement(table: string, values: Record<string, SqlValue>): D1Sta
   }
 }
 
-export async function seedPersonalTenant(target: D1Target, options: SeedOptions): Promise<SeedResult> {
+export async function seedPersonalAdmin(target: D1Target, options: SeedOptions): Promise<SeedResult> {
   const email = options.adminEmail.trim()
   if (email.length === 0) {
     throw new Error('adminEmail must not be empty')
   }
 
   const now = options.now ?? new Date().toISOString()
-  const slug = options.slug.trim()
-  const tenantName = options.tenantName?.trim() || DEFAULT_TENANT_NAME
   const adminName = options.adminName?.trim() || email.split('@')[0] || 'Admin'
-
-  const [existingTenant] = await target.query<{ id: string }>('select "id" from "tenant" where "slug" = ? limit 1', [
-    slug,
-  ])
-  const tenantId = existingTenant?.id ?? generateId()
 
   const [existingUser] = await target.query<{ id: string, role: string }>(
     'select "id", "role" from "auth_user" where lower(trim("email")) = lower(trim(?)) limit 1',
@@ -73,28 +63,7 @@ export async function seedPersonalTenant(target: D1Target, options: SeedOptions)
   )
   const userId = existingUser?.id ?? generateId()
 
-  const [existingMembership] = await target.query<{ id: string, role: string, status: string }>(
-    'select "id", "role", "status" from "tenant_membership" where "tenant_id" = ? and "user_id" = ? limit 1',
-    [tenantId, userId],
-  )
-
   const statements: D1Statement[] = []
-
-  if (!existingTenant) {
-    statements.push(
-      insertStatement('tenant', {
-        id: tenantId,
-        slug,
-        name: tenantName,
-        plan_id: 'free',
-        storage_plan_id: null,
-        banned: 0,
-        status: 'active',
-        created_at: now,
-        updated_at: now,
-      }),
-    )
-  }
 
   if (!existingUser) {
     statements.push(
@@ -104,7 +73,6 @@ export async function seedPersonalTenant(target: D1Target, options: SeedOptions)
         email,
         email_verified: 1,
         role: 'superadmin',
-        had_trial: 0,
         two_factor_enabled: 0,
         banned: 0,
         created_at: now,
@@ -119,39 +87,16 @@ export async function seedPersonalTenant(target: D1Target, options: SeedOptions)
     })
   }
 
-  if (!existingMembership) {
-    statements.push(
-      insertStatement('tenant_membership', {
-        id: generateId(),
-        tenant_id: tenantId,
-        user_id: userId,
-        role: 'owner',
-        status: 'active',
-        created_at: now,
-        updated_at: now,
-      }),
-    )
-  }
-  else if (existingMembership.role !== 'owner' || existingMembership.status !== 'active') {
-    statements.push({
-      sql: 'update "tenant_membership" set "role" = ?, "status" = ?, "updated_at" = ? where "id" = ?',
-      params: ['owner', 'active', now, existingMembership.id],
-    })
-  }
-
   statements.push({
-    sql: 'insert into "tenant_manifest_state" ("tenant_id", "revision", "updated_at") values (?, ?, ?) on conflict ("tenant_id") do nothing',
-    params: [tenantId, 0, now],
+    sql: 'insert into "manifest_state" ("id", "revision", "updated_at") values (\'default\', 0, ?) on conflict ("id") do nothing',
+    params: [now],
   })
 
   await target.batch(statements)
 
   return {
-    tenantId,
     userId,
-    createdTenant: !existingTenant,
     createdUser: !existingUser,
-    createdMembership: !existingMembership,
   }
 }
 
@@ -248,14 +193,24 @@ export function createSqliteTarget(sqlite: DatabaseSync): D1Target {
 }
 
 export function applySqliteMigrations(sqlite: DatabaseSync): void {
-  const migrations = readFileSync(SQLITE_MIGRATION_PATH, 'utf8')
-  sqlite.exec(migrations)
+  const migrations = readdirSync(SQLITE_MIGRATIONS_DIR)
+    .filter(name => name.endsWith('.sql'))
+    .sort()
+  for (const migrationFile of migrations) {
+    const migration = readFileSync(path.join(SQLITE_MIGRATIONS_DIR, migrationFile), 'utf8').replaceAll(
+      '--> statement-breakpoint',
+      '',
+    )
+    sqlite.exec(migration)
+  }
 }
 
 export function openLocalTarget(path: string): D1Target {
   const sqlite = new DatabaseSync(path)
-  const hasTenantTable = sqlite.prepare('select name from sqlite_master where type = \'table\' and name = \'tenant\'').get()
-  if (!hasTenantTable) {
+  const hasManifestState = sqlite
+    .prepare('select name from sqlite_master where type = \'table\' and name = \'manifest_state\'')
+    .get()
+  if (!hasManifestState) {
     applySqliteMigrations(sqlite)
   }
   return createSqliteTarget(sqlite)

@@ -1,6 +1,6 @@
 # Builder Pipeline
 
-The builder ingests photos from storage, processes them, and outputs thumbnails plus `photos-manifest.json` for the SPA/SSR.
+The builder ingests photos from storage, processes them, and outputs thumbnails plus `photos-manifest.json` for the SPA.
 
 ## Pipeline Steps
 

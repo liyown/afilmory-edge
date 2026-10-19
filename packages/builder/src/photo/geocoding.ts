@@ -2,12 +2,33 @@ import { createHash } from 'node:crypto'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import process from 'node:process'
 
 import type { LocationInfo, PickedExif } from '@afilmory/typing'
 
 import { getGlobalLoggers } from './logger-adapter.js'
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+interface MapboxContextEntry {
+  name?: string
+}
+
+interface MapboxReverseGeocodeResponse {
+  features?: {
+    properties?: {
+      name?: string
+      place_formatted?: string
+      context?: Record<string, MapboxContextEntry | undefined>
+    }
+  }[]
+}
+
+interface NominatimReverseGeocodeResponse {
+  error?: string
+  display_name?: string
+  address?: Record<string, string | undefined>
+}
+
+const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 const getBackoffDelay = (attempt: number, baseDelay: number): number => {
   const exponential = baseDelay * 2 ** (attempt - 1)
   const jitter = Math.random() * baseDelay
@@ -28,7 +49,7 @@ const ensureRateLimitDir = async (): Promise<void> => {
 
 const hashKey = (key: string): string => createHash('sha1').update(key).digest('hex')
 
-const getRateLimitPaths = (key: string): { lockPath: string; timestampPath: string } => {
+const getRateLimitPaths = (key: string): { lockPath: string, timestampPath: string } => {
   const hashedKey = hashKey(key)
   return {
     lockPath: path.join(INTERPROCESS_RATE_LIMIT_DIR, `${hashedKey}.lock`),
@@ -44,7 +65,8 @@ const isLockStale = async (lockPath: string): Promise<boolean> => {
   try {
     const stat = await fs.stat(lockPath)
     return Date.now() - stat.mtimeMs > LOCK_STALE_TIMEOUT_MS
-  } catch (error) {
+  }
+  catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return false
     }
@@ -65,10 +87,12 @@ async function withInterprocessLock<T>(key: string, fn: () => Promise<T>): Promi
       try {
         const result = await fn()
         return result
-      } finally {
+      }
+      finally {
         await tryRemoveLock(lockPath)
       }
-    } catch (error) {
+    }
+    catch (error) {
       const nodeError = error as NodeJS.ErrnoException
       if (nodeError.code === 'EEXIST') {
         if (await isLockStale(lockPath)) {
@@ -91,7 +115,8 @@ const applyInterprocessRateLimit = async (key: string, intervalMs: number): Prom
     try {
       const stat = await fs.stat(timestampPath)
       lastRequestTime = stat.mtimeMs
-    } catch (error) {
+    }
+    catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error
       }
@@ -202,7 +227,7 @@ export class MapboxGeocodingProvider implements GeocodingProvider {
           throw new Error(`Mapbox API 错误: ${response.status} ${response.statusText}`)
         }
 
-        const data = await response.json()
+        const data = (await response.json()) as MapboxReverseGeocodeResponse
 
         if (!data || !data.features || data.features.length === 0) {
           log.warn('Mapbox API 未返回结果')
@@ -242,7 +267,8 @@ export class MapboxGeocodingProvider implements GeocodingProvider {
           city,
           locationName,
         }
-      } catch (error) {
+      }
+      catch (error) {
         const isLastAttempt = attempt === this.maxRetries
         if (isLastAttempt) {
           log.error('Mapbox 反向地理编码失败:', error)
@@ -314,7 +340,7 @@ export class NominatimGeocodingProvider implements GeocodingProvider {
           throw new Error(`Nominatim API 错误: ${response.status} ${response.statusText}`)
         }
 
-        const data = await response.json()
+        const data = (await response.json()) as NominatimReverseGeocodeResponse
 
         if (!data || data.error) {
           throw new Error(`Nominatim API 返回错误: ${data?.error}`)
@@ -354,7 +380,8 @@ export class NominatimGeocodingProvider implements GeocodingProvider {
           city,
           locationName,
         }
-      } catch (error) {
+      }
+      catch (error) {
         const isLastAttempt = attempt === this.maxRetries
         if (isLastAttempt) {
           log.error('Nominatim 反向地理编码失败:', error)
@@ -436,7 +463,8 @@ export function parseGPSCoordinates(exif: PickedExif): {
     }
 
     return { latitude, longitude }
-  } catch (error) {
+  }
+  catch (error) {
     log.error('解析 GPS 坐标失败:', error)
     return {}
   }
@@ -469,12 +497,14 @@ export async function extractLocationFromGPS(
 
     if (locationInfo) {
       log.success(`位置已找到: ${locationInfo.city}, ${locationInfo.country}`)
-    } else {
+    }
+    else {
       log.warn('未找到位置信息')
     }
 
     return locationInfo
-  } catch (error) {
+  }
+  catch (error) {
     log.error('位置提取失败:', error)
     return null
   }

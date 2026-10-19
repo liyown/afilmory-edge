@@ -4,38 +4,24 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 import { settings } from '@afilmory/db'
 import { env } from '@afilmory/env'
 import { DbAccessor } from '@core/database/database.provider'
-import { BizException, ErrorCode } from '@core/errors'
-import { getTenantContext } from '@core/modules/platform/tenant/tenant.context'
-import { TenantService } from '@core/modules/platform/tenant/tenant.service'
-import { EventEmitterService } from '@tsuki-hono/event-emitter'
-import { and, eq, inArray } from 'drizzle-orm'
+import { EventEmitterService } from '@core/modules/infrastructure/event/event-emitter.service'
+import { eq, inArray } from 'drizzle-orm'
 import { injectable } from 'tsyringe'
 
 import { getUiSchemaTranslator } from '../../ui/ui-schema/ui-schema.i18n'
 import { AES_ALGORITHM, AUTH_TAG_LENGTH, DEFAULT_SETTING_METADATA, IV_LENGTH } from './setting.constant'
 import type { SettingKeyType, SettingRecord, SettingUiSchemaResponse, SettingValueMap } from './setting.type'
 import { createSettingUiSchema, SETTING_UI_SCHEMA_KEYS } from './setting.ui-schema'
-import { STORAGE_PROVIDERS_SETTING_KEY } from './storage-provider.constants'
-import type { BuilderStorageProvider } from './storage-provider.utils'
-import {
-  parseStorageProviders,
-  prepareStorageProvidersForPersist,
-  sanitizeStorageProviders,
-} from './storage-provider.utils'
-
-export type SettingOption = {
-  tenantId?: string
-}
 
 export type SetSettingOptions = {
   isSensitive?: boolean
   description?: string | null
-} & SettingOption
+}
 
-declare module '@tsuki-hono/event-emitter' {
+declare module '@core/modules/infrastructure/event/events' {
   interface Events {
-    'setting.updated': { tenantId: string, key: string, value: string }
-    'setting.deleted': { tenantId: string, key: string }
+    'setting.updated': { key: string, value: string }
+    'setting.deleted': { key: string }
   }
 }
 export type SettingEntryInput = {
@@ -53,44 +39,29 @@ export class SettingService {
   constructor(
     private readonly dbAccessor: DbAccessor,
     private readonly eventEmitter: EventEmitterService,
-    private readonly tenantService: TenantService,
   ) {
     this.encryptionKey = createHash('sha256').update(env.CONFIG_ENCRYPTION_KEY).digest()
   }
 
-  async get<K extends SettingKeyType>(key: K, options: SettingOption): Promise<SettingValueMap[K] | null>
-  async get(key: string, options?: SettingOption): Promise<string | null> {
-    const tenantId = await this.resolveTenantId(options)
-    const record = await this.findSettingRecord(key, tenantId)
+  async get<K extends SettingKeyType>(key: K): Promise<SettingValueMap[K] | null>
+  async get(key: string): Promise<string | null> {
+    const record = await this.findSettingRecord(key)
     if (!record) {
       return null
     }
-    const rawValue = record.isSensitive ? this.decrypt(record.value) : record.value
-
-    if (key === STORAGE_PROVIDERS_SETTING_KEY) {
-      return sanitizeStorageProviders(rawValue)
-    }
-
-    return rawValue
+    return record.isSensitive ? this.decrypt(record.value) : record.value
   }
 
-  async getMany<K extends readonly SettingKeyType[]>(
-    keys: K,
-    options?: SettingOption,
-  ): Promise<{ [P in K[number]]: SettingValueMap[P] | null }>
-  async getMany(keys: readonly string[], options?: SettingOption): Promise<Record<string, string | null>> {
+  async getMany<K extends readonly SettingKeyType[]>(keys: K): Promise<{ [P in K[number]]: SettingValueMap[P] | null }>
+  async getMany(keys: readonly string[]): Promise<Record<string, string | null>> {
     if (keys.length === 0) {
       return {}
     }
 
     const uniqueKeys = Array.from(new Set(keys))
-    const tenantId = await this.resolveTenantId(options)
 
     const db = this.dbAccessor.get()
-    const records = await db
-      .select()
-      .from(settings)
-      .where(and(eq(settings.tenantId, tenantId), inArray(settings.key, uniqueKeys)))
+    const records = await db.select().from(settings).where(inArray(settings.key, uniqueKeys))
 
     const recordMap = new Map(records.map(record => [record.key, record]))
 
@@ -100,72 +71,22 @@ export class SettingService {
         acc[key] = null
         return acc
       }
-      const rawValue = record.isSensitive ? this.decrypt(record.value) : record.value
-
-      if (key === STORAGE_PROVIDERS_SETTING_KEY) {
-        acc[key] = sanitizeStorageProviders(rawValue)
-        return acc
-      }
-
-      acc[key] = rawValue
+      acc[key] = record.isSensitive ? this.decrypt(record.value) : record.value
       return acc
     }, {})
-  }
-
-  async getStorageProvidersRaw(options?: SettingOption): Promise<BuilderStorageProvider[]> {
-    const tenantId = await this.resolveTenantId(options)
-    const record = await this.findSettingRecord(STORAGE_PROVIDERS_SETTING_KEY, tenantId)
-    if (!record) {
-      return []
-    }
-
-    const rawValue = record.isSensitive ? this.decrypt(record.value) : record.value
-    return parseStorageProviders(rawValue)
-  }
-
-  async getActiveStorageProvider(options: SettingOption): Promise<BuilderStorageProvider | null> {
-    const providers = await this.getStorageProvidersRaw(options)
-    const activeIdRaw = await this.get('builder.storage.activeProvider', options)
-    const activeId = typeof activeIdRaw === 'string' && activeIdRaw.trim().length > 0 ? activeIdRaw.trim() : null
-
-    // If activeId exists and matches, return it
-    if (activeId) {
-      const found = providers.find(provider => provider.id === activeId) ?? null
-      if (found)
-        return found
-    }
-
-    // Fallback: if there is exactly one provider, treat it as active without mutating settings.
-    if (providers.length === 1) {
-      return providers[0]
-    }
-
-    return null
   }
 
   async set<K extends SettingKeyType>(key: K, value: SettingValueMap[K], options: SetSettingOptions): Promise<void>
   async set(key: string, value: string, options: SetSettingOptions): Promise<void>
   async set(key: string, value: string, options: SetSettingOptions): Promise<void> {
-    const tenantId = await this.resolveTenantId(options)
-    const existing = await this.findSettingRecord(key, tenantId)
+    const existing = await this.findSettingRecord(key)
     const defaultMetadata = isSettingKey(key) ? DEFAULT_SETTING_METADATA[key] : undefined
-    let isSensitive = options.isSensitive ?? defaultMetadata?.isSensitive ?? existing?.isSensitive ?? false
-    let persistedValue = value
-    let maskedValue = value
+    const isSensitive = options.isSensitive ?? defaultMetadata?.isSensitive ?? existing?.isSensitive ?? false
 
-    if (key === STORAGE_PROVIDERS_SETTING_KEY) {
-      const existingRaw = existing ? (existing.isSensitive ? this.decrypt(existing.value) : existing.value) : null
-      const result = prepareStorageProvidersForPersist(value, existingRaw)
-      persistedValue = result.stored
-      maskedValue = result.masked
-      isSensitive = true
-    }
-
-    const payload = isSensitive ? this.encrypt(persistedValue) : persistedValue
+    const payload = isSensitive ? this.encrypt(value) : value
     const db = this.dbAccessor.get()
 
     const insertPayload: typeof settings.$inferInsert = {
-      tenantId,
       key,
       value: payload,
       isSensitive,
@@ -177,15 +98,12 @@ export class SettingService {
       updatedAt: new Date().toISOString(),
     }
 
-    await db
-      .insert(settings)
-      .values(insertPayload)
-      .onConflictDoUpdate({
-        target: [settings.tenantId, settings.key],
-        set: updatePayload,
-      })
+    await db.insert(settings).values(insertPayload).onConflictDoUpdate({
+      target: settings.key,
+      set: updatePayload,
+    })
 
-    await this.eventEmitter.emit('setting.updated', { tenantId, key, value: maskedValue })
+    await this.eventEmitter.emit('setting.updated', { key, value })
   }
 
   async setMany(entries: readonly SettingEntryInput[]): Promise<void> {
@@ -194,31 +112,29 @@ export class SettingService {
     }
   }
 
-  async delete(key: string, options?: SettingOption): Promise<void> {
-    const tenantId = await this.resolveTenantId(options)
+  async delete(key: string): Promise<void> {
     const db = this.dbAccessor.get()
-    await db.delete(settings).where(and(eq(settings.tenantId, tenantId), eq(settings.key, key)))
+    await db.delete(settings).where(eq(settings.key, key))
 
-    await this.eventEmitter.emit('setting.deleted', { tenantId, key })
+    await this.eventEmitter.emit('setting.deleted', { key })
   }
 
-  async deleteMany(keys: readonly string[], options?: SettingOption): Promise<void> {
+  async deleteMany(keys: readonly string[]): Promise<void> {
     if (keys.length === 0) {
       return
     }
 
-    const tenantId = await this.resolveTenantId(options)
     const db = this.dbAccessor.get()
     const uniqueKeys = Array.from(new Set(keys))
-    await db.delete(settings).where(and(eq(settings.tenantId, tenantId), inArray(settings.key, uniqueKeys)))
+    await db.delete(settings).where(inArray(settings.key, uniqueKeys))
 
     for (const key of uniqueKeys) {
-      await this.eventEmitter.emit('setting.deleted', { tenantId, key })
+      await this.eventEmitter.emit('setting.deleted', { key })
     }
   }
 
-  async getUiSchema(options?: SettingOption): Promise<SettingUiSchemaResponse> {
-    const rawValues = await this.getMany(SETTING_UI_SCHEMA_KEYS, options)
+  async getUiSchema(): Promise<SettingUiSchemaResponse> {
+    const rawValues = await this.getMany(SETTING_UI_SCHEMA_KEYS)
     const typedValues: SettingUiSchemaResponse['values'] = {}
 
     for (const key of SETTING_UI_SCHEMA_KEYS) {
@@ -241,28 +157,11 @@ export class SettingService {
     }
   }
 
-  private async findSettingRecord(key: string, tenantId: string): Promise<SettingRecord | null> {
+  private async findSettingRecord(key: string): Promise<SettingRecord | null> {
     const db = this.dbAccessor.get()
-    const [record] = await db
-      .select()
-      .from(settings)
-      .where(and(eq(settings.tenantId, tenantId), eq(settings.key, key)))
-      .limit(1)
+    const [record] = await db.select().from(settings).where(eq(settings.key, key)).limit(1)
 
     return record ?? null
-  }
-
-  private async resolveTenantId(options?: SettingOption): Promise<string> {
-    if (options?.tenantId) {
-      return options.tenantId
-    }
-
-    const tenant = getTenantContext()
-    if (tenant) {
-      return tenant.tenant.id
-    }
-
-    throw new BizException(ErrorCode.TENANT_NOT_FOUND)
   }
 
   private encrypt(value: string): string {

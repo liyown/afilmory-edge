@@ -1,16 +1,12 @@
-import { authUsers, commentReactions, comments, photoAssets, tenantMemberships, tenants } from '@afilmory/db'
-import { DEFAULT_BASE_DOMAIN } from '@afilmory/utils'
+import { authUsers, commentReactions, comments, photoAssets } from '@afilmory/db'
 import { getClientIp } from '@core/context/http-context.helper'
 import { DbAccessor } from '@core/database/database.provider'
 import { BizException, ErrorCode } from '@core/errors'
 import { logger } from '@core/helpers/logger.helper'
-import { SystemSettingService } from '@core/modules/configuration/system-setting/system-setting.service'
 import { CommentCreatedEvent } from '@core/modules/content/comment/events/comment-created.event'
-import { WorkspaceMembershipService } from '@core/modules/platform/auth/workspace-membership.service'
-import { requireTenantContext } from '@core/modules/platform/tenant/tenant.context'
+import { EventEmitterService } from '@core/modules/infrastructure/event/event-emitter.service'
 import { HttpContext } from '@tsuki-hono/common'
-import { EventEmitterService } from '@tsuki-hono/event-emitter'
-import { and, asc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
+import { and, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { inject, injectable } from 'tsyringe'
 
@@ -38,6 +34,7 @@ export interface UserViewModel {
 
 interface AuthUser {
   id?: string
+  role?: string | null
 }
 
 interface CommentResponseItem extends CommentViewModel {
@@ -58,8 +55,6 @@ export class CommentService {
     private readonly dbAccessor: DbAccessor,
     @inject(COMMENT_MODERATION_HOOK) private readonly moderationHook: CommentModerationHook,
     private readonly eventEmitter: EventEmitterService,
-    private readonly systemSettings: SystemSettingService,
-    private readonly memberships: WorkspaceMembershipService,
   ) {}
 
   async createComment(
@@ -70,7 +65,6 @@ export class CommentService {
     relations: Record<string, CommentResponseItem>
     users: Record<string, UserViewModel>
   }> {
-    const tenant = requireTenantContext()
     const authUser = this.getAuthUser()
     const userId = authUser?.id
     if (!userId) {
@@ -78,11 +72,10 @@ export class CommentService {
     }
     const db = this.dbAccessor.get()
 
-    await this.ensurePhotoExists(tenant.tenant.id, dto.photoId)
-    const parent = await this.validateParent(dto.parentId, tenant.tenant.id, dto.photoId)
+    await this.ensurePhotoExists(dto.photoId)
+    const parent = await this.validateParent(dto.parentId, dto.photoId)
 
     const moderationInput: CommentModerationHookInput = {
-      tenantId: tenant.tenant.id,
       userId,
       photoId: dto.photoId,
       parentId: parent?.id,
@@ -103,7 +96,6 @@ export class CommentService {
     const [record] = await db
       .insert(comments)
       .values({
-        tenantId: tenant.tenant.id,
         photoId: dto.photoId,
         parentId: parent?.id ?? null,
         userId,
@@ -139,7 +131,7 @@ export class CommentService {
         .limit(1)
 
       if (fullParent) {
-        const parentReactions = await this.fetchReactionAggregations(tenant.tenant.id, [parent.id], userId)
+        const parentReactions = await this.fetchReactionAggregations([parent.id], userId)
         relations[parent.id] = this.toResponse({
           ...fullParent,
           reactionCounts: parentReactions.counts.get(parent.id) ?? {},
@@ -158,7 +150,6 @@ export class CommentService {
         'comment.created',
         new CommentCreatedEvent(
           record.id,
-          tenant.tenant.id,
           dto.photoId,
           userId,
           parent?.id ?? null,
@@ -179,23 +170,18 @@ export class CommentService {
     users: Record<string, UserViewModel>
     nextCursor: string | null
   }> {
-    const tenant = requireTenantContext()
     const authUser = this.getAuthUser()
     const viewerUserId = authUser?.id ?? null
-    const isAdmin = viewerUserId ? await this.memberships.isWorkspaceAdmin(viewerUserId, tenant.tenant.id) : false
+    const isAdmin = this.isAdminUser(authUser)
     const db = this.dbAccessor.get()
 
-    const filters = [
-      eq(comments.tenantId, tenant.tenant.id),
-      eq(comments.photoId, query.photoId),
-      isNull(comments.deletedAt),
-    ]
+    const filters = [eq(comments.photoId, query.photoId), isNull(comments.deletedAt)]
 
     const statusCondition = this.resolveVisibleStatusCondition(isAdmin, viewerUserId)
 
     let cursorCondition
     if (query.cursor) {
-      const anchor = await this.findCommentForCursor(query.cursor, tenant.tenant.id, query.photoId)
+      const anchor = await this.findCommentForCursor(query.cursor, query.photoId)
       cursorCondition = or(
         gt(comments.createdAt, anchor.createdAt),
         and(eq(comments.createdAt, anchor.createdAt), gt(comments.id, anchor.id)),
@@ -224,7 +210,7 @@ export class CommentService {
     const items = rows.slice(0, query.limit)
     const commentIds = items.map(item => item.id)
 
-    const reactions = await this.fetchReactionAggregations(tenant.tenant.id, commentIds, viewerUserId)
+    const reactions = await this.fetchReactionAggregations(commentIds, viewerUserId)
 
     const nextCursor = hasMore && items.length > 0 ? items.at(-1)!.id : null
 
@@ -252,12 +238,9 @@ export class CommentService {
           updatedAt: comments.updatedAt,
         })
         .from(comments)
-        .where(
-          and(eq(comments.tenantId, tenant.tenant.id), inArray(comments.id, parentIds), isNull(comments.deletedAt)),
-        )
+        .where(and(inArray(comments.id, parentIds), isNull(comments.deletedAt)))
 
       const parentReactions = await this.fetchReactionAggregations(
-        tenant.tenant.id,
         parentRows.map(p => p.id),
         viewerUserId,
       )
@@ -292,12 +275,11 @@ export class CommentService {
     users: Record<string, UserViewModel>
     nextCursor: string | null
   }> {
-    const tenant = requireTenantContext()
     const authUser = this.getAuthUser()
     const viewerUserId = authUser?.id ?? null
     const db = this.dbAccessor.get()
 
-    const filters = [eq(comments.tenantId, tenant.tenant.id), isNull(comments.deletedAt)]
+    const filters = [isNull(comments.deletedAt)]
 
     // Filter by photoId if provided
     if (query.photoId) {
@@ -311,7 +293,7 @@ export class CommentService {
 
     let cursorCondition
     if (query.cursor) {
-      const anchor = await this.findCommentForCursorAll(query.cursor, tenant.tenant.id)
+      const anchor = await this.findCommentForCursorAll(query.cursor)
       cursorCondition = or(
         gt(comments.createdAt, anchor.createdAt),
         and(eq(comments.createdAt, anchor.createdAt), gt(comments.id, anchor.id)),
@@ -340,7 +322,7 @@ export class CommentService {
     const items = rows.slice(0, query.limit)
     const commentIds = items.map(item => item.id)
 
-    const reactions = await this.fetchReactionAggregations(tenant.tenant.id, commentIds, viewerUserId)
+    const reactions = await this.fetchReactionAggregations(commentIds, viewerUserId)
 
     const nextCursor = hasMore && items.length > 0 ? items.at(-1)!.id : null
 
@@ -368,12 +350,9 @@ export class CommentService {
           updatedAt: comments.updatedAt,
         })
         .from(comments)
-        .where(
-          and(eq(comments.tenantId, tenant.tenant.id), inArray(comments.id, parentIds), isNull(comments.deletedAt)),
-        )
+        .where(and(inArray(comments.id, parentIds), isNull(comments.deletedAt)))
 
       const parentReactions = await this.fetchReactionAggregations(
-        tenant.tenant.id,
         parentRows.map(p => p.id),
         viewerUserId,
       )
@@ -403,7 +382,6 @@ export class CommentService {
   }
 
   async toggleReaction(commentId: string, body: CommentReactionDto): Promise<{ item: CommentResponseItem }> {
-    const tenant = requireTenantContext()
     const authUser = this.getAuthUser()
     const userId = authUser?.id
     if (!userId) {
@@ -411,14 +389,13 @@ export class CommentService {
     }
     const db = this.dbAccessor.get()
 
-    const comment = await this.getCommentById(commentId, tenant.tenant.id)
+    const comment = await this.getCommentById(commentId)
 
     const [existing] = await db
       .select({ id: commentReactions.id })
       .from(commentReactions)
       .where(
         and(
-          eq(commentReactions.tenantId, tenant.tenant.id),
           eq(commentReactions.commentId, comment.id),
           eq(commentReactions.userId, userId),
           eq(commentReactions.reaction, body.reaction),
@@ -431,14 +408,13 @@ export class CommentService {
     }
     else {
       await db.insert(commentReactions).values({
-        tenantId: tenant.tenant.id,
         commentId: comment.id,
         userId,
         reaction: body.reaction,
       })
     }
 
-    const aggregation = await this.fetchReactionAggregations(tenant.tenant.id, [comment.id], userId)
+    const aggregation = await this.fetchReactionAggregations([comment.id], userId)
     const item = this.toResponse({
       ...comment,
       reactionCounts: aggregation.counts.get(comment.id) ?? {},
@@ -448,23 +424,21 @@ export class CommentService {
   }
 
   async softDelete(commentId: string): Promise<void> {
-    const tenant = requireTenantContext()
     const authUser = this.getAuthUser()
     const userId = authUser?.id
     if (!userId) {
       throw new BizException(ErrorCode.AUTH_UNAUTHORIZED)
     }
-    const isAdmin = await this.memberships.isWorkspaceAdmin(userId, tenant.tenant.id)
+    const isAdmin = this.isAdminUser(authUser)
     const db = this.dbAccessor.get()
 
     const [record] = await db
       .select({
         id: comments.id,
-        tenantId: comments.tenantId,
         userId: comments.userId,
       })
       .from(comments)
-      .where(and(eq(comments.id, commentId), eq(comments.tenantId, tenant.tenant.id), isNull(comments.deletedAt)))
+      .where(and(eq(comments.id, commentId), isNull(comments.deletedAt)))
       .limit(1)
 
     if (!record) {
@@ -488,17 +462,12 @@ export class CommentService {
   }
 
   async getCommentCount(query: { photoId: string }): Promise<{ count: number }> {
-    const tenant = requireTenantContext()
     const authUser = this.getAuthUser()
     const viewerUserId = authUser?.id ?? null
-    const isAdmin = viewerUserId ? await this.memberships.isWorkspaceAdmin(viewerUserId, tenant.tenant.id) : false
+    const isAdmin = this.isAdminUser(authUser)
     const db = this.dbAccessor.get()
 
-    const filters = [
-      eq(comments.tenantId, tenant.tenant.id),
-      eq(comments.photoId, query.photoId),
-      isNull(comments.deletedAt),
-    ]
+    const filters = [eq(comments.photoId, query.photoId), isNull(comments.deletedAt)]
 
     const statusCondition = this.resolveVisibleStatusCondition(isAdmin, viewerUserId)
 
@@ -525,12 +494,16 @@ export class CommentService {
     return authContext?.user
   }
 
-  private async ensurePhotoExists(tenantId: string, photoId: string): Promise<void> {
+  private isAdminUser(user: AuthUser | undefined): boolean {
+    return user?.role === 'superadmin'
+  }
+
+  private async ensurePhotoExists(photoId: string): Promise<void> {
     const db = this.dbAccessor.get()
     const [photo] = await db
       .select({ id: photoAssets.id })
       .from(photoAssets)
-      .where(and(eq(photoAssets.tenantId, tenantId), eq(photoAssets.photoId, photoId)))
+      .where(eq(photoAssets.photoId, photoId))
       .limit(1)
 
     if (!photo) {
@@ -538,7 +511,7 @@ export class CommentService {
     }
   }
 
-  private async validateParent(parentId: string | undefined, tenantId: string, photoId: string) {
+  private async validateParent(parentId: string | undefined, photoId: string) {
     if (!parentId) {
       return null
     }
@@ -551,7 +524,7 @@ export class CommentService {
         deletedAt: comments.deletedAt,
       })
       .from(comments)
-      .where(and(eq(comments.id, parentId), eq(comments.tenantId, tenantId)))
+      .where(eq(comments.id, parentId))
       .limit(1)
 
     if (!parent) {
@@ -567,7 +540,7 @@ export class CommentService {
     return parent
   }
 
-  private async getCommentById(commentId: string, tenantId: string) {
+  private async getCommentById(commentId: string) {
     const db = this.dbAccessor.get()
     const [comment] = await db
       .select({
@@ -582,7 +555,7 @@ export class CommentService {
         deletedAt: comments.deletedAt,
       })
       .from(comments)
-      .where(and(eq(comments.id, commentId), eq(comments.tenantId, tenantId), isNull(comments.deletedAt)))
+      .where(and(eq(comments.id, commentId), isNull(comments.deletedAt)))
       .limit(1)
 
     if (!comment) {
@@ -592,7 +565,7 @@ export class CommentService {
     return comment
   }
 
-  private async fetchReactionAggregations(tenantId: string, commentIds: string[], viewerId: string | null) {
+  private async fetchReactionAggregations(commentIds: string[], viewerId: string | null) {
     const db = this.dbAccessor.get()
     const counts = new Map<string, Record<string, number>>()
     const viewer = new Map<string, string[]>()
@@ -608,7 +581,7 @@ export class CommentService {
         total: sql<number>`count(*)`,
       })
       .from(commentReactions)
-      .where(and(eq(commentReactions.tenantId, tenantId), inArray(commentReactions.commentId, commentIds)))
+      .where(inArray(commentReactions.commentId, commentIds))
       .groupBy(commentReactions.commentId, commentReactions.reaction)
 
     for (const row of rows) {
@@ -624,13 +597,7 @@ export class CommentService {
           reaction: commentReactions.reaction,
         })
         .from(commentReactions)
-        .where(
-          and(
-            eq(commentReactions.tenantId, tenantId),
-            inArray(commentReactions.commentId, commentIds),
-            eq(commentReactions.userId, viewerId),
-          ),
-        )
+        .where(and(inArray(commentReactions.commentId, commentIds), eq(commentReactions.userId, viewerId)))
 
       for (const row of viewerRows) {
         const existing = viewer.get(row.commentId) ?? []
@@ -642,7 +609,7 @@ export class CommentService {
     return { counts, viewer }
   }
 
-  private async findCommentForCursor(commentId: string, tenantId: string, photoId: string) {
+  private async findCommentForCursor(commentId: string, photoId: string) {
     const db = this.dbAccessor.get()
     const [comment] = await db
       .select({
@@ -650,7 +617,7 @@ export class CommentService {
         createdAt: comments.createdAt,
       })
       .from(comments)
-      .where(and(eq(comments.id, commentId), eq(comments.tenantId, tenantId), eq(comments.photoId, photoId)))
+      .where(and(eq(comments.id, commentId), eq(comments.photoId, photoId)))
       .limit(1)
 
     if (!comment) {
@@ -659,7 +626,7 @@ export class CommentService {
     return comment
   }
 
-  private async findCommentForCursorAll(commentId: string, tenantId: string) {
+  private async findCommentForCursorAll(commentId: string) {
     const db = this.dbAccessor.get()
     const [comment] = await db
       .select({
@@ -667,7 +634,7 @@ export class CommentService {
         createdAt: comments.createdAt,
       })
       .from(comments)
-      .where(and(eq(comments.id, commentId), eq(comments.tenantId, tenantId)))
+      .where(eq(comments.id, commentId))
       .limit(1)
 
     if (!comment) {
@@ -715,33 +682,6 @@ export class CommentService {
         name: user.name,
         image: user.image,
         website: null,
-      }
-    }
-
-    const ownedWorkspaces = await db
-      .select({
-        userId: tenantMemberships.userId,
-        slug: tenants.slug,
-      })
-      .from(tenantMemberships)
-      .innerJoin(tenants, eq(tenantMemberships.tenantId, tenants.id))
-      .where(
-        and(
-          inArray(tenantMemberships.userId, uniqueUserIds),
-          eq(tenantMemberships.role, 'owner'),
-          eq(tenantMemberships.status, 'active'),
-        ),
-      )
-      .orderBy(asc(tenantMemberships.createdAt), asc(tenants.id))
-
-    if (ownedWorkspaces.length > 0) {
-      const baseDomain = (await this.systemSettings.getSettings()).baseDomain || DEFAULT_BASE_DOMAIN
-      for (const workspace of ownedWorkspaces) {
-        const user = result[workspace.userId]
-        if (!user || user.website) {
-          continue
-        }
-        user.website = `https://${workspace.slug}.${baseDomain}`
       }
     }
 

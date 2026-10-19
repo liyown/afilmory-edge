@@ -1,5 +1,2 @@
-import type { ManifestVersion } from '@afilmory/typing'
-
-export type { ManifestVersion }
-
-export const CURRENT_MANIFEST_VERSION: ManifestVersion = 'v10'
+export type { ManifestVersion } from '@afilmory/typing'
+export { CURRENT_MANIFEST_VERSION } from '@afilmory/typing'

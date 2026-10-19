@@ -1,4 +1,3 @@
-import { DEFAULT_BASE_DOMAIN } from '@afilmory/utils'
 import { z } from 'zod'
 
 const nonEmptyString = z.string().trim().min(1)
@@ -40,18 +39,6 @@ export const SYSTEM_SETTING_DEFINITIONS = {
     defaultValue: true,
     isSensitive: false,
   },
-  baseDomain: {
-    key: 'system.domain.base',
-    schema: z
-      .string()
-      .trim()
-      .min(1)
-      .regex(/^[a-z0-9.-]+$/i, {
-        message: '域名只能包含字母、数字、连字符和点',
-      }),
-    defaultValue: DEFAULT_BASE_DOMAIN,
-    isSensitive: false,
-  },
   oauthGatewayUrl: {
     key: 'system.auth.oauth.gatewayUrl',
     schema: nullableHttpUrl,
@@ -86,12 +73,6 @@ export const SYSTEM_SETTING_DEFINITIONS = {
     key: 'system.auth.oauth.apple.webClientId',
     schema: nullableNonEmptyString,
     defaultValue: null as string | null,
-    isSensitive: false,
-  },
-  oauthAppleAppBundleId: {
-    key: 'system.auth.oauth.apple.appBundleId',
-    schema: nonEmptyString,
-    defaultValue: 'app.afilmory',
     isSensitive: false,
   },
   oauthAppleTeamId: {

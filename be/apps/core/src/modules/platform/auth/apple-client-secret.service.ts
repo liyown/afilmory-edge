@@ -10,9 +10,9 @@ const CLIENT_SECRET_REFRESH_SKEW_SECONDS = 30
 export class AppleClientSecretService {
   private readonly cache = new Map<string, { expiresAt: number, token: string }>()
 
-  async generate(options: AppleAuthOptions, clientId = options.clientId): Promise<string> {
+  async generate(options: AppleAuthOptions): Promise<string> {
     const now = Math.floor(Date.now() / 1000)
-    const cacheKey = [options.teamId, options.keyId, clientId].join(':')
+    const cacheKey = [options.teamId, options.keyId, options.clientId].join(':')
     const cached = this.cache.get(cacheKey)
     if (cached && cached.expiresAt - CLIENT_SECRET_REFRESH_SKEW_SECONDS > now) {
       return cached.token
@@ -24,7 +24,7 @@ export class AppleClientSecretService {
       .setProtectedHeader({ alg: 'ES256', kid: options.keyId })
       .setIssuer(options.teamId)
       .setAudience('https://appleid.apple.com')
-      .setSubject(clientId)
+      .setSubject(options.clientId)
       .setIssuedAt(now)
       .setExpirationTime(expiresAt)
       .sign(privateKey)

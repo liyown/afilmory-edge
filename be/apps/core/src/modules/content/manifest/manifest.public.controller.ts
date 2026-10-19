@@ -1,9 +1,8 @@
 import { BizException, ErrorCode } from '@core/errors'
 import { BypassResponseTransform } from '@core/interceptors/response-transform.decorator'
-import { requireTenantContext } from '@core/modules/platform/tenant/tenant.context'
+import { EventEmitterService } from '@core/modules/infrastructure/event/event-emitter.service'
 import { createProgressSseResponse } from '@core/modules/shared/http/sse'
 import { Body, ContextParam, Controller, createZodSchemaDto, Get, Param, Post, Query } from '@tsuki-hono/common'
-import { EventEmitterService } from '@tsuki-hono/event-emitter'
 import type { Context } from 'hono'
 import { z } from 'zod'
 
@@ -109,26 +108,20 @@ export class ManifestPublicController {
   @Get('events')
   @BypassResponseTransform()
   async streamEvents(@ContextParam() context: Context): Promise<Response> {
-    const tenantId = requireTenantContext().tenant.id
-
-    return createProgressSseResponse<{ type: 'revision', tenantId: string, revision: number }>({
+    return createProgressSseResponse<{ type: 'revision', revision: number }>({
       context,
       eventName: 'revision',
       handler: async ({ sendEvent, abortSignal }) => {
-        const listener = ({ tenantId: changedTenantId, revision }: { tenantId: string, revision?: number }) => {
-          if (changedTenantId !== tenantId) {
-            return
-          }
+        const listener = ({ revision }: { revision?: number }) => {
           void sendEvent({
             type: 'revision',
-            tenantId,
             revision: revision ?? 0,
           })
         }
         this.eventEmitter.on('photo.manifest.changed', listener)
         try {
           const revision = await this.manifestService.getManifestRevision()
-          await sendEvent({ type: 'revision', tenantId, revision })
+          await sendEvent({ type: 'revision', revision })
           await new Promise<void>((resolve) => {
             if (abortSignal.aborted) {
               resolve()

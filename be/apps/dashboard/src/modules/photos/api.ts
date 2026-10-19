@@ -1,8 +1,16 @@
+import { compressUint8Array } from '@afilmory/utils'
+import { rgbaToThumbHash } from 'thumbhash'
+
 import { coreApi } from '~/lib/api-client'
 import { camelCaseKeys } from '~/lib/case'
 import { getRequestErrorMessage } from '~/lib/errors'
 
 import type { PhotoAssetListItem, PhotoAssetSummary, PhotoSyncProgressEvent } from './types'
+
+const MAX_UPLOAD_FILE_BYTES = 1024 * 1024 * 1024
+const MAX_UPLOAD_BATCH_FILES = 128
+const MAX_UPLOAD_BATCH_BYTES = 5 * 1024 * 1024 * 1024
+const THUMBHASH_MAX_DIMENSION = 100
 
 function normalizeServerMessage(payload: unknown): string | null {
   const message = getRequestErrorMessage(payload, '')
@@ -233,18 +241,64 @@ function putBlobWithProgress(params: {
   })
 }
 
-async function readImageDimensions(file: File): Promise<{ width: number, height: number } | null> {
+function formatBytes(bytes: number): string {
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}
+
+function validateUploadBatch(files: File[]): void {
+  if (files.length > MAX_UPLOAD_BATCH_FILES) {
+    throw new Error(`一次最多上传 ${MAX_UPLOAD_BATCH_FILES} 个文件`)
+  }
+  for (const file of files) {
+    if (file.size > MAX_UPLOAD_FILE_BYTES) {
+      throw new Error(`文件 ${file.name} 超过单文件上限 ${formatBytes(MAX_UPLOAD_FILE_BYTES)}`)
+    }
+  }
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0)
+  if (totalBytes > MAX_UPLOAD_BATCH_BYTES) {
+    throw new Error(`本批次总大小超过上限 ${formatBytes(MAX_UPLOAD_BATCH_BYTES)}`)
+  }
+}
+
+type ImageInspection = {
+  width: number
+  height: number
+  thumbHash: string | null
+}
+
+async function inspectImage(file: File): Promise<ImageInspection | null> {
   if (!file.type.startsWith('image/')) {
     return null
   }
+  let bitmap: ImageBitmap
   try {
-    const bitmap = await createImageBitmap(file)
-    const dimensions = { width: bitmap.width, height: bitmap.height }
-    bitmap.close()
-    return dimensions
+    bitmap = await createImageBitmap(file)
   }
   catch {
     return null
+  }
+
+  try {
+    const dimensions = { width: bitmap.width, height: bitmap.height }
+    const scale = Math.min(1, THUMBHASH_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height))
+    const width = Math.max(1, Math.round(bitmap.width * scale))
+    const height = Math.max(1, Math.round(bitmap.height * scale))
+
+    const canvas = new OffscreenCanvas(width, height)
+    const context = canvas.getContext('2d')
+    if (!context) {
+      return { ...dimensions, thumbHash: null }
+    }
+
+    context.drawImage(bitmap, 0, 0, width, height)
+    const { data } = context.getImageData(0, 0, width, height)
+    return { ...dimensions, thumbHash: compressUint8Array(rgbaToThumbHash(width, height, data)) }
+  }
+  catch {
+    return { width: bitmap.width, height: bitmap.height, thumbHash: null }
+  }
+  finally {
+    bitmap.close()
   }
 }
 
@@ -347,6 +401,8 @@ export async function uploadPhotoAssets(
     return []
   }
 
+  validateUploadBatch(files)
+
   // iOS Live Photos arrive as <base>.HEIC + <base>.MOV. Pair them by base
   // name; the MOV is uploaded as the photo's companion, not as its own asset.
   const imageIndexByBase = new Map<string, number>()
@@ -447,15 +503,16 @@ export async function uploadPhotoAssets(
     }
 
     const { intent, parts } = await uploadObject(file, index)
-    const dimensions = await readImageDimensions(file)
+    const inspection = await inspectImage(file)
     const asset = await coreApi<PhotoAssetListItem>('/photos/upload-complete', {
       method: 'POST',
       body: {
         key: intent.key,
         photoId: intent.photoId,
         filename: file.name,
-        width: dimensions?.width ?? null,
-        height: dimensions?.height ?? null,
+        width: inspection?.width ?? null,
+        height: inspection?.height ?? null,
+        thumbHash: inspection?.thumbHash ?? null,
         takenAt: Number.isFinite(file.lastModified) ? new Date(file.lastModified).toISOString() : null,
         uploadId: intent.mode === 'multipart' ? intent.uploadId : null,
         parts: parts.length > 0 ? parts : null,

@@ -1,8 +1,10 @@
-// T1.3: serve the SPA shell and inject the live manifest/config before it
-// reaches the browser, replacing the legacy Next host's linkedom renderer.
+// Serve the SPA shell with the live manifest/config injected before it
+// reaches the browser.
 //
 // The SPA is built with AFILMORY_EMBED_MANIFEST=false, so `index.html` ships
 // with empty `<script id="manifest">` / `<script id="config">` placeholders.
+
+import { loadOgSiteConfig } from './og-site'
 
 const MANIFEST_KEY = 'manifest.json'
 const MANIFEST_CACHE_KEY = 'manifest:cache'
@@ -50,6 +52,22 @@ export async function serveAppShell(request: Request, env: Env): Promise<Respons
   }
 
   const manifest = await loadManifest(env)
+  const site = await loadOgSiteConfig(env)
+  const origin = new URL(request.url).origin
+  const title = site.title || site.name
+  const image = `${origin}/og/`
+  const head = [
+    `<meta property="og:type" content="website">`,
+    `<meta property="og:title" content="${escapeHtml(title)}">`,
+    `<meta property="og:description" content="${escapeHtml(site.description)}">`,
+    `<meta property="og:image" content="${escapeHtml(image)}">`,
+    `<meta property="og:url" content="${escapeHtml(origin)}">`,
+    `<meta name="twitter:card" content="summary_large_image">`,
+    `<meta name="twitter:title" content="${escapeHtml(title)}">`,
+    `<meta name="twitter:description" content="${escapeHtml(site.description)}">`,
+    `<meta name="twitter:image" content="${escapeHtml(image)}">`,
+    `<meta name="description" content="${escapeHtml(site.description)}">`,
+  ].join('')
 
   return new HTMLRewriter()
     .on('script#config', {
@@ -60,6 +78,36 @@ export async function serveAppShell(request: Request, env: Env): Promise<Respons
     .on('script#manifest', {
       element(element) {
         element.setInnerContent(`window.__MANIFEST__ = ${JSON.stringify(manifest)};`)
+      },
+    })
+    .on('title', {
+      element(element) {
+        element.setInnerContent(title)
+      },
+    })
+    .on('meta[name="description"]', {
+      element(element) {
+        element.remove()
+      },
+    })
+    .on('meta[property^="og:"]', {
+      element(element) {
+        element.remove()
+      },
+    })
+    .on('meta[name^="twitter:"]', {
+      element(element) {
+        element.remove()
+      },
+    })
+    .on('meta[property^="twitter:"]', {
+      element(element) {
+        element.remove()
+      },
+    })
+    .on('head', {
+      element(element) {
+        element.append(head, { html: true })
       },
     })
     .transform(
@@ -86,10 +134,7 @@ function escapeHtml(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
 }
 
-/**
- * T1.4: photo detail shell — same HTML as `/`, but with the photo's Open Graph
- * and Twitter meta tags. Mirrors the legacy Next host's prod.ts without linkedom.
- */
+/** Photo detail shell — same HTML as `/`, but with the photo's Open Graph and Twitter meta tags. */
 export async function servePhotoShell(request: Request, env: Env, photoId: string): Promise<Response> {
   const manifest = await loadManifest(env)
   const photos = (manifest.data ?? []) as ManifestPhoto[]
@@ -143,6 +188,11 @@ export async function servePhotoShell(request: Request, env: Env, photoId: strin
         },
       })
       // Drop the static defaults before appending the photo-specific ones.
+      .on('meta[name="description"]', {
+        element(element) {
+          element.remove()
+        },
+      })
       .on('meta[property^="og:"]', {
         element(element) {
           element.remove()
@@ -153,8 +203,7 @@ export async function servePhotoShell(request: Request, env: Env, photoId: strin
           element.remove()
         },
       })
-      // The SPA build emits twitter tags as `property=`; the SSR version had to
-      // strip both shapes too.
+      // The SPA build emits twitter tags as `property=`; strip both shapes.
       .on('meta[property^="twitter:"]', {
         element(element) {
           element.remove()

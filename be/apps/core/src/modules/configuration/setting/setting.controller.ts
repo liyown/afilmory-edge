@@ -23,14 +23,14 @@ export class SettingController {
   @Get('/:key')
   @BypassResponseTransform()
   async get(@Param() { key }: GetSettingDto) {
-    const value = await this.settingService.get(key, {})
+    const value = await this.settingService.get(key)
     return { key, value }
   }
 
   @Get('/')
   @BypassResponseTransform()
   async getAll() {
-    const values = await this.settingService.getMany(Array.from(SettingKeys), {})
+    const values = await this.settingService.getMany(Array.from(SettingKeys))
 
     return { values }
   }
@@ -43,7 +43,7 @@ export class SettingController {
         message: 'settings keys is required',
       })
     }
-    const values = await this.settingService.getMany(keys, {})
+    const values = await this.settingService.getMany(keys)
     return { values }
   }
 

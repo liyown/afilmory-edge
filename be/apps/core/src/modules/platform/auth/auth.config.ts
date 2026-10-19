@@ -13,12 +13,10 @@ export interface SocialProvidersConfig {
 }
 
 export interface AppleAuthOptions {
-  appBundleIdentifier: string
   clientId: string
   keyId: string
   privateKey: string
   teamId: string
-  webEnabled: boolean
 }
 
 export interface AuthModuleOptions {
@@ -26,7 +24,6 @@ export interface AuthModuleOptions {
   useDrizzle: boolean
   socialProviders: SocialProvidersConfig
   apple?: AppleAuthOptions
-  baseDomain: string
   oauthGatewayUrl: string | null
 }
 
@@ -36,37 +33,20 @@ export class AuthConfig {
 
   async getOptions(): Promise<AuthModuleOptions> {
     const prefix = '/auth'
-    const { socialProviders, baseDomain, oauthGatewayUrl } = await this.systemSettings.getAuthModuleConfig()
+    const { socialProviders, oauthGatewayUrl } = await this.systemSettings.getAuthModuleConfig()
     const settings = await this.systemSettings.getSettings()
 
-    // T3.1: the personal deployment has a single local account. OAuth
-    // providers, Apple sign-in and the mobile OAuth gateway are not part of
-    // this mode, so ignore any stale values persisted in system settings.
-    if (env.PERSONAL_DEPLOYMENT) {
-      return {
-        prefix,
-        useDrizzle: true,
-        socialProviders: {},
-        apple: undefined,
-        baseDomain,
-        oauthGatewayUrl: null,
-      }
-    }
-
-    const appBundleIdentifier = env.APPLE_APP_BUNDLE_ID ?? settings.oauthAppleAppBundleId
-    const webClientId = settings.oauthAppleWebClientId ?? env.APPLE_WEB_CLIENT_ID ?? null
+    const clientId = settings.oauthAppleWebClientId ?? env.APPLE_WEB_CLIENT_ID ?? null
     const teamId = settings.oauthAppleTeamId ?? env.APPLE_TEAM_ID ?? null
     const keyId = settings.oauthAppleKeyId ?? env.APPLE_KEY_ID ?? null
     const privateKey = env.APPLE_PRIVATE_KEY ?? null
     const apple
-      = teamId && keyId && privateKey
+      = clientId && teamId && keyId && privateKey
         ? {
-            appBundleIdentifier,
-            clientId: webClientId ?? appBundleIdentifier,
+            clientId,
             keyId,
             privateKey,
             teamId,
-            webEnabled: Boolean(webClientId),
           }
         : undefined
 
@@ -75,7 +55,6 @@ export class AuthConfig {
       useDrizzle: true,
       socialProviders,
       apple,
-      baseDomain,
       oauthGatewayUrl,
     }
   }

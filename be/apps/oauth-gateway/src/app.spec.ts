@@ -10,29 +10,27 @@ const config = {
   baseDomain: 'afilmory.art',
   forceHttps: true,
   callbackBasePath: '/api/auth/callback',
-  rootSlug: 'root',
   stateSecret: 'test-gateway-state-secret',
 } as const satisfies GatewayConfig
 
-function createState(tenantSlug: string | null, innerState = 'better-auth-state'): string {
+function createState(innerState = 'better-auth-state'): string {
   return encodeGatewayState({
     innerState,
     secret: config.stateSecret,
-    tenantSlug,
   })
 }
 
 describe('oauth gateway callbacks', () => {
-  it('keeps the existing GET callback behavior and unwraps state in the redirect URL', async () => {
+  it('forwards GET callbacks to the site domain and unwraps state in the redirect URL', async () => {
     const app = createOAuthGatewayApp(config)
-    const state = createState('gallery-one')
+    const state = createState()
     const response = await app.request(
       `https://auth.afilmory.art/api/auth/callback/github?code=github-code&state=${encodeURIComponent(state)}`,
     )
 
     expect(response.status).toBe(302)
     const location = new URL(response.headers.get('location')!)
-    expect(location.origin).toBe('https://gallery-one.afilmory.art')
+    expect(location.origin).toBe('https://afilmory.art')
     expect(location.pathname).toBe('/api/auth/callback/github')
     expect(location.searchParams.get('code')).toBe('github-code')
     expect(location.searchParams.get('state')).toBe('better-auth-state')
@@ -40,7 +38,7 @@ describe('oauth gateway callbacks', () => {
 
   it('routes Apple form_post callbacks with a 307 so the browser preserves the authorization body', async () => {
     const app = createOAuthGatewayApp(config)
-    const state = createState('gallery-one')
+    const state = createState()
     const form = new URLSearchParams({
       code: 'apple-authorization-code',
       id_token: 'apple-id-token',
@@ -55,12 +53,12 @@ describe('oauth gateway callbacks', () => {
     })
 
     expect(response.status).toBe(307)
-    expect(response.headers.get('location')).toBe('https://gallery-one.afilmory.art/api/auth/callback/apple')
+    expect(response.headers.get('location')).toBe('https://afilmory.art/api/auth/callback/apple')
   })
 
   it('rejects a tampered form state instead of forwarding the Apple authorization code', async () => {
     const app = createOAuthGatewayApp(config)
-    const state = `${createState('gallery-one')}tampered`
+    const state = `${createState()}tampered`
     const form = new URLSearchParams({ code: 'apple-authorization-code', state })
 
     const response = await app.request('https://auth.afilmory.art/api/auth/callback/apple', {
@@ -76,7 +74,7 @@ describe('oauth gateway callbacks', () => {
   it('rejects POST callbacks that are not URL-encoded forms', async () => {
     const app = createOAuthGatewayApp(config)
     const response = await app.request('https://auth.afilmory.art/api/auth/callback/apple', {
-      body: JSON.stringify({ state: createState('gallery-one') }),
+      body: JSON.stringify({ state: createState() }),
       headers: { 'content-type': 'application/json' },
       method: 'POST',
     })

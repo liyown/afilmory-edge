@@ -1,9 +1,8 @@
-import { authUsers, tenantMemberships } from '@afilmory/db'
+import { authUsers } from '@afilmory/db'
 import { DbAccessor } from '@core/database/database.provider'
 import { BizException, ErrorCode } from '@core/errors'
 import { normalizeStringToUndefined } from '@core/helpers/normalize.helper'
-import { requireTenantContext } from '@core/modules/platform/tenant/tenant.context'
-import { and, asc, eq, sql } from 'drizzle-orm'
+import { asc, eq, sql } from 'drizzle-orm'
 import { injectable } from 'tsyringe'
 
 import { getUiSchemaTranslator } from '../../ui/ui-schema/ui-schema.i18n'
@@ -33,7 +32,7 @@ export class SiteSettingService {
   ) {}
 
   async getUiSchema(): Promise<SiteSettingUiSchemaResponse> {
-    const values = await this.settingService.getMany(SITE_SETTING_UI_SCHEMA_KEYS, {})
+    const values = await this.settingService.getMany(SITE_SETTING_UI_SCHEMA_KEYS)
     const typedValues: SiteSettingUiSchemaResponse['values'] = {}
 
     for (const key of SITE_SETTING_KEYS) {
@@ -74,11 +73,11 @@ export class SiteSettingService {
   }
 
   async get(key: SiteSettingKey) {
-    return await this.settingService.get(key, {})
+    return await this.settingService.get(key)
   }
 
   async getSiteConfig(): Promise<SiteConfig> {
-    const values = await this.settingService.getMany(SITE_SETTING_KEYS, {})
+    const values = await this.settingService.getMany(SITE_SETTING_KEYS)
 
     const config: SiteConfig = {
       ...DEFAULT_SITE_CONFIG,
@@ -96,7 +95,7 @@ export class SiteSettingService {
       config.viewer = viewer
     }
 
-    const resolvedAuthor = await this.resolveAuthorFromTenant(config.name)
+    const resolvedAuthor = await this.resolveAuthor(config.name)
     if (resolvedAuthor) {
       config.author = resolvedAuthor
     }
@@ -133,7 +132,7 @@ export class SiteSettingService {
     const user = await this.findPrimaryAuthorUser()
     if (!user) {
       throw new BizException(ErrorCode.AUTH_FORBIDDEN, {
-        message: '当前租户缺少可更新的作者账号，请先创建管理员账号。',
+        message: '当前站点缺少可更新的作者账号，请先创建管理员账号。',
       })
     }
     return toSiteAuthorProfile(user)
@@ -143,7 +142,7 @@ export class SiteSettingService {
     const user = await this.findPrimaryAuthorUser()
     if (!user) {
       throw new BizException(ErrorCode.AUTH_FORBIDDEN, {
-        message: '当前租户缺少可更新的作者账号，请先创建管理员账号。',
+        message: '当前站点缺少可更新的作者账号，请先创建管理员账号。',
       })
     }
 
@@ -180,7 +179,7 @@ export class SiteSettingService {
     })
   }
 
-  private async resolveAuthorFromTenant(siteName: string): Promise<SiteConfigAuthor | null> {
+  private async resolveAuthor(siteName: string): Promise<SiteConfigAuthor | null> {
     const user = await this.findPrimaryAuthorUser()
     if (!user) {
       return null
@@ -206,7 +205,6 @@ export class SiteSettingService {
   }
 
   private async findPrimaryAuthorUser(): Promise<AuthorUserRecord | null> {
-    const tenant = requireTenantContext()
     const db = this.dbAccessor.get()
     const [user] = await db
       .select({
@@ -216,17 +214,12 @@ export class SiteSettingService {
         displayUsername: authUsers.displayUsername,
         username: authUsers.username,
         image: authUsers.image,
-        role: tenantMemberships.role,
+        role: authUsers.role,
         createdAt: authUsers.createdAt,
         updatedAt: authUsers.updatedAt,
       })
       .from(authUsers)
-      .innerJoin(tenantMemberships, eq(tenantMemberships.userId, authUsers.id))
-      .where(and(eq(tenantMemberships.tenantId, tenant.tenant.id), eq(tenantMemberships.status, 'active')))
-      .orderBy(
-        sql`case when ${tenantMemberships.role} = 'owner' then 0 when ${tenantMemberships.role} = 'admin' then 1 else 2 end`,
-        asc(authUsers.createdAt),
-      )
+      .orderBy(sql`case when ${authUsers.role} = 'superadmin' then 0 else 1 end`, asc(authUsers.createdAt))
       .limit(1)
 
     return user ?? null

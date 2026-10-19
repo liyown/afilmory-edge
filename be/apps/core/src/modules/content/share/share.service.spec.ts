@@ -5,13 +5,6 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { ShareService } from './share.service'
 
-vi.hoisted(() => {
-  process.env.DATABASE_URL ??= 'postgres://localhost:5432/afilmory'
-  process.env.REDIS_URL ??= 'redis://localhost:6379'
-  process.env.CONFIG_ENCRYPTION_KEY ??= 'test-config-encryption-key'
-})
-
-// The provider module validates the full server environment on import.
 vi.mock('@core/database/database.provider', () => ({ DbAccessor: class DbAccessor {} }))
 
 function createPhoto(overrides: Partial<PhotoManifestItem> & { id: string }): PhotoManifestItem {

@@ -2,20 +2,7 @@ import { decodeGatewayState } from '@afilmory/be-utils'
 import { Hono } from 'hono'
 
 import type { GatewayConfig } from './config'
-import { buildForwardLocation, resolveTargetHost, sanitizeTenantSlug } from './resolver'
-
-function resolveTenantSlug(decodedState: ReturnType<typeof decodeGatewayState>): {
-  invalid: boolean
-  tenantSlug: string | null
-} {
-  const rawTenantSlug = decodedState?.tenantSlug ?? null
-  if (!rawTenantSlug) {
-    return { invalid: false, tenantSlug: null }
-  }
-
-  const tenantSlug = sanitizeTenantSlug(rawTenantSlug)
-  return tenantSlug ? { invalid: false, tenantSlug } : { invalid: true, tenantSlug: null }
-}
+import { buildForwardLocation, resolveTargetHost } from './resolver'
 
 export function createOAuthGatewayApp(config: GatewayConfig): Hono {
   const app = new Hono()
@@ -56,20 +43,7 @@ export function createOAuthGatewayApp(config: GatewayConfig): Hono {
       requestUrl.searchParams.set('state', decodedState.innerState)
     }
 
-    const resolvedTenant = resolveTenantSlug(decodedState)
-    if (resolvedTenant.invalid) {
-      return c.json({ error: 'invalid_state', message: 'OAuth state contains an invalid tenant.' }, 400)
-    }
-
-    const targetHost = resolveTargetHost(config, { tenantSlug: resolvedTenant.tenantSlug })
-    if (!targetHost) {
-      console.error('[oauth-gateway:callback] Unable to resolve target host', {
-        provider,
-        tenantSlug: resolvedTenant.tenantSlug,
-        baseDomain: config.baseDomain,
-      })
-      return c.json({ error: 'unresolvable_host', message: 'Unable to resolve target tenant host.' }, 400)
-    }
+    const targetHost = resolveTargetHost(config)
 
     const location = buildForwardLocation({
       config,
@@ -115,20 +89,7 @@ export function createOAuthGatewayApp(config: GatewayConfig): Hono {
       return c.json({ error: 'invalid_state', message: 'OAuth state is invalid or expired.' }, 400)
     }
 
-    const resolvedTenant = resolveTenantSlug(decodedState)
-    if (resolvedTenant.invalid) {
-      return c.json({ error: 'invalid_state', message: 'OAuth state contains an invalid tenant.' }, 400)
-    }
-
-    const targetHost = resolveTargetHost(config, { tenantSlug: resolvedTenant.tenantSlug })
-    if (!targetHost) {
-      console.error('[oauth-gateway:callback] Unable to resolve form callback target host', {
-        provider,
-        tenantSlug: resolvedTenant.tenantSlug,
-        baseDomain: config.baseDomain,
-      })
-      return c.json({ error: 'unresolvable_host', message: 'Unable to resolve target tenant host.' }, 400)
-    }
+    const targetHost = resolveTargetHost(config)
 
     const location = buildForwardLocation({
       config,
@@ -138,8 +99,8 @@ export function createOAuthGatewayApp(config: GatewayConfig): Hono {
     })
 
     // Apple uses response_mode=form_post. A 307 redirect makes the user agent
-    // repeat the POST with the original form body at the tenant Core endpoint,
-    // where the wrapped state is verified and unwrapped.
+    // repeat the POST with the original form body at the Core endpoint, where
+    // the wrapped state is verified and unwrapped.
     return c.redirect(location, 307)
   })
 

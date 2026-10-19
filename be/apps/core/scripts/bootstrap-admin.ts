@@ -5,7 +5,7 @@ import process, { stderr, stdout } from 'node:process'
 import { hashPassword } from 'better-auth/crypto'
 
 import type { D1Statement, D1Target, SeedResult } from './lib/d1-target'
-import { createHttpD1Target, openLocalTarget, seedPersonalTenant } from './lib/d1-target'
+import { createHttpD1Target, openLocalTarget, seedPersonalAdmin } from './lib/d1-target'
 
 const LOCAL_D1_DIRECTORIES = [
   new URL('../../../../apps/edge/.cloudflare/state/v3/d1/miniflare-D1DatabaseObject/', import.meta.url),
@@ -17,8 +17,6 @@ export interface BootstrapOptions {
   name?: string
   now?: string
   password?: string
-  slug?: string
-  tenantName?: string
 }
 
 export interface BootstrapResult {
@@ -30,9 +28,9 @@ export interface BootstrapResult {
 }
 
 /**
- * Creates the single personal administrator: a superadmin user, an owner
- * membership on the root tenant and a credential account. Every step is
- * idempotent so the script can be rerun to repair or rotate a password.
+ * Creates the single personal administrator: a superadmin user and a
+ * credential account. Every step is idempotent so the script can be rerun to
+ * repair or rotate a password.
  */
 export async function bootstrapPersonalAdmin(target: D1Target, options: BootstrapOptions): Promise<BootstrapResult> {
   const email = options.email.trim().toLowerCase()
@@ -41,12 +39,10 @@ export async function bootstrapPersonalAdmin(target: D1Target, options: Bootstra
   }
 
   const now = options.now ?? new Date().toISOString()
-  const seed = await seedPersonalTenant(target, {
+  const seed = await seedPersonalAdmin(target, {
     adminEmail: email,
     adminName: options.name,
     now,
-    slug: options.slug ?? 'root',
-    tenantName: options.tenantName,
   })
 
   const [existingAccount] = await target.query<{ id: string }>(
@@ -103,14 +99,12 @@ interface BootstrapCliOptions {
   localFile: string | null
   name: string | null
   password: string | null
-  tenantName: string | null
-  tenantSlug: string
 }
 
 const USAGE = `Usage: bootstrap-admin [options]
 
-Creates the single personal administrator. Rerunning is safe: an existing user,
-membership and credential account are reused. Provide --password (or
+Creates the single personal administrator. Rerunning is safe: an existing user
+and credential account are reused. Provide --password (or
 BOOTSTRAP_ADMIN_PASSWORD) to rotate the password; when the account is created
 without one, a random password is generated and printed once.
 
@@ -119,8 +113,6 @@ Admin:
   --password <password>    Admin password (default: $BOOTSTRAP_ADMIN_PASSWORD);
                            prefer the environment variable over the flag
   --name <name>            Display name (default: $BOOTSTRAP_ADMIN_NAME)
-  --tenant-slug <slug>     Workspace slug (default: root)
-  --tenant-name <name>     Workspace name (default: Afilmory / $PERSONAL_TENANT_NAME)
 
 Target (local D1):
   --local                  Use the local D1 file created by \`cf dev\`
@@ -147,8 +139,6 @@ function parseCliArgs(argv: readonly string[]): BootstrapCliOptions {
     localFile: null,
     name: process.env.BOOTSTRAP_ADMIN_NAME ?? process.env.MIGRATION_ADMIN_NAME ?? process.env.ADMIN_NAME ?? null,
     password: process.env.BOOTSTRAP_ADMIN_PASSWORD ?? null,
-    tenantName: process.env.PERSONAL_TENANT_NAME ?? null,
-    tenantSlug: process.env.PERSONAL_TENANT_SLUG ?? 'root',
   }
 
   for (let index = 0; index < argv.length; index++) {
@@ -203,12 +193,6 @@ function parseCliArgs(argv: readonly string[]): BootstrapCliOptions {
         break
       case '--password':
         options.password = readValue()
-        break
-      case '--tenant-name':
-        options.tenantName = readValue()
-        break
-      case '--tenant-slug':
-        options.tenantSlug = readValue()
         break
       default:
         throw new Error(`Unknown option: ${flag}`)
@@ -272,12 +256,10 @@ export async function runBootstrapCli(argv: readonly string[]): Promise<void> {
     email,
     name: options.name ?? undefined,
     password: options.password ?? undefined,
-    slug: options.tenantSlug,
-    tenantName: options.tenantName ?? undefined,
   })
 
   stdout.write(
-    `Administrator ${email} is ready (tenant=${result.seed.createdTenant ? 'created' : 'existing'}, user=${result.seed.createdUser ? 'created' : 'existing'}, membership=${result.seed.createdMembership ? 'created' : 'existing'}, credential=${
+    `Administrator ${email} is ready (user=${result.seed.createdUser ? 'created' : 'existing'}, credential=${
       result.accountCreated ? 'created' : result.passwordChanged ? 'updated' : 'unchanged'
     }).\n`,
   )

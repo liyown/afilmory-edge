@@ -1,7 +1,6 @@
 export class CommentCreatedEvent {
   constructor(
     public readonly commentId: string,
-    public readonly tenantId: string,
     public readonly photoId: string,
     public readonly userId: string,
     public readonly parentId: string | null,

@@ -1,14 +1,11 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 
-const MIGRATION_PATH = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../../../../packages/db/migrations-sqlite/0000_heavy_skin.sql',
-)
+const MIGRATIONS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../packages/db/migrations')
 
 type ProxyQuery = {
   sql: string
@@ -39,8 +36,16 @@ export function createSqliteHarness(options?: { filename?: string, migrate?: boo
   sqlite.exec('PRAGMA busy_timeout = 5000')
 
   if (options?.migrate !== false) {
-    const migration = readFileSync(MIGRATION_PATH, 'utf8').replaceAll('--> statement-breakpoint', '')
-    sqlite.exec(migration)
+    const migrations = readdirSync(MIGRATIONS_DIR)
+      .filter(name => name.endsWith('.sql'))
+      .sort()
+    for (const migrationFile of migrations) {
+      const migration = readFileSync(path.join(MIGRATIONS_DIR, migrationFile), 'utf8').replaceAll(
+        '--> statement-breakpoint',
+        '',
+      )
+      sqlite.exec(migration)
+    }
   }
 
   const db = drizzle(
@@ -78,8 +83,4 @@ export function createSqliteHarness(options?: { filename?: string, migrate?: boo
   }
 
   return { sqlite, db, accessor }
-}
-
-export function seedTenant(sqlite: DatabaseSync, tenantId: string) {
-  sqlite.prepare('insert into tenant (id, slug, name) values (?1, ?2, ?3)').run(tenantId, tenantId, tenantId)
 }

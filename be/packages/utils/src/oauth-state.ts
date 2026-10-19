@@ -1,15 +1,14 @@
+import { Buffer } from 'node:buffer'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
 export interface GatewayStatePayload {
   innerState: string
-  tenantSlug: string | null
   issuedAt: number
   expiresAt: number
 }
 
 export interface EncodeGatewayStateOptions {
   secret: string
-  tenantSlug: string | null
   innerState: string
 
   ttlMs?: number
@@ -45,15 +44,14 @@ function safeCompare(a: string, b: string): boolean {
 }
 
 /**
- * Wraps the Better Auth state with tenant metadata so the OAuth gateway can
- * route the callback without hard-coding tenant slugs in redirect URIs.
+ * Wraps the Better Auth state so the OAuth gateway can verify the callback
+ * before forwarding it to the site domain.
  */
 export function encodeGatewayState(options: EncodeGatewayStateOptions): string {
-  const { secret, tenantSlug, innerState, ttlMs = DEFAULT_TTL_MS } = options
+  const { secret, innerState, ttlMs = DEFAULT_TTL_MS } = options
   const now = Date.now()
   const payload: GatewayStatePayload = {
     innerState,
-    tenantSlug,
     issuedAt: now,
     expiresAt: now + ttlMs,
   }
@@ -89,10 +87,10 @@ export function decodeGatewayState(
   try {
     const parsed = JSON.parse(base64UrlDecode(encodedPayload)) as GatewayStatePayload
     if (
-      !parsed ||
-      typeof parsed.innerState !== 'string' ||
-      typeof parsed.issuedAt !== 'number' ||
-      typeof parsed.expiresAt !== 'number'
+      !parsed
+      || typeof parsed.innerState !== 'string'
+      || typeof parsed.issuedAt !== 'number'
+      || typeof parsed.expiresAt !== 'number'
     ) {
       return null
     }
@@ -104,7 +102,8 @@ export function decodeGatewayState(
     }
 
     return parsed
-  } catch {
+  }
+  catch {
     return null
   }
 }

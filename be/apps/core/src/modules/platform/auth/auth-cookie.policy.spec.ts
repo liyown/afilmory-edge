@@ -6,10 +6,8 @@ import { AUTH_COOKIE_POLICY, AUTH_COOKIE_PREFIX } from './auth-cookie.policy'
 
 describe('auth cookie isolation', () => {
   it.each([
-    ['managed tenant', 'https://alpha.afilmory.art'],
-    ['platform root', 'https://afilmory.art'],
-    ['mobile broker', 'https://api.afilmory.art'],
-    ['custom domain', 'https://photos.example.net'],
+    ['site', 'https://photos.example.net'],
+    ['custom domain', 'https://gallery.example.org'],
   ])('emits host-only Better Auth cookies on the %s host', (_label, baseURL) => {
     const cookies = getCookies({
       baseURL,

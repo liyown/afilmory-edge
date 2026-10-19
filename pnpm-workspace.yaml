@@ -53,11 +53,11 @@ catalog:
 allowBuilds:
   '@swc/core': true
   esbuild: true
-  libpq: false
   node-pty: false
   sharp: true
   workerd: true
   simple-git-hooks: true
+  libpq: false
 
 packageExtensions:
   'swiper@14.3.0':

@@ -3,7 +3,6 @@ import { injectable } from 'tsyringe'
 export type CommentModerationAction = 'allow' | 'reject' | 'flag_pending'
 
 export interface CommentModerationHookInput {
-  tenantId: string
   userId: string
   photoId: string
   parentId?: string | null

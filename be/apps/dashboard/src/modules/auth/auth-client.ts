@@ -1,5 +1,4 @@
-import { creemClient } from '@creem_io/better-auth/client'
-import { createCreemAuthClient } from '@creem_io/better-auth/create-creem-auth-client'
+import { createAuthClient } from 'better-auth/react'
 import { FetchError } from 'ofetch'
 
 const apiBase = import.meta.env.VITE_APP_CORE_API_URL?.replace(/\/$/, '') || '/api'
@@ -12,9 +11,8 @@ const commonOptions = {
   },
 }
 
-export const authClient = createCreemAuthClient({
+export const authClient = createAuthClient({
   baseURL: authBase,
-  plugins: [creemClient()],
   ...commonOptions,
 })
 
@@ -46,7 +44,8 @@ export async function signInSocial(options: SocialSignInOptions): Promise<unknow
 export async function signOutBySource() {
   try {
     await signOutAuth()
-  } catch (error) {
+  }
+  catch (error) {
     if (error instanceof FetchError) {
       const status = error.statusCode ?? error.response?.status ?? null
       const recoverableStatuses = new Set([401, 403, 404])

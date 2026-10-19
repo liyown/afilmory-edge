@@ -1,12 +1,11 @@
 import type { ManifestChangePayload } from '@afilmory/db'
-import { photoAssets, tenantManifestChanges, tenantManifestStates } from '@afilmory/db'
+import { manifestChanges, manifestStates, photoAssets } from '@afilmory/db'
 import type { PhotoManifestItem } from '@afilmory/typing'
 import type { AtomicPlan } from '@core/database/atomic'
+import type { DrizzleDb } from '@core/database/database.provider'
 import { DbAccessor } from '@core/database/database.provider'
-import type { DrizzleDb } from '@core/database/tokens'
-import { requireTenantContext } from '@core/modules/platform/tenant/tenant.context'
-import { EventEmitterService } from '@tsuki-hono/event-emitter'
-import { and, asc, eq, gt, inArray, lte, sql } from 'drizzle-orm'
+import { EventEmitterService } from '@core/modules/infrastructure/event/event-emitter.service'
+import { asc, eq, gt, inArray, lte, sql } from 'drizzle-orm'
 import { injectable } from 'tsyringe'
 
 import type { PhotoChange } from './manifest-sync.types'
@@ -19,6 +18,8 @@ import {
 } from './manifest-sync.types'
 
 type PhotoAssetRow = typeof photoAssets.$inferSelect
+
+const MANIFEST_STATE_ID = 'default'
 
 export type AppliedManifestAction = {
   type: string
@@ -46,37 +47,31 @@ export class ManifestSyncService {
     private readonly eventEmitter: EventEmitterService,
   ) {}
 
-  async getRevision(tenantId?: string): Promise<number> {
-    const id = tenantId ?? requireTenantContext().tenant.id
+  async getRevision(): Promise<number> {
     const db = this.dbAccessor.get()
     const [row] = await db
-      .select({ revision: tenantManifestStates.revision })
-      .from(tenantManifestStates)
-      .where(eq(tenantManifestStates.tenantId, id))
+      .select({ revision: manifestStates.revision })
+      .from(manifestStates)
+      .where(eq(manifestStates.id, MANIFEST_STATE_ID))
       .limit(1)
     return row?.revision ?? 0
   }
 
-  async listChanges(
-    after: number,
-    tenantId?: string,
-  ): Promise<{
+  async listChanges(after: number): Promise<{
     revision: number
     expired: boolean
     changes: PhotoChange[]
   }> {
-    const id = tenantId ?? requireTenantContext().tenant.id
     const db = this.dbAccessor.get()
-    const revision = await this.getRevision(id)
+    const revision = await this.getRevision()
     if (after >= revision) {
       return { revision, expired: false, changes: [] }
     }
 
     const [oldest] = await db
-      .select({ revision: tenantManifestChanges.revision })
-      .from(tenantManifestChanges)
-      .where(eq(tenantManifestChanges.tenantId, id))
-      .orderBy(asc(tenantManifestChanges.revision))
+      .select({ revision: manifestChanges.revision })
+      .from(manifestChanges)
+      .orderBy(asc(manifestChanges.revision))
       .limit(1)
 
     if (isChangeCursorExpired(after, oldest?.revision ?? null)) {
@@ -85,43 +80,42 @@ export class ManifestSyncService {
 
     const rows = await db
       .select()
-      .from(tenantManifestChanges)
-      .where(and(eq(tenantManifestChanges.tenantId, id), gt(tenantManifestChanges.revision, after)))
-      .orderBy(asc(tenantManifestChanges.revision))
+      .from(manifestChanges)
+      .where(gt(manifestChanges.revision, after))
+      .orderBy(asc(manifestChanges.revision))
       .limit(MANIFEST_CHANGE_PAGE_SIZE)
 
     return {
       revision,
       expired: false,
-      changes: rows.map(row => toPhotoChange({ tenantId: id, revision: row.revision, payload: row.payload })),
+      changes: rows.map(row => toPhotoChange({ revision: row.revision, payload: row.payload })),
     }
   }
 
-  async recordDrafts(tenantId: string, drafts: ManifestChangeDraft[]): Promise<PhotoChange[]> {
+  async recordDrafts(drafts: ManifestChangeDraft[]): Promise<PhotoChange[]> {
     if (drafts.length === 0) {
       return []
     }
-    const changes = await this.dbAccessor.runAtomically(tx => this.createDraftPlan(tx, tenantId, drafts))
-    this.emitChanged(tenantId, changes)
+    const changes = await this.dbAccessor.runAtomically(tx => this.createDraftPlan(tx, drafts))
+    this.emitChanged(changes)
     return changes
   }
 
-  emitChanged(tenantId: string, changes: PhotoChange[]): void {
+  emitChanged(changes: PhotoChange[]): void {
     const latest = changes.at(-1)
     if (!latest) {
       return
     }
-    void this.eventEmitter.emit('photo.manifest.changed', { tenantId, revision: latest.revision })
+    void this.eventEmitter.emit('photo.manifest.changed', { revision: latest.revision })
   }
 
   async recordUpsert(record: PhotoAssetRow, publicUrl?: string | null): Promise<PhotoChange> {
-    const [change] = await this.recordDrafts(record.tenantId, [{ operation: 'upsert', record, publicUrl }])
+    const [change] = await this.recordDrafts([{ operation: 'upsert', record, publicUrl }])
     return change
   }
 
-  async recordDeletes(tenantId: string, records: Array<{ id: string, photoId: string }>): Promise<PhotoChange[]> {
+  async recordDeletes(records: Array<{ id: string, photoId: string }>): Promise<PhotoChange[]> {
     return await this.recordDrafts(
-      tenantId,
       records.map(record => ({
         operation: 'delete' as const,
         photoId: record.photoId,
@@ -130,7 +124,7 @@ export class ManifestSyncService {
     )
   }
 
-  async recordAppliedActions(tenantId: string, actions: AppliedManifestAction[]): Promise<PhotoChange[]> {
+  async recordAppliedActions(actions: AppliedManifestAction[]): Promise<PhotoChange[]> {
     const applied = actions.filter(
       action => action.applied && (action.type === 'insert' || action.type === 'update' || action.type === 'delete'),
     )
@@ -141,12 +135,7 @@ export class ManifestSyncService {
     const db = this.dbAccessor.get()
     const photoIds = [...new Set(applied.map(action => action.photoId).filter((id): id is string => Boolean(id)))]
     const records
-      = photoIds.length === 0
-        ? []
-        : await db
-            .select()
-            .from(photoAssets)
-            .where(and(eq(photoAssets.tenantId, tenantId), inArray(photoAssets.photoId, photoIds)))
+      = photoIds.length === 0 ? [] : await db.select().from(photoAssets).where(inArray(photoAssets.photoId, photoIds))
     const recordsByPhotoId = new Map(records.map(record => [record.photoId, record]))
 
     const drafts: ManifestChangeDraft[] = []
@@ -166,7 +155,7 @@ export class ManifestSyncService {
       drafts.push({ operation: 'upsert', record })
     }
 
-    return await this.recordDrafts(tenantId, drafts)
+    return await this.recordDrafts(drafts)
   }
 
   /**
@@ -174,33 +163,32 @@ export class ManifestSyncService {
    * allocated by a single UPDATE, and each change row derives its revision from
    * the already-updated state row inside the same transaction/batch.
    */
-  createDraftPlan(tx: DrizzleDb, tenantId: string, drafts: ManifestChangeDraft[]): AtomicPlan<PhotoChange[]> {
+  createDraftPlan(tx: DrizzleDb, drafts: ManifestChangeDraft[]): AtomicPlan<PhotoChange[]> {
     const now = new Date().toISOString()
     const count = drafts.length
     const payloads = drafts.map(draft => this.createPayload(draft))
 
     const currentRevision = sql<number>`(
-      select ${tenantManifestStates.revision}
-      from ${tenantManifestStates}
-      where ${tenantManifestStates.tenantId} = ${tenantId}
+      select ${manifestStates.revision}
+      from ${manifestStates}
+      where ${manifestStates.id} = ${MANIFEST_STATE_ID}
     )`
 
     const statements: unknown[] = [
-      tx.insert(tenantManifestStates).values({ tenantId, revision: 0, updatedAt: now }).onConflictDoNothing(),
+      tx.insert(manifestStates).values({ id: MANIFEST_STATE_ID, revision: 0, updatedAt: now }).onConflictDoNothing(),
       tx
-        .update(tenantManifestStates)
+        .update(manifestStates)
         .set({
-          revision: sql`${tenantManifestStates.revision} + ${count}`,
+          revision: sql`${manifestStates.revision} + ${count}`,
           updatedAt: now,
         })
-        .where(eq(tenantManifestStates.tenantId, tenantId))
-        .returning({ revision: tenantManifestStates.revision }),
+        .where(eq(manifestStates.id, MANIFEST_STATE_ID))
+        .returning({ revision: manifestStates.revision }),
     ]
 
     for (const [index, payload] of payloads.entries()) {
       statements.push(
-        tx.insert(tenantManifestChanges).values({
-          tenantId,
+        tx.insert(manifestChanges).values({
           revision: sql`${currentRevision} - ${count - 1 - index}`,
           operation: payload.operation,
           photoId: payload.photoId,
@@ -212,13 +200,8 @@ export class ManifestSyncService {
 
     statements.push(
       tx
-        .delete(tenantManifestChanges)
-        .where(
-          and(
-            eq(tenantManifestChanges.tenantId, tenantId),
-            lte(tenantManifestChanges.revision, sql`${currentRevision} - ${MANIFEST_CHANGE_RETENTION}`),
-          ),
-        ),
+        .delete(manifestChanges)
+        .where(lte(manifestChanges.revision, sql`${currentRevision} - ${MANIFEST_CHANGE_RETENTION}`)),
     )
 
     return {
@@ -226,12 +209,11 @@ export class ManifestSyncService {
       resolve: (results) => {
         const [state] = (results[1] ?? []) as Array<{ revision: number }>
         if (!state) {
-          throw new Error(`Failed to allocate manifest revision for tenant ${tenantId}`)
+          throw new Error('Failed to allocate manifest revision')
         }
 
         return payloads.map((payload, index) =>
           toPhotoChange({
-            tenantId,
             revision: state.revision - (count - 1 - index),
             payload,
           }))

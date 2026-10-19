@@ -14,7 +14,7 @@ import { useNavigate } from 'react-router'
 import { Drawer } from 'vaul'
 
 import { gallerySettingAtom, isCommandPaletteOpenAtom } from '~/atoms/app'
-import { sessionMembershipAtom, sessionUserAtom } from '~/atoms/session'
+import { sessionUserAtom } from '~/atoms/session'
 import { injectConfig, siteConfig } from '~/config'
 import { useMobile } from '~/hooks/useMobile'
 import { authApi, canAccessDashboard } from '~/lib/api/auth'
@@ -344,11 +344,9 @@ const UserMenuButton = ({
 }) => {
   const { t } = useTranslation()
   const setSessionUser = useSetAtom(sessionUserAtom)
-  const setSessionMembership = useSetAtom(sessionMembershipAtom)
-  const requestedMembership = useAtomValue(sessionMembershipAtom)
   const queryClient = useQueryClient()
   const [isSigningOut, setIsSigningOut] = useState(false)
-  const showDashboard = canAccessDashboard({ user, requestedMembership })
+  const showDashboard = canAccessDashboard({ user })
 
   const handleSignOut = async () => {
     if (isSigningOut) {
@@ -358,7 +356,6 @@ const UserMenuButton = ({
     try {
       await authApi.signOut()
       setSessionUser(null)
-      setSessionMembership(null)
       await queryClient.invalidateQueries({ queryKey: ['session'] })
     }
     catch (error) {

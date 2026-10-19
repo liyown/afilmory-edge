@@ -44,19 +44,6 @@ export interface PhotoSyncResult {
   actions: PhotoSyncAction[]
 }
 
-export interface PhotoSyncRunRecord {
-  id: string
-  dryRun: boolean
-  summary: PhotoSyncResultSummary
-  actionsCount: number
-  startedAt: string
-  completedAt: string
-}
-
-export interface PhotoSyncStatus {
-  lastRun: PhotoSyncRunRecord | null
-}
-
 export type PhotoSyncConflictType = 'missing-in-storage' | 'metadata-mismatch' | 'photo-id-conflict'
 
 export interface PhotoSyncConflictPayload {
@@ -64,23 +51,6 @@ export interface PhotoSyncConflictPayload {
   storageSnapshot?: PhotoSyncSnapshot | null
   recordSnapshot?: PhotoSyncSnapshot | null
   incomingStorageKey?: string | null
-}
-
-export interface PhotoSyncConflict {
-  id: string
-  storageKey: string
-  photoId: string | null
-  reason: string | null
-  payload: PhotoSyncConflictPayload | null
-  manifestVersion: string
-  manifest: PhotoAssetManifestPayload
-  storageProvider: string
-  syncedAt: string
-  updatedAt: string
-}
-
-export interface RunPhotoSyncPayload {
-  dryRun?: boolean
 }
 
 export type PhotoSyncProgressStage = 'missing-in-db' | 'orphan-in-db' | 'metadata-conflicts' | 'status-reconciliation'
@@ -148,42 +118,6 @@ export type PhotoSyncProgressEvent
     }
   }
   | PhotoSyncLogEvent
-
-export type PhotoSyncStageStatus = 'pending' | 'running' | 'completed'
-
-export interface PhotoSyncProgressState {
-  dryRun: boolean
-  summary: PhotoSyncResultSummary
-  totals: PhotoSyncStageTotals
-  stages: Record<
-    PhotoSyncProgressStage,
-    {
-      status: PhotoSyncStageStatus
-      processed: number
-      total: number
-    }
-  >
-  startedAt: number
-  updatedAt: number
-  logs: PhotoSyncLogEntry[]
-  lastAction?: {
-    stage: PhotoSyncProgressStage
-    index: number
-    total: number
-    action: PhotoSyncAction
-  }
-  error?: string
-}
-
-export interface PhotoSyncLogEntry {
-  id: string
-  timestamp: number
-  level: PhotoSyncLogLevel
-  message: string
-  stage?: PhotoSyncProgressStage | null
-  storageKey?: string
-  details?: Record<string, unknown> | null
-}
 
 export interface PhotoAssetManifestPayload {
   version: string

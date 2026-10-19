@@ -14,7 +14,7 @@ A ~42 s, 16:9 (1920×1080) promo video of the `apps/web` gallery for social medi
 - **Footage source:** the live gallery at `https://innei.afilmory.art` (redirect target of `afilmory.innei.in`). Footage reflects the deployed build, not local `main`.
 - **Language:** Chinese captions only.
 - **Audio:** no voice-over. Optional music track dropped into `apps/promo/public/` and named in `copy.ts`; unset renders a silent video.
-- **Non-goals:** iOS app video (later, separate spec), vertical/square cuts, English version, App Store preview compliance.
+- **Non-goals:** vertical/square cuts, English version.
 
 ## 2. Storyboard
 

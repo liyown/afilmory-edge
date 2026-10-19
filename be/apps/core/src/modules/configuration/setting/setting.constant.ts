@@ -1,9 +1,5 @@
 import { z } from 'zod'
 
-import {
-  BUILDER_SYSTEM_CONFIG_SETTING_KEY,
-  BUILDER_USER_CONFIG_SETTING_KEY,
-} from '../builder-config/builder-config.constants'
 import type { SettingDefinition, SettingMetadata } from './setting.type'
 
 const HEX_COLOR_REGEX = /^#(?:[0-9a-f]{3}){1,2}$/i
@@ -62,25 +58,6 @@ export const DEFAULT_SETTING_DEFINITIONS = {
   //   isSensitive: false,
   //   schema: z.string().min(1, 'AI Model name cannot be empty'),
   // },
-  'builder.storage.providers': {
-    isSensitive: false,
-    schema: createJsonStringArraySchema({
-      allowEmpty: true,
-      errorMessage: 'Builder storage providers must be a JSON array',
-    }),
-  },
-  'builder.storage.activeProvider': {
-    isSensitive: false,
-    schema: z.string().transform(value => value.trim()),
-  },
-  [BUILDER_SYSTEM_CONFIG_SETTING_KEY]: {
-    isSensitive: false,
-    schema: z.string().trim(),
-  },
-  [BUILDER_USER_CONFIG_SETTING_KEY]: {
-    isSensitive: true,
-    schema: z.string().trim(),
-  },
   'site.name': {
     isSensitive: false,
     schema: z.string().trim().min(1, 'Site name cannot be empty'),

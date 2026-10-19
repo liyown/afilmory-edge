@@ -2,9 +2,8 @@ import type { BetterAuthOptions } from 'better-auth'
 
 export const AUTH_ACCOUNT_POLICY = {
   // The OAuth gateway forwards the callback across a cross-subdomain
-  // redirect hop (auth.<domain> -> <tenant>.<domain>), which real
-  // browsers can drop the auth-state cookie on depending on SameSite
-  // enforcement. The gateway's HMAC-signed state envelope plus Better
+  // redirect hop (auth.<domain> -> site domain), which real browsers can
+  // drop the auth-state cookie on depending on SameSite enforcement. The gateway's HMAC-signed state envelope plus Better
   // Auth's own DB-backed verification record already authenticate the
   // callback, so this redundant cookie check is safe to skip.
   skipStateCookieCheck: true,

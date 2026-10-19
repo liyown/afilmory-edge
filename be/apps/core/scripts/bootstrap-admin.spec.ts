@@ -1,17 +1,14 @@
-import { readFileSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 
 import { verifyPassword } from 'better-auth/crypto'
 import { describe, expect, it } from 'vitest'
 
 import { bootstrapPersonalAdmin } from './bootstrap-admin'
-import { createSqliteTarget, seedPersonalTenant } from './lib/d1-target'
-
-const SQLITE_MIGRATION_PATH = new URL('../../../packages/db/migrations-sqlite/0000_heavy_skin.sql', import.meta.url)
+import { applySqliteMigrations, createSqliteTarget, seedPersonalAdmin } from './lib/d1-target'
 
 function createTarget() {
   const sqlite = new DatabaseSync(':memory:')
-  sqlite.exec(readFileSync(SQLITE_MIGRATION_PATH, 'utf8'))
+  applySqliteMigrations(sqlite)
   return createSqliteTarget(sqlite)
 }
 
@@ -25,7 +22,7 @@ async function readCredentialHash(target: ReturnType<typeof createTarget>, userI
 }
 
 describe('bootstrapPersonalAdmin', () => {
-  it('creates a superadmin, owner membership and working credential account', async () => {
+  it('creates a superadmin and working credential account', async () => {
     const target = createTarget()
     const result = await bootstrapPersonalAdmin(target, {
       email: 'Admin@Example.com',
@@ -33,9 +30,7 @@ describe('bootstrapPersonalAdmin', () => {
       password: 'Password123!',
     })
 
-    expect(result.seed.createdTenant).toBe(true)
     expect(result.seed.createdUser).toBe(true)
-    expect(result.seed.createdMembership).toBe(true)
     expect(result.accountCreated).toBe(true)
     expect(result.passwordChanged).toBe(true)
     expect(result.passwordGenerated).toBe(false)
@@ -45,10 +40,10 @@ describe('bootstrapPersonalAdmin', () => {
     )
     expect(users).toEqual([{ email: 'admin@example.com', email_verified: 1, role: 'superadmin' }])
 
-    const memberships = await target.query<{ role: string, status: string, tenant_id: string }>(
-      'select "role", "status", "tenant_id" from "tenant_membership"',
+    const [manifest] = await target.query<{ id: string, revision: number }>(
+      'select "id", "revision" from "manifest_state"',
     )
-    expect(memberships).toEqual([{ role: 'owner', status: 'active', tenant_id: result.seed.tenantId }])
+    expect(manifest).toEqual({ id: 'default', revision: 0 })
 
     const hash = await readCredentialHash(target, result.seed.userId)
     expect(await verifyPassword({ hash, password: 'Password123!' })).toBe(true)
@@ -66,7 +61,6 @@ describe('bootstrapPersonalAdmin', () => {
     const second = await bootstrapPersonalAdmin(target, { email: 'ADMIN@example.com' })
 
     expect(second.seed.createdUser).toBe(false)
-    expect(second.seed.createdMembership).toBe(false)
     expect(second.accountCreated).toBe(false)
     expect(second.passwordChanged).toBe(false)
     expect(second.passwordGenerated).toBe(false)
@@ -100,7 +94,7 @@ describe('bootstrapPersonalAdmin', () => {
 
   it('generates a password when the migrated user has no credential account', async () => {
     const target = createTarget()
-    const seed = await seedPersonalTenant(target, { adminEmail: 'admin@example.com', slug: 'root' })
+    const seed = await seedPersonalAdmin(target, { adminEmail: 'admin@example.com' })
 
     const result = await bootstrapPersonalAdmin(target, { email: 'admin@example.com' })
 
