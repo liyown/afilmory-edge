@@ -158,6 +158,43 @@ export const authVerifications = sqliteTable('auth_verification', {
   updatedAt: updatedAt(),
 })
 
+export const daemonAuthCodes = sqliteTable(
+  'daemon_auth_code',
+  {
+    id: snowflakeId,
+    codeHash: text('code_hash').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    redirectUri: text('redirect_uri').notNull(),
+    codeChallenge: text('code_challenge').notNull(),
+    state: text('state'),
+    expiresAt: isoDateText('expires_at').notNull(),
+    consumedAt: isoDateText('consumed_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('uq_daemon_auth_code_hash').on(t.codeHash), index('idx_daemon_auth_code_user').on(t.userId)],
+)
+
+export const daemonTokens = sqliteTable(
+  'daemon_token',
+  {
+    id: snowflakeId,
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    tokenPrefix: text('token_prefix').notNull(),
+    createdAt: createdAt(),
+    lastUsedAt: isoDateText('last_used_at'),
+    expiresAt: isoDateText('expires_at'),
+    revokedAt: isoDateText('revoked_at'),
+  },
+  (t) => [uniqueIndex('uq_daemon_token_hash').on(t.tokenHash), index('idx_daemon_token_user').on(t.userId)],
+)
+
 export const settings = sqliteTable(
   'settings',
   {

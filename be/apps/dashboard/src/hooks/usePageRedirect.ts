@@ -4,7 +4,7 @@ import { useCallback, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
 import { useSetAuthUser } from '~/atoms/auth'
-import { PUBLIC_ROUTES, ROUTE_PATHS } from '~/constants/routes'
+import { getSafeRedirect, PUBLIC_ROUTES, ROUTE_PATHS } from '~/constants/routes'
 import type { SessionResponse } from '~/modules/auth/api/session'
 import { AUTH_SESSION_QUERY_KEY, fetchSession } from '~/modules/auth/api/session'
 import { signOutBySource } from '~/modules/auth/auth-client'
@@ -22,8 +22,7 @@ export function usePageRedirect() {
     queryFn: async () => {
       try {
         return await fetchSession()
-      }
-      catch (error) {
+      } catch (error) {
         if (error instanceof FetchError) {
           const status = error.statusCode ?? error.response?.status ?? null
           if (status && AUTH_FAILURE_STATUSES.has(status)) {
@@ -40,11 +39,9 @@ export function usePageRedirect() {
   const logout = useCallback(async () => {
     try {
       await signOutBySource()
-    }
-    catch (error) {
+    } catch (error) {
       console.error('Logout error:', error)
-    }
-    finally {
+    } finally {
       queryClient.setQueryData(AUTH_SESSION_QUERY_KEY, null)
       queryClient.invalidateQueries({ queryKey: AUTH_SESSION_QUERY_KEY })
       setAuthUser(null)
@@ -61,16 +58,18 @@ export function usePageRedirect() {
       return
     }
 
-    const { pathname } = location
+    const { pathname, search } = location
     const session = sessionQuery.data
 
     if (!session && !PUBLIC_ROUTES.has(pathname)) {
-      navigate(ROUTE_PATHS.LOGIN, { replace: true })
+      const returnTo = encodeURIComponent(`${pathname}${search}`)
+      navigate(`${ROUTE_PATHS.LOGIN}?redirect=${returnTo}`, { replace: true })
       return
     }
 
     if (session && pathname === ROUTE_PATHS.LOGIN) {
-      navigate(ROUTE_PATHS.DEFAULT_AUTHENTICATED, { replace: true })
+      const redirect = getSafeRedirect(new URLSearchParams(search).get('redirect'))
+      navigate(redirect, { replace: true })
     }
   }, [location, sessionQuery.data, sessionQuery.isError, sessionQuery.isPending, navigate])
 

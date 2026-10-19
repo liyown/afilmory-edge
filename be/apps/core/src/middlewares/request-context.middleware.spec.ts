@@ -10,14 +10,15 @@ vi.mock('@core/database/database.provider', () => ({ DbAccessor: class DbAccesso
 function createMiddleware(session: unknown = null) {
   const getSession = vi.fn(async () => session)
   const getAuth = vi.fn(async () => ({ api: { getSession } }))
-  const middleware = new RequestContextMiddleware({ getAuth } as never)
-  return { middleware, getSession }
+  const resolveBearer = vi.fn(async () => null)
+  const middleware = new RequestContextMiddleware({ getAuth } as never, { resolveBearer } as never)
+  return { middleware, getSession, resolveBearer }
 }
 
-function requestContext(path: string): Context {
+function requestContext(path: string, authorization?: string): Context {
   return {
     req: {
-      header: () => undefined,
+      header: (name: string) => (name.toLowerCase() === 'authorization' ? authorization : undefined),
       method: 'GET',
       path,
       raw: new Request(`https://example.com${path}`),
@@ -47,6 +48,27 @@ describe('requestContextMiddleware', () => {
     await HttpContext.run(context as never, async () => {
       await middleware.use(context, async () => {})
       expect(HttpContext.getValue('auth')).toBeUndefined()
+    })
+  })
+
+  it('resolves a bearer token without consulting the session', async () => {
+    const authContext = {
+      user: { id: 'user-1', role: 'superadmin' },
+      session: { id: 'daemon-token-1' },
+    }
+    const getSession = vi.fn(async () => null)
+    const resolveBearer = vi.fn(async () => authContext)
+    const middleware = new RequestContextMiddleware(
+      { getAuth: vi.fn(async () => ({ api: { getSession } })) } as never,
+      { resolveBearer } as never,
+    )
+    const context = requestContext('/photos', 'Bearer afi_token')
+
+    await HttpContext.run(context as never, async () => {
+      await middleware.use(context, async () => {})
+      expect(resolveBearer).toHaveBeenCalledWith('afi_token')
+      expect(getSession).not.toHaveBeenCalled()
+      expect(HttpContext.getValue('auth')).toEqual(authContext)
     })
   })
 })

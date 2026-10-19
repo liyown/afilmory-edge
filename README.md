@@ -72,6 +72,22 @@ pnpm bootstrap:admin --email you@example.com \
 Sign in at `/platform/` and upload photos from the dashboard.
 See [Deployment](./docs/deployment.md) for binding setup, secrets, and backups.
 
+### Sync a local folder
+
+The `afi` CLI watches a folder and uploads new photos automatically:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/liyown/afilmory-edge/main/scripts/install-afi.sh | sh
+
+afi login -s https://photos.example.com
+cd ~/Pictures/import
+afi add
+afi ls
+```
+
+It uses browser OAuth, stores only a revocable long-lived token, and watches filesystem events
+without polling. See [apps/sync/README.md](./apps/sync/README.md) for details.
+
 ## 📸 Live Gallery
 
 - [photos.liuyaowen.cn](https://photos.liuyaowen.cn) - This deployment
@@ -91,6 +107,7 @@ The gallery UI, WebGPU/WebGL viewer, masonry layout, EXIF display, maps, comment
 - 🧾 **Built-in backups** - A daily cron exports D1 into the same private bucket (14 rotating copies) with a restore script.
 - 🧱 **Fresh baseline** - A single D1 baseline migration with no legacy history or compatibility shims.
 - 🚀 **Single build and deploy** - `pnpm build` assembles both SPAs and the Worker; `pnpm deploy:edge` ships it.
+- **Local folder sync** - A Rust `afi` CLI watches camera/import folders and uploads through the same API, with browser OAuth and a revocable token.
 
 ## 🏗️ Architecture
 

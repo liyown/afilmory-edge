@@ -110,6 +110,7 @@ Key implications when changing things:
 | `apps/web`                   | Vite + React 19 SPA — the gallery UI (the only web UI codebase)                                  |
 | `apps/edge`                  | Cloudflare Worker: serves SPA/dashboard, injects manifest, dynamic OG/SEO, cron (backup/cleanup) |
 | `apps/docs`                  | Vite-based documentation site                                                                    |
+| `apps/sync`                  | Rust `afi` CLI: watches folders and uploads through the public API                               |
 | `be/apps/core`               | Hono API graph: DB-backed manifest, REST API, auth, uploads                                      |
 | `be/apps/dashboard`          | Admin SPA (served by the Worker under `/platform/`)                                              |
 | `be/apps/oauth-gateway`      | Standalone OAuth broker (own Dockerfile)                                                         |

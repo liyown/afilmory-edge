@@ -7,10 +7,12 @@ import { AppleClientSecretService } from './apple-client-secret.service'
 import { AuthConfig } from './auth.config'
 import { AuthController } from './auth.controller'
 import { AuthProvider } from './auth.provider'
+import { DaemonAuthController } from './daemon-auth.controller'
+import { DaemonAuthService } from './daemon-auth.service'
 
 @Module({
   imports: [DatabaseModule, SystemSettingModule, SettingModule],
-  controllers: [AuthController],
-  providers: [AuthProvider, AuthConfig, AppleClientSecretService],
+  controllers: [AuthController, DaemonAuthController],
+  providers: [AuthProvider, AuthConfig, AppleClientSecretService, DaemonAuthService],
 })
 export class AuthModule {}

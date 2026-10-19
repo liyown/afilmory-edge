@@ -1,0 +1,34 @@
+name: Rust CLI
+
+on:
+  push:
+    paths:
+      - 'apps/sync/**'
+      - '.github/workflows/rust.yml'
+  pull_request:
+    paths:
+      - 'apps/sync/**'
+      - '.github/workflows/rust.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/sync
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.98.1
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/sync
+
+      - run: cargo fmt --check
+      - run: cargo clippy -- -D warnings
+      - run: cargo test
+      - run: cargo build --release

@@ -31,3 +31,6 @@ config.json
 tmp-asc/
 acceptance-report/
 /metadata/
+
+# Rust sync CLI build output
+apps/sync/target/

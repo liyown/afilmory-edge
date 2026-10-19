@@ -1,10 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { FetchError } from 'ofetch'
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 
 import { useSetAuthUser } from '~/atoms/auth'
-import { ROUTE_PATHS } from '~/constants/routes'
+import { getSafeRedirect } from '~/constants/routes'
 import { AUTH_SESSION_QUERY_KEY, fetchSession } from '~/modules/auth/api/session'
 
 import { signInAuth } from '../auth-client'
@@ -17,6 +17,7 @@ export interface LoginRequest {
 
 export function useLogin() {
   const navigate = useNavigate()
+  const location = useLocation()
   const queryClient = useQueryClient()
   const setAuthUser = useSetAuthUser()
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -42,7 +43,8 @@ export function useLogin() {
       queryClient.setQueryData(AUTH_SESSION_QUERY_KEY, session)
       setAuthUser(session.user)
       setErrorMessage(null)
-      navigate(ROUTE_PATHS.DEFAULT_AUTHENTICATED, { replace: true })
+      const redirect = getSafeRedirect(new URLSearchParams(location.search).get('redirect'))
+      navigate(redirect, { replace: true })
     },
     onError: (error: Error) => {
       if (error instanceof FetchError) {
@@ -65,8 +67,7 @@ export function useLogin() {
             setErrorMessage(serverMessage || error.message || 'Login failed. Please try again')
           }
         }
-      }
-      else {
+      } else {
         console.error('error', error)
         setErrorMessage('An unexpected error occurred. Please try again')
       }

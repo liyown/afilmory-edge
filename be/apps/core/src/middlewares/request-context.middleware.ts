@@ -1,6 +1,8 @@
+import type { HttpContextAuth } from '@core/context/http-context.values'
 import { logger } from '@core/helpers/logger.helper'
 import type { AuthSession } from '@core/modules/platform/auth/auth.provider'
 import { AuthProvider } from '@core/modules/platform/auth/auth.provider'
+import { DaemonAuthService } from '@core/modules/platform/auth/daemon-auth.service'
 import type { SupportedLanguage } from '@core/modules/ui/ui-schema/ui-schema.i18n'
 import { detectLanguageFromHeader } from '@core/modules/ui/ui-schema/ui-schema.i18n'
 import type { HttpMiddleware } from '@tsuki-hono/common'
@@ -13,7 +15,10 @@ import { injectable } from 'tsyringe'
 export class RequestContextMiddleware implements HttpMiddleware {
   private readonly log = logger.extend('RequestContextMiddleware')
 
-  constructor(private readonly authProvider: AuthProvider) {}
+  constructor(
+    private readonly authProvider: AuthProvider,
+    private readonly daemonAuth: DaemonAuthService,
+  ) {}
 
   async use(context: Context, next: Next): Promise<Response | void> {
     this.ensureLanguageContext(context)
@@ -50,7 +55,21 @@ export class RequestContextMiddleware implements HttpMiddleware {
     })
   }
 
-  private async resolveAuthSession(context: Context): Promise<AuthSession | null> {
+  private async resolveAuthSession(context: Context): Promise<AuthSession | HttpContextAuth | null> {
+    const authorization = context.req.header('authorization')?.trim()
+    if (authorization?.toLowerCase().startsWith('bearer ')) {
+      try {
+        const authContext = await this.daemonAuth.resolveBearer(authorization.slice(7).trim())
+        if (!authContext) {
+          this.log.warn(`Rejected bearer token on ${context.req.method} ${context.req.path}`)
+        }
+        return authContext
+      } catch (error) {
+        this.log.error('Failed to resolve bearer token from middleware', error)
+        return null
+      }
+    }
+
     try {
       const { headers } = context.req.raw
       const globalAuth = await this.authProvider.getAuth()
@@ -60,14 +79,12 @@ export class RequestContextMiddleware implements HttpMiddleware {
         this.log.verbose(
           `Session detected for user ${(authSession.user as { id?: string }).id ?? 'unknown'} on ${context.req.method} ${context.req.path}`,
         )
-      }
-      else {
+      } else {
         this.log.verbose(`No active session for ${context.req.method} ${context.req.path}`)
       }
 
       return authSession
-    }
-    catch (error) {
+    } catch (error) {
       this.log.error('Failed to resolve auth session from middleware', error)
       return null
     }
