@@ -21,6 +21,8 @@ import { APP_GUARD, APP_INTERCEPTOR, APP_MIDDLEWARE, createZodValidationPipe, Mo
 import type { HonoHttpApplication } from '@tsuki-hono/core'
 import { createApplication } from '@tsuki-hono/core'
 
+import { PersonalPhotoModule } from './modules/photos/personal-photo.module'
+
 /**
  * T3.1: the first slice of the core graph that runs in the Worker. It covers
  * authentication only; settings/photo/feed modules still depend on Redis or
@@ -36,6 +38,7 @@ import { createApplication } from '@tsuki-hono/core'
     TenantModule,
     AuthModule,
     DashboardModule,
+    PersonalPhotoModule,
   ],
   providers: [
     { provide: APP_MIDDLEWARE, useClass: RequestContextMiddleware },

@@ -22,6 +22,8 @@ const defaults: Partial<Record<keyof NodeEnvShape, unknown>> = {
   MOBILE_STORAGE_HANDOFF_RETURN_URL: 'afilmory://onboarding/storage',
   DEFAULT_SUPERADMIN_EMAIL: 'root@local.host',
   DEFAULT_SUPERADMIN_USERNAME: 'root',
+  R2_BUCKET_NAME: 'afilmory-photos',
+  R2_PUBLIC_BASE_URL: '/media',
   PERSONAL_DEPLOYMENT: true,
   TEST: false,
 }

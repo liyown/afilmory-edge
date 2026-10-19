@@ -30,7 +30,13 @@ Target reader: **执行这个计划的 agent**。本文件不按"人日"编排�
 | T2.5 租户 shim | ✅ | `TenantContextResolver` 永远返回 root 行（去掉初始化门禁/host 解析），`OnModuleInit` 启动预热；`ensureRootTenant` 用 `ON CONFLICT DO NOTHING` 并发安全创建 **active** root，并自动激活历史 inactive 行。3 files / 10 tests 通过（任意 host/path、并发、重试、middleware 内 `requireTenantContext()`）；Worker 端到端挂载留待 T3.1 |
 | T3.1 better-auth + D1 | ✅ | Worker 内挂载 `EdgeCoreModule`（Database/InProcessEvent/AppState/Setting/SystemSetting/Tenant/Auth）；drizzle adapter 按 `PERSONAL_DEPLOYMENT` 走 sqlite schema；新增 `isoDateText` 解决 better-auth 传 `Date` 而 D1 只接受原始值；Apple 服务构建期替换为禁用 stub；社交登录/邮件验证关闭。`cf dev` 实测：匿名 `/api/auth/session` → `null`；`POST /api/auth/sign-in/email` → 200 + session cookie；带 cookie 的 session 返回 user/session/memberships；`/api/auth/social/providers` → `[]`；`/api/mobile-auth/apple/configuration` → `enabled:false`；`pnpm -C apps/edge build` 通过 |
 | T3.2 单管理员引导 | ✅ | 新增 `bootstrap:admin`（本地 D1 / 远程 D1 REST）：幂等创建 superadmin + root owner + credential account，密码用 `better-auth/crypto` 的 scrypt 哈希；未给密码时随机生成并只打印一次，重跑不改密码。个人模式 `POST /api/auth/sign-up/email` → 403，同时 better-auth `emailAndPassword.disableSignUp=true` 兜底。本地 D1 实测：`auth_user` 1 行、credential 1 行；注册 403 且未新增用户；登录 + session 正常 |
-| T3.3 dashboard 托管 | ✅ | `apps/edge/scripts/sync-assets.sh` 合并两个 SPA；dashboard 按原生 base 托管在 `/platform/`（`/dashboard/*` → 302），Worker 对 SPA 路由回退到 `/platform/index.html`；`/api/*` 同源转发到 `EdgeCoreModule` 并挂载 `DashboardModule`（overview/analytics 改写为 SQLite）。headless Chrome 实测 `admin@local.test` 登录后进入 `/platform`，概览与空图库页面正常渲染。**已知缺口**：`/api/photos/assets` 与 `/api/billing/plan` 仍 404（photo 模块待 T4 解耦） |
+| T3.3 dashboard 托管 | ✅ | `apps/edge/scripts/sync-assets.sh` 合并两个 SPA；dashboard 按原生 base 托管在 `/platform/`（`/dashboard/*` → 302），Worker 对 SPA 路由回退到 `/platform/index.html`；`/api/*` 同源转发到 `EdgeCoreModule` 并挂载 `DashboardModule`（overview/analytics 改写为 SQLite）。headless Chrome 实测 `admin@local.test` 登录后进入 `/platform`，概览与空图库页面正常渲染。`/api/photos/assets` 缺口已在 T4.2 关闭；`/api/billing/plan` 仍 404（billing 为个人版非目标） |
+| T4.1 上传意图 | ✅ | 新增 `POST /api/photos/upload-intent`（`aws4fetch` 预签名）+ `PUT /api/photos/upload-content` Worker 代理兜底。本地 `.dev.vars` 用 `R2_*=disabled` 走代理；预签名 URL 结构已用临时凭据核对（host/bucket/key、`X-Amz-Signature`、`X-Amz-Expires=3600`）。**未覆盖**：真实 R2 直传（无凭据）；>100 MB multipart 仅实现未联调 |
+| T4.2 完成回调 + 去重 | ✅ | `POST /api/photos/upload-complete`：multipart 合并 → HEAD 校验 → 唯一键幂等插入 `photo_asset`；重复调用返回同一 asset。`GET /api/photos/assets` / `assets/summary` 改为 D1 实现，dashboard 图库显示真实行 |
+| T4.3 元数据提取 | ✅ | `ExifMetadataService` 对 R2 做 256 KB range 读 + `exifr`（tiff/exif/gps/xmp/iptc），映射相机/曝光/GPS/关键词；客户端宽高与 thumbhash 优先。合成 FUJIFILM X-T5 JPEG 上传后 manifest `exif.Make/Model/Software` 正确，相机集合自动生成。**未覆盖**：真实 iPhone HEIC / GPS 照片与 exiftool 的逐字段对比（仓库样例图均无 EXIF） |
+| T4.4 缩略图 URL | ✅（含降级） | `R2UploadService.thumbnailUrl()`：`R2_PUBLIC_BASE_URL` 为绝对地址时生成 `/cdn-cgi/image/width=1024,format=auto,quality=80/...`；保持 `/media` 相对地址时回退原图，避免 workers.dev 无 Image Resizing 时裂图 |
+| T4.5 manifest 增量更新 | ✅ | `ManifestPublisher` 在完成上传/删除/改标签后全量重建 manifest（`data` + `cameras`/`lenses`）写入 R2 `manifest.json`，删除 KV `manifest:cache`，资产标记 `synced`。实测上传后同请求内 `/api/manifest` 出现新照片，画廊首页 `<img>` 指向 `/media/photos/1/...`，无控制台/HTTP 错误 |
+| T4.6 Live Photo | ✅ | dashboard 按文件名 base 配对 `HEIC/JPEG + MOV`：MOV 作为伴随对象上传但不单独建 asset；完整回调带 `videoKey`，manifest 写入 `{ type:'live-photo', videoUrl, s3Key }`；删除照片时连同配对视频一起删 R2 对象。UI 实测一次 complete 携带 `videoKey`，`/media` 视频 200，删除后照片与视频均 404。**未覆盖**：真实 Live Photo 播放（测试用 MOV 为合成字节） |
 | T0.4 裁剪 core | 🚧 模块图完成 | `personal.module.ts` 修正 import 路径、补齐全局 middleware/guard/interceptor；新增 `InProcessEventModule`（§2.6，去掉事件对 Redis 的依赖）。已删除 `activity`、`super-admin`、`featured-galleries`、`gallery-subscriptions`、`mobile`、`user-safety`、`account-deletion`、`static-web`、`mail`、`index.module.ts`；`app.factory` / `openapi` 已切到 `PersonalModule`；`tsc --noEmit` 通过。**仍待**：billing/managed-storage/push/data-sync 与 photo/system-setting 解耦（与 T4 上传重写重叠），以及 billing 本身删除 |
 
 **线上资源（`cf deploy --provision` 创建）**
@@ -544,42 +550,85 @@ T1.6 + T2.5 + T3.3 ────────────────────�
     `pnpm -C apps/edge build`、`pnpm -C be/apps/dashboard build` → 通过。
 - 验收：浏览器打开 `/platform`（或 `/dashboard`）能登录并看到 dashboard；图库页可打开但为空。
 - 已知缺口（不阻塞）：
-  - `/api/photos/assets` 仍是 404：`PhotoModule` 依赖 billing/managed-storage/push/data-sync，
-    与 T4 上传重写一起解耦。在 T4 完成前，即使 D1 已有 `photo_asset` 行，图库页也只显示空状态。
+  - `/api/photos/assets` 已在 T4.2 由 `PersonalPhotoController` 关闭（D1 读写）。
   - `/api/billing/plan` 404：Header 的套餐徽标查询，billing 不在个人版模块图内；后续删除 billing 页面时一并处理。
 
 ### Phase 4 — 上传（核心，功能对等）
 
 **T4.1 上传意图接口**
 - 动作：`POST /api/photos/upload-intent`，body: `{ filename, size, contentType, directory? }`。
-  返回 `{ mode: 'single'|'multipart', url|uploadId+parts, key, headers }`。R2 用 `aws4fetch` 签名。
+  返回 `{ mode: 'single'|'multipart'|'proxy', url|uploadId+parts, key, headers }`。R2 用 `aws4fetch` 签名。
 - 验收：`curl` 拿到预签名 URL；用 `curl -X PUT --data-binary @photo.jpg <url>` 成功写入 R2。
+- 实现（2026-10-19）：`apps/edge/src/modules/photos/r2-upload.service.ts` 负责签名、multipart 创建/合并、
+  R2 binding 读写；`personal-photo.service.ts` 生成 `photos/<tenantId>/<directory?>/<base>-<photoId>.<ext>`
+  并做文件名/大小校验。新增可选环境变量 `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` /
+  `R2_BUCKET_NAME` / `R2_PUBLIC_BASE_URL`；值为 `disabled` 或缺失时返回 `mode: 'proxy'`，由
+  `PUT /api/photos/upload-content` 把请求体写入 R2（本地开发与无凭据环境保留上传能力，受 Worker
+  请求体上限约束）。>100 MB 走 S3 multipart（8 MB 分片，预签每个分片）。
+- 本地验证：`mode: 'proxy'` + PUT 204 + complete 200；临时假凭据下预签名 URL 含正确 host/path、
+  `X-Amz-Signature`、`X-Amz-Expires=3600`。真实 R2 直传待凭据。
 
 **T4.2 完成回调 + 去重**
 - 动作：`POST /api/photos/upload-complete`：HEAD 校验对象、取 size/etag、查 `photo_asset` 唯一键去重，
   写 `pending` 记录，返回 assetId。
 - 验收：重复调用返回同一 asset（幂等）；同 key 不产生两行。
+- 实现（2026-10-19）：`PersonalPhotoController`（`@TenantRoles('admin')`）提供 `assets` 列表/摘要、
+  `upload-intent`、`upload-complete`、`upload-content`、`storage-url`、删除与标签更新；JSON 响应
+  `@BypassResponseTransform` 保持 dashboard 契约。插入用 `.onConflictDoNothing().returning()`，
+  竞争失败后回查同一 `(tenantId, storageKey)` 行。dashboard 的 `uploadPhotoAssets` 从 multipart/SSE
+  改为 intent → PUT（XHR 进度）→ complete，并把快照合成为原有 `PhotoSyncProgressEvent`，弹窗行为不变。
+- 验证：同一 key 连续 complete 返回同一 asset id，列表计数不变；headless Chrome 上传进度到 100%、
+  图库出现新行。
 
 **T4.3 元数据提取**
 - 动作：R2 range 读前 256 KB → `exifr` 解析 EXIF/XMP/GPS；宽高用 `Image` 头解析或由客户端传；
   `thumbhash` 由客户端在 form 字段传入（iOS 已有 `Core/ThumbHash.swift`，Web 用 canvas）。
 - 验收：拿 3 张真实照片（含 iPhone HEIC、单反 JPEG、带 GPS 的）对比 exiftool 输出，字段差异清单写入 PR 描述。
 - 风险：中。RAW/冷门标签可能缺失 → 记录，不阻塞上线。
+- 实现（2026-10-19）：`ExifMetadataService` 用 `PHOTOS.get(key, { range: { offset: 0, length: 262144 } })`
+  读取头部，`exifr.parse` 开启 tiff/exif/gps/xmp/iptc；输出映射到 `PickedExif`（相机、曝光、镜头、GPS、
+  时间偏移），XMP/IPTC 关键词合并去重，`DateTimeOriginal` 在客户端未提供时作为 `dateTaken`。
+  视频扩展名（mov/mp4 等）直接跳过；解析异常静默降级为 `exif: null`，不阻塞上传。
+- 验证：合成 FUJIFILM X-T5 JPEG（sharp 写入 EXIF）上传后，manifest 得到
+  `{ Make: 'FUJIFILM', Model: 'X-T5', Software: 'afilmory-test', Orientation, ColorSpace }`，
+  `cameras` 生成 `FUJIFILM X-T5`。**未覆盖**：真实 HEIC / 带 GPS 样片与 exiftool 逐字段对比
+  （仓库内样片均已剥除 EXIF），留待有真实照片时补验。
 
 **T4.4 缩略图 URL**
 - 动作：生成 `/cdn-cgi/image/width=<w>,format=auto,quality=<q>/<r2-custom-domain>/<key>`；
   manifest 写入 `thumbnailUrl`/`originalUrl`，保持字段名不变。
 - 验收：浏览器打开缩略图返回 WebP/AVIF；HEIC 原图可出图。
 - 若 H4 选 wasm：改为任务 T4.4b（`@jsquash/*` + 降采样），验收同上 + 内存 <100 MB。
+- 实现（2026-10-19）：`R2UploadService.thumbnailUrl(key, width = 1024)`。当 `R2_PUBLIC_BASE_URL`
+  是绝对地址（Cloudflare 代理的自定义域名 / 支持 Image Resizing 的 zone）时生成
+  `<origin>/cdn-cgi/image/width=1024,format=auto,quality=80<object path>`；仍为默认 `/media`
+  时回退到 `originalUrl`（workers.dev 与本地没有 Image Resizing，硬拼会裂图）。
+- 验证：降级路径在本地画廊实测加载正常。**未覆盖**：真实 CDN 域的 WebP/AVIF 输出与 HEIC 转码
+  （需要已启用 Image Resizing 的线上域名）。
 
 **T4.5 manifest 增量更新**
 - 动作：上传完成后更新 `photo_asset` + `tenant_manifest_change` → 重建 manifest（个人量级可全量重建）→
   写 R2 → 失效 KV。保持 `ManifestSyncService.emitChanged` 的对外语义（改为进程内事件）。
 - 验收：上传后 ≤5 s，`/api/manifest` 与画廊首页出现新照片。
+- 实现（2026-10-19）：`ManifestPublisher.publish(tenantId)` 从 D1 读取全部 `photo_asset.manifest.data`，
+  按 `dateTaken` 倒序重建 `{ version, data, cameras, lenses }` 写入 R2 `manifest.json`（60s KV 缓存
+  键 `manifest:cache` 同步删除）。调用点：上传完成（随后把资产标记 `synced`）、标签更新、删除。
+  个人部署量级下一次全量读写可接受，避免维护 `tenant_manifest_change` 增量链。
+- 验证：上传后同一请求内 `GET /api/manifest` 即返回新照片（count 4，含 `exif-test`），
+  headless Chrome 打开 `/` 后 `<img>` 指向 `/media/photos/1/...`，无 HTTP/页面错误。
 
 **T4.6 Live Photo 配对**
 - 动作：同 base name 的 HEIC + MOV 作为一组写入；manifest 字段与现在一致。
 - 验收：上传一组 Live Photo，详情页能播放视频。
+- 实现（2026-10-19）：`uploadPhotoAssets` 先按小写 base name 建立图片索引，再把 MOV 分成两类：
+  配对视频（作为图片的伴随对象走同一 intent/PUT，但不调用 complete）与孤立 MOV（跳过，不生成
+  asset；图库拖拽时已有 `collectUnmatchedMovFiles` 提示）。图片 complete 请求新增 `videoKey`；
+  服务端校验租户前缀并 HEAD 视频对象后写入 manifest `video`。删除资产时从 manifest 收集
+  `video.s3Key` 与主对象一并删除。进度/完成事件把伴随视频计入 storageObjects、不计入
+  databaseRecords。
+- 验证：headless Chrome 选择 `IMG_9999.jpg + IMG_9999.MOV` 后只有一次 `upload-complete`，body 含
+  `videoKey`；`/api/manifest` 的 `video` 指向 `/media/...mov` 且该 URL 返回 200；删除资产后
+  photo 与 video URL 均 404。**未覆盖**：真实 iPhone Live Photo 的播放（测试 MOV 为合成字节）。
 
 ### Phase 5 — 保留的互动与输出
 

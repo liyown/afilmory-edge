@@ -37,7 +37,8 @@ function parseRawPayload(raw: string | null | undefined): unknown | null {
   }
   try {
     return JSON.parse(trimmed)
-  } catch {
+  }
+  catch {
     return trimmed
   }
 }
@@ -51,8 +52,8 @@ type ServerErrorInfo = {
 const extractErrorInfoFromPayload = (payload: unknown): ServerErrorInfo => {
   const message = normalizeServerMessage(payload)
   const codeValue = typeof payload === 'object' && payload ? (payload as { code?: unknown }).code : null
-  const code =
-    typeof codeValue === 'number' && Number.isFinite(codeValue)
+  const code
+    = typeof codeValue === 'number' && Number.isFinite(codeValue)
       ? codeValue
       : typeof codeValue === 'string'
         ? Number.parseInt(codeValue, 10)
@@ -73,7 +74,8 @@ async function readResponseErrorInfo(response: Response): Promise<ServerErrorInf
   try {
     const text = await response.text()
     return extractErrorInfoFromRaw(text)
-  } catch {
+  }
+  catch {
     return { message: null, code: null, raw: null }
   }
 }
@@ -91,13 +93,13 @@ const createApiError = (
   statusCode?: number
   code?: number
   data?: unknown
-  response?: { status?: number; _data?: unknown }
+  response?: { status?: number, _data?: unknown }
 } => {
   const error = new Error(info.message ?? fallback) as Error & {
     statusCode?: number
     code?: number
     data?: unknown
-    response?: { status?: number; _data?: unknown }
+    response?: { status?: number, _data?: unknown }
   }
   if (typeof status === 'number' && Number.isFinite(status)) {
     error.statusCode = status
@@ -147,7 +149,7 @@ export async function runPhotoSync(
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        accept: 'text/event-stream',
+        'accept': 'text/event-stream',
       },
       credentials: 'include',
       body: JSON.stringify({ dryRun: payload.dryRun ?? false }),
@@ -217,14 +219,16 @@ export async function runPhotoSync(
         const payloadCode = (event.payload as { code?: unknown }).code
         if (typeof payloadCode === 'number' && Number.isFinite(payloadCode)) {
           lastErrorCode = payloadCode
-        } else if (typeof payloadCode === 'string') {
+        }
+        else if (typeof payloadCode === 'string') {
           const parsed = Number.parseInt(payloadCode, 10)
           if (!Number.isNaN(parsed)) {
             lastErrorCode = parsed
           }
         }
       }
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Failed to parse sync progress event', error)
     }
   }
@@ -251,7 +255,8 @@ export async function runPhotoSync(
       stageEvent(buffer)
       buffer = ''
     }
-  } finally {
+  }
+  finally {
     reader.releaseLock()
   }
 
@@ -273,7 +278,7 @@ export async function listPhotoSyncConflicts(): Promise<PhotoSyncConflict[]> {
 
 export async function resolvePhotoSyncConflict(
   id: string,
-  payload: { strategy: PhotoSyncResolution; dryRun?: boolean },
+  payload: { strategy: PhotoSyncResolution, dryRun?: boolean },
 ): Promise<PhotoSyncAction> {
   const result = await coreApi<PhotoSyncAction>(`/data-sync/conflicts/${id}/resolve`, {
     method: 'POST',
@@ -314,6 +319,204 @@ export async function updatePhotoAssetTags(id: string, tags: string[]): Promise<
   return camelCaseKeys<PhotoAssetListItem>(asset)
 }
 
+type UploadIntent = {
+  mode: 'single' | 'multipart' | 'proxy'
+  key: string
+  photoId: string
+  headers: Record<string, string>
+  url?: string
+  uploadId?: string
+  parts?: Array<{ partNumber: number, url: string }>
+}
+
+type UploadPart = {
+  partNumber: number
+  etag: string
+}
+
+type PutResult = {
+  etag: string | null
+}
+
+function putBlobWithProgress(params: {
+  url: string
+  blob: Blob
+  headers?: Record<string, string>
+  signal?: AbortSignal
+  timeoutMs?: number
+  onProgress?: (loaded: number) => void
+}): Promise<PutResult> {
+  const { url, blob, headers, signal, timeoutMs, onProgress } = params
+  return new Promise<PutResult>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    const sameOrigin = url.startsWith('/')
+    xhr.open('PUT', url, true)
+    xhr.withCredentials = sameOrigin
+    if (timeoutMs && Number.isFinite(timeoutMs)) {
+      xhr.timeout = Math.max(0, timeoutMs)
+    }
+    for (const [name, value] of Object.entries(headers ?? {})) {
+      xhr.setRequestHeader(name, value)
+    }
+
+    const handleAbort = () => xhr.abort()
+    const cleanup = () => signal?.removeEventListener('abort', handleAbort)
+    if (signal) {
+      if (signal.aborted) {
+        reject(new DOMException('Upload aborted', 'AbortError'))
+        return
+      }
+      signal.addEventListener('abort', handleAbort)
+    }
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress?.(event.loaded)
+      }
+    }
+    xhr.onerror = () => {
+      cleanup()
+      reject(
+        createApiError(
+          { message: 'Network error during upload. Please try again later.', code: null, raw: null },
+          'Network error during upload. Please try again later.',
+          xhr.status || undefined,
+        ),
+      )
+    }
+    xhr.onabort = () => {
+      cleanup()
+      reject(new DOMException('Upload aborted', 'AbortError'))
+    }
+    xhr.ontimeout = () => {
+      cleanup()
+      reject(
+        createApiError(
+          { message: 'Upload timed out. Please try again later.', code: null, raw: null },
+          'Upload timed out. Please try again later.',
+          xhr.status || undefined,
+        ),
+      )
+    }
+    xhr.onload = () => {
+      cleanup()
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(blob.size)
+        resolve({ etag: xhr.getResponseHeader('etag') })
+        return
+      }
+      reject(createApiError(extractErrorInfoFromXhr(xhr), `Upload failed: ${xhr.status}`, xhr.status || undefined))
+    }
+    xhr.send(blob)
+  })
+}
+
+async function readImageDimensions(file: File): Promise<{ width: number, height: number } | null> {
+  if (!file.type.startsWith('image/')) {
+    return null
+  }
+  try {
+    const bitmap = await createImageBitmap(file)
+    const dimensions = { width: bitmap.width, height: bitmap.height }
+    bitmap.close()
+    return dimensions
+  }
+  catch {
+    return null
+  }
+}
+
+async function uploadSingleFile(params: {
+  file: File
+  intent: UploadIntent
+  signal?: AbortSignal
+  timeoutMs?: number
+  onProgress: (loaded: number) => void
+}): Promise<UploadPart[]> {
+  const { file, intent, signal, timeoutMs, onProgress } = params
+  if (!intent.url) {
+    throw new Error('Upload intent did not include a URL')
+  }
+
+  await putBlobWithProgress({
+    url: intent.url,
+    blob: file,
+    headers: intent.headers,
+    signal,
+    timeoutMs,
+    onProgress,
+  })
+  return []
+}
+
+async function uploadMultipartFile(params: {
+  file: File
+  intent: UploadIntent
+  signal?: AbortSignal
+  timeoutMs?: number
+  onProgress: (loaded: number) => void
+}): Promise<UploadPart[]> {
+  const { file, intent, signal, timeoutMs, onProgress } = params
+  const parts = intent.parts ?? []
+  if (parts.length === 0) {
+    throw new Error('Multipart upload intent did not include parts')
+  }
+
+  const partSize = Math.ceil(file.size / parts.length)
+  const uploaded: UploadPart[] = []
+  let completedBytes = 0
+
+  for (const part of parts) {
+    const start = (part.partNumber - 1) * partSize
+    const end = Math.min(file.size, start + partSize)
+    const blob = file.slice(start, end)
+    const result = await putBlobWithProgress({
+      url: part.url,
+      blob,
+      headers: intent.headers,
+      signal,
+      timeoutMs,
+      onProgress: loaded => onProgress(completedBytes + loaded),
+    })
+    if (!result.etag) {
+      throw new Error('R2 did not expose the part ETag. Configure CORS ExposeHeaders: ETag on the bucket.')
+    }
+    uploaded.push({ partNumber: part.partNumber, etag: result.etag })
+    completedBytes += blob.size
+    onProgress(completedBytes)
+  }
+
+  return uploaded
+}
+
+const IMAGE_UPLOAD_EXTENSIONS = new Set([
+  'jpg',
+  'jpeg',
+  'png',
+  'gif',
+  'webp',
+  'bmp',
+  'tiff',
+  'tif',
+  'heic',
+  'heif',
+  'hif',
+  'avif',
+  'raw',
+  'dng',
+])
+
+function fileExtension(name: string): string {
+  const normalized = name.toLowerCase()
+  const dotIndex = normalized.lastIndexOf('.')
+  return dotIndex === -1 ? '' : normalized.slice(dotIndex + 1)
+}
+
+function fileBaseName(name: string): string {
+  const dotIndex = name.lastIndexOf('.')
+  return (dotIndex === -1 ? name : name.slice(0, dotIndex)).toLowerCase()
+}
+
 export async function uploadPhotoAssets(
   files: File[],
   options?: UploadPhotoAssetsOptions,
@@ -322,222 +525,173 @@ export async function uploadPhotoAssets(
     return []
   }
 
-  const formData = new FormData()
+  // iOS Live Photos arrive as <base>.HEIC + <base>.MOV. Pair them by base
+  // name; the MOV is uploaded as the photo's companion, not as its own asset.
+  const imageIndexByBase = new Map<string, number>()
+  files.forEach((file, index) => {
+    if (IMAGE_UPLOAD_EXTENSIONS.has(fileExtension(file.name))) {
+      imageIndexByBase.set(fileBaseName(file.name), index)
+    }
+  })
+  const videoIndexForImage = new Map<number, number>()
+  const pairedVideoIndices = new Set<number>()
+  const skippedVideoIndices = new Set<number>()
+  files.forEach((file, index) => {
+    if (fileExtension(file.name) !== 'mov') {
+      return
+    }
+    const imageIndex = imageIndexByBase.get(fileBaseName(file.name))
+    if (imageIndex === undefined) {
+      skippedVideoIndices.add(index)
+    }
+    else {
+      videoIndexForImage.set(imageIndex, index)
+      pairedVideoIndices.add(index)
+    }
+  })
 
-  if (options?.directory) {
-    formData.append('directory', options.directory)
-  }
-
-  for (const file of files) {
-    formData.append('files', file)
-  }
-
-  if (typeof XMLHttpRequest === 'undefined') {
-    const fallbackResponse = await coreApi<{ assets: PhotoAssetListItem[] }>('/photos/assets/upload', {
-      method: 'POST',
-      body: formData,
-    })
-    const fallbackData = camelCaseKeys<{ assets: PhotoAssetListItem[] }>(fallbackResponse)
-    return fallbackData.assets
-  }
-
-  const fileMetadata = files.map((file, index) => ({
-    index,
-    name: file.name,
-    size: file.size,
-  }))
+  const fileMetadata = files.map((file, index) => ({ index, name: file.name, size: file.size }))
   const totalBytes = fileMetadata.reduce((sum, file) => sum + file.size, 0)
+  const uploadedByFile = new Map<number, number>()
 
-  const snapshotFromLoaded = (loaded: number): PhotoUploadProgressSnapshot => {
-    let remaining = loaded
+  const emitProgress = () => {
+    if (!options?.onProgress) {
+      return
+    }
     const filesProgress: PhotoUploadFileProgress[] = fileMetadata.map((meta) => {
-      const uploadedForFile = Math.max(0, Math.min(meta.size, remaining))
-      remaining -= uploadedForFile
+      const uploadedBytes = Math.min(meta.size, uploadedByFile.get(meta.index) ?? 0)
       return {
         index: meta.index,
         name: meta.name,
         size: meta.size,
-        uploadedBytes: uploadedForFile,
-        progress: meta.size === 0 ? 1 : Math.min(1, uploadedForFile / meta.size),
+        uploadedBytes,
+        progress: meta.size === 0 ? 1 : uploadedBytes / meta.size,
       }
     })
-
-    return {
-      totalBytes,
-      uploadedBytes: Math.min(loaded, totalBytes),
-      files: filesProgress,
-    }
+    const uploadedBytes = filesProgress.reduce((sum, file) => sum + file.uploadedBytes, 0)
+    options.onProgress({ totalBytes, uploadedBytes: Math.min(uploadedBytes, totalBytes), files: filesProgress })
   }
 
-  return await new Promise<PhotoAssetListItem[]>((resolve, reject) => {
-    const xhr = new XMLHttpRequest()
-    xhr.open('POST', `${coreApiBaseURL}/photos/assets/upload`, true)
-    xhr.withCredentials = true
-    xhr.setRequestHeader('accept', 'text/event-stream')
-    if (options?.timeoutMs && Number.isFinite(options.timeoutMs)) {
-      xhr.timeout = Math.max(0, options.timeoutMs)
+  const uploadObject = async (file: File, index: number): Promise<{ intent: UploadIntent, parts: UploadPart[] }> => {
+    const intent = await coreApi<UploadIntent>('/photos/upload-intent', {
+      method: 'POST',
+      body: {
+        filename: file.name,
+        size: file.size,
+        contentType: file.type || null,
+        directory: options?.directory ?? null,
+      },
+    })
+
+    const onProgress = (loaded: number) => {
+      uploadedByFile.set(index, loaded)
+      emitProgress()
     }
 
-    const handleAbort = () => {
-      xhr.abort()
+    const parts
+      = intent.mode === 'multipart'
+        ? await uploadMultipartFile({
+            file,
+            intent,
+            signal: options?.signal,
+            timeoutMs: options?.timeoutMs,
+            onProgress,
+          })
+        : await uploadSingleFile({ file, intent, signal: options?.signal, timeoutMs: options?.timeoutMs, onProgress })
+    return { intent, parts }
+  }
+
+  const uploads: PhotoAssetListItem[] = []
+  for (const [index, file] of files.entries()) {
+    options?.signal?.throwIfAborted()
+
+    if (pairedVideoIndices.has(index)) {
+      // Already uploaded as the companion of the preceding image.
+      continue
     }
 
-    const cleanup = () => {
-      if (options?.signal) {
-        options.signal.removeEventListener('abort', handleAbort)
-      }
+    if (skippedVideoIndices.has(index)) {
+      // A standalone MOV has no gallery representation in the manifest.
+      uploadedByFile.set(index, file.size)
+      emitProgress()
+      continue
     }
 
-    if (options?.signal) {
-      if (options.signal.aborted) {
-        cleanup()
-        reject(new DOMException('Upload aborted', 'AbortError'))
-        return
-      }
-      options.signal.addEventListener('abort', handleAbort)
+    let videoKey: string | null = null
+    const videoIndex = videoIndexForImage.get(index)
+    if (videoIndex !== undefined && files[videoIndex]) {
+      const videoUpload = await uploadObject(files[videoIndex], videoIndex)
+      videoKey = videoUpload.intent.key
     }
 
-    xhr.upload.onprogress = (event: ProgressEvent<EventTarget>) => {
-      if (!options?.onProgress) {
-        return
-      }
-      const loaded = event.lengthComputable ? event.loaded : totalBytes
-      options.onProgress(snapshotFromLoaded(loaded))
-    }
+    const { intent, parts } = await uploadObject(file, index)
+    const dimensions = await readImageDimensions(file)
+    const asset = await coreApi<PhotoAssetListItem>('/photos/upload-complete', {
+      method: 'POST',
+      body: {
+        key: intent.key,
+        photoId: intent.photoId,
+        filename: file.name,
+        width: dimensions?.width ?? null,
+        height: dimensions?.height ?? null,
+        takenAt: Number.isFinite(file.lastModified) ? new Date(file.lastModified).toISOString() : null,
+        uploadId: intent.mode === 'multipart' ? intent.uploadId : null,
+        parts: parts.length > 0 ? parts : null,
+        videoKey,
+      },
+    })
+    uploads.push(asset)
+  }
 
-    let buffer = ''
-    let lastIndex = 0
-    let settled = false
-    let completed = false
+  uploadedByFile.forEach((_value, index) => uploadedByFile.set(index, files[index].size))
+  emitProgress()
 
-    const settle = (resolver: () => void, rejecter?: (error: Error) => void, error?: Error) => {
-      if (settled) return
-      settled = true
-      cleanup()
-      if (error && rejecter) {
-        rejecter(error)
-        return
-      }
-      resolver()
-    }
+  const uploadedObjects = files.length - skippedVideoIndices.size
+  const databaseRecords = uploads.length
 
-    const processBuffer = () => {
-      const text = xhr.responseText
-      if (!text || text.length === lastIndex) {
-        return
-      }
-      const chunk = text.slice(lastIndex)
-      lastIndex = text.length
-      buffer += chunk
-
-      let boundary = buffer.indexOf('\n\n')
-      while (boundary !== -1) {
-        const rawEvent = buffer.slice(0, boundary)
-        buffer = buffer.slice(boundary + 2)
-        handleSseEvent(rawEvent)
-        boundary = buffer.indexOf('\n\n')
-      }
-    }
-
-    const handleSseEvent = (rawEvent: string) => {
-      const lines = rawEvent.split(STABLE_NEWLINE)
-      let eventName: string | null = null
-      const dataLines: string[] = []
-
-      for (const line of lines) {
-        if (!line) {
-          continue
-        }
-        if (line.startsWith(':')) {
-          continue
-        }
-        if (line.startsWith('event:')) {
-          eventName = line.slice(6).trim()
-          continue
-        }
-        if (line.startsWith('data:')) {
-          dataLines.push(line.slice(5).trim())
-        }
-      }
-
-      if (eventName !== 'progress' || dataLines.length === 0) {
-        return
-      }
-
-      try {
-        const parsed = JSON.parse(dataLines.join('\n'))
-        const event = camelCaseKeys<PhotoSyncProgressEvent>(parsed)
-        options?.onServerEvent?.(event)
-        if (event.type === 'error') {
-          const error = createApiError(
-            extractErrorInfoFromPayload(event.payload),
-            'Server processing failed',
-          )
-          settle(() => {}, reject, error)
-          xhr.abort()
-          return
-        }
-        if (event.type === 'complete') {
-          completed = true
-        }
-      } catch (error) {
-        console.error('Failed to parse upload progress event', error)
-      }
-    }
-
-    xhr.onreadystatechange = () => {
-      if (xhr.readyState === XMLHttpRequest.LOADING || xhr.readyState === XMLHttpRequest.DONE) {
-        processBuffer()
-      }
-    }
-
-    xhr.onprogress = () => {
-      processBuffer()
-    }
-
-    xhr.onerror = () => {
-      settle(
-        () => {},
-        reject,
-        createApiError(
-          { message: 'Network error during upload. Please try again later.', code: null, raw: null },
-          'Network error during upload. Please try again later.',
-          xhr.status,
-        ),
-      )
-    }
-
-    xhr.onabort = () => {
-      settle(() => {}, reject, new DOMException('Upload aborted', 'AbortError'))
-    }
-
-    xhr.ontimeout = () => {
-      settle(
-        () => {},
-        reject,
-        createApiError(
-          { message: 'Upload timed out. Please try again later.', code: null, raw: null },
-          'Upload timed out. Please try again later.',
-          xhr.status,
-        ),
-      )
-    }
-
-    xhr.onload = () => {
-      processBuffer()
-      if (xhr.status >= 200 && xhr.status < 300 && completed) {
-        settle(() => resolve([]))
-        return
-      }
-
-      const fallbackMessage =
-        xhr.status >= 200 && xhr.status < 300 ? 'Upload response incomplete' : `Upload failed: ${xhr.status}`
-      const errorInfo = extractErrorInfoFromXhr(xhr)
-      settle(() => {}, reject, createApiError(errorInfo, fallbackMessage, xhr.status || undefined))
-    }
-
-    xhr.send(formData)
+  // The upload UI waits for a processing `complete` event to leave the
+  // uploading phase. Metadata/manifest work now happens inline, so report a
+  // completed sync rather than depending on the removed SSE endpoint.
+  options?.onServerEvent?.({
+    type: 'start',
+    payload: {
+      summary: {
+        storageObjects: uploadedObjects,
+        databaseRecords,
+        inserted: 0,
+        updated: 0,
+        deleted: 0,
+        conflicts: 0,
+        skipped: skippedVideoIndices.size,
+        errors: 0,
+      },
+      totals: {
+        'missing-in-db': files.length,
+        'orphan-in-db': 0,
+        'metadata-conflicts': 0,
+        'status-reconciliation': 0,
+      },
+      options: { dryRun: false },
+    },
   })
+  options?.onServerEvent?.({
+    type: 'complete',
+    payload: {
+      summary: {
+        storageObjects: uploadedObjects,
+        databaseRecords,
+        inserted: databaseRecords,
+        updated: 0,
+        deleted: 0,
+        conflicts: 0,
+        skipped: skippedVideoIndices.size,
+        errors: 0,
+      },
+      actions: [],
+    },
+  })
+
+  return uploads
 }
 
 export async function getPhotoStorageUrl(storageKey: string): Promise<string> {

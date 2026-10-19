@@ -39,6 +39,14 @@ export const env = createEnv({
       .default(false),
     BETTER_AUTH_SECRET: z.string().min(1).optional(),
 
+    // T4.1: R2 S3 credentials used to presign direct uploads from the browser.
+    // Without them the Worker falls back to proxying PUT bodies through itself.
+    R2_ACCOUNT_ID: z.string().min(1).optional(),
+    R2_ACCESS_KEY_ID: z.string().min(1).optional(),
+    R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+    R2_BUCKET_NAME: z.string().min(1).optional(),
+    R2_PUBLIC_BASE_URL: z.string().min(1).optional(),
+
     // Payment
     CREEM_API_KEY: z.string().min(1).optional(),
     CREEM_WEBHOOK_SECRET: z.string().min(1).optional(),

@@ -15,6 +15,14 @@ export default defineConfig({
       ASSETS: bindings.assets(),
       CONFIG_ENCRYPTION_KEY: bindings.secret(),
       BETTER_AUTH_SECRET: bindings.secret(),
+      // Direct-to-R2 uploads. Set these with `cf secret put <NAME>` in
+      // production; local dev may use `disabled` to exercise the Worker-proxied
+      // fallback path.
+      R2_ACCOUNT_ID: bindings.secret(),
+      R2_ACCESS_KEY_ID: bindings.secret(),
+      R2_SECRET_ACCESS_KEY: bindings.secret(),
+      R2_BUCKET_NAME: bindings.secret(),
+      R2_PUBLIC_BASE_URL: bindings.secret(),
     },
     assets: {
       htmlHandling: 'auto-trailing-slash',

@@ -3,3 +3,12 @@
 # optionally BETTER_AUTH_SECRET; it falls back to CONFIG_ENCRYPTION_KEY).
 CONFIG_ENCRYPTION_KEY=local-development-encryption-key
 BETTER_AUTH_SECRET=local-development-better-auth-secret
+
+# Direct-to-R2 presigned uploads (T4.1). `disabled` makes the Worker proxy
+# uploads through itself, which is fine locally but bounded by the Worker body
+# size. Production must set real values (`cf secret put <NAME>`).
+R2_ACCOUNT_ID=disabled
+R2_ACCESS_KEY_ID=disabled
+R2_SECRET_ACCESS_KEY=disabled
+R2_BUCKET_NAME=afilmory-photos
+R2_PUBLIC_BASE_URL=/media

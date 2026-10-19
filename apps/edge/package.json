@@ -13,8 +13,11 @@
     "typecheck": "cf workers types && tsc"
   },
   "dependencies": {
+    "@afilmory/typing": "workspace:*",
     "@tsuki-hono/common": "0.0.6",
     "@tsuki-hono/core": "0.0.6",
+    "aws4fetch": "^1.0.20",
+    "exifr": "^7.1.3",
     "hono": "4.13.13",
     "workers-og": "0.0.27"
   },
