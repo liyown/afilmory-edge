@@ -1,31 +1,33 @@
 <p align="center">
-  <img src="https://github.com/Afilmory/assets/blob/main/afilmory-readme-2:1.webp?raw=true" alt="Afilmory" width="100%" />
+  <img src="https://github.com/Afilmory/assets/blob/main/afilmory-readme-2:1.webp?raw=true" alt="Afilmory Edge" width="100%" />
 </p>
 
-# <p align="center">Afilmory</p>
+# <p align="center">Afilmory Edge</p>
 
 <p align="center">
-  <em>A modern, high-performance photo gallery for photographers</em>
+  <em>A personal, Cloudflare-native photo gallery derived from Afilmory</em>
 </p>
 
 <p align="center">
   <a href="./docs/README.md">Documentation</a> •
-  <a href="#-live-galleries">Live Examples</a> •
+  <a href="./ORIGIN.md">Origin & Differences</a> •
   <a href="#-quick-start">Quick Start</a>
 </p>
 
 ---
 
-**Afilmory** (/əˈfɪlməri/, "uh-FIL-muh-ree") is a personal, single-tenant photo gallery that deploys as one Cloudflare Worker.
-It combines **Auto Focus (AF)**, **Aperture** (light control), **Film** (vintage medium), and **Memory** (captured moments).
+**Afilmory Edge** is a derived, single-tenant photo gallery that deploys as one Cloudflare Worker.
+It keeps the name **Afilmory** — **Auto Focus (AF)**, **Aperture** (light control), **Film** (vintage medium), and **Memory** (captured moments) — and adds **Edge** for its Cloudflare-native deployment.
 The Worker serves the gallery SPA, the admin dashboard, and the API from the same origin, backed by D1, KV, and S3-compatible object storage (Aliyun OSS).
+
+This project is maintained independently from [Afilmory](https://github.com/Afilmory/Afilmory) and has been stripped down for personal use. See [ORIGIN.md](./ORIGIN.md) for what changed.
 
 ## 🚀 Quick Start
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/Afilmory/Afilmory.git
-cd Afilmory
+git clone https://github.com/liyown/afilmory-edge.git
+cd afilmory-edge
 pnpm install
 
 # 2. Configure
@@ -50,14 +52,11 @@ pnpm bootstrap:admin --email you@example.com \
 Sign in at `/platform/` and upload photos from the dashboard.
 See [Deployment](./docs/deployment.md) for binding setup, secrets, and backups.
 
-## 📸 Live Galleries
+## 📸 Live Gallery
 
-See Afilmory in action:
+- [photos.liuyaowen.cn](https://photos.liuyaowen.cn) - This deployment
 
-- [afilmory.innei.in](https://afilmory.innei.in) - Creator's personal gallery
-- [gallery.mxte.cc](https://gallery.mxte.cc)
-- [photography.pseudoyu.com](https://photography.pseudoyu.com)
-- [afilmory.magren.cc](https://afilmory.magren.cc)
+For galleries running the upstream project, see [Afilmory](https://github.com/Afilmory/Afilmory#-live-galleries).
 
 ## ✨ Features
 
@@ -88,7 +87,7 @@ See Afilmory in action:
 ### Monorepo Structure
 
 ```
-afilmory/
+afilmory-edge/
 ├── apps/
 │   ├── web/              # Gallery SPA (Vite + React 19 + React Router 7)
 │   ├── edge/             # Cloudflare Worker: SPA + dashboard, core API, OG/SEO, cron
@@ -259,17 +258,18 @@ See [AGENTS.md](./AGENTS.md) for architecture notes and [DESIGN.md](./DESIGN.md)
 
 Attribution Network License (ANL) v1.0 © 2025 Afilmory Team
 
-See [LICENSE](./LICENSE) for more details.
+Afilmory Edge is a derivative of Afilmory. See [LICENSE](./LICENSE) and [ORIGIN.md](./ORIGIN.md) for attribution and scope.
 
 ## 🔗 Links
 
 - **[Documentation](./docs/README.md)** - Full documentation
-- **[GitHub](https://github.com/Afilmory/Afilmory)** - Source code
-- **[Creator's Website](https://innei.in)** - Project creator
+- **[Origin & Differences](./ORIGIN.md)** - How this project relates to upstream Afilmory
+- **[Afilmory Edge](https://github.com/liyown/afilmory-edge)** - This repository
+- **[Afilmory](https://github.com/Afilmory/Afilmory)** - Upstream project
 
 ## 🙏 Acknowledgments
 
-Built with love by the Afilmory team and contributors.
+Afilmory Edge is built on the work of the [Afilmory](https://github.com/Afilmory/Afilmory) team and its contributors.
 Special thanks to all photographers using Afilmory to share their work with the world.
 
 ---
