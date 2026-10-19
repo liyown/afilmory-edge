@@ -9,14 +9,15 @@ use anyhow::{Context, Result, bail};
 use fs2::FileExt;
 use notify::event::EventKind;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::{UnixListener, UnixStream};
+use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{Mutex, mpsc};
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 use crate::api::ApiClient;
 use crate::config::{
-    Config, FolderConfig, ensure_home, lock_path, pid_path, socket_path, state_path,
+    Config, FolderConfig, control_path, ensure_home, lock_path, pid_path, state_path, write_private,
 };
 use crate::credentials::Credentials;
 use crate::inspect::is_supported;
@@ -29,6 +30,12 @@ struct Job {
     folder: FolderConfig,
     path: PathBuf,
     inflight: Option<Arc<Mutex<HashSet<PathBuf>>>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ControlInfo {
+    port: u16,
+    token: String,
 }
 
 #[derive(Debug)]
@@ -85,7 +92,7 @@ pub async fn run() -> Result<()> {
     enqueue_initial_scan(&config, &job_tx);
 
     let (control_tx, mut control_rx) = mpsc::unbounded_channel::<ControlCommand>();
-    spawn_control_socket(control_tx);
+    spawn_control_server(control_tx).await?;
 
     info!(
         folders = config.enabled_folders().count(),
@@ -249,55 +256,82 @@ fn find_folder(config: &Config, path: &Path) -> Option<FolderConfig> {
         .cloned()
 }
 
-fn spawn_control_socket(sender: mpsc::UnboundedSender<ControlCommand>) {
-    let socket = socket_path();
-    let _ = fs::remove_file(&socket);
+async fn spawn_control_server(sender: mpsc::UnboundedSender<ControlCommand>) -> Result<()> {
+    let listener = TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .context("启动本地控制通道失败")?;
+    let port = listener.local_addr()?.port();
+    let token = hex::encode(rand::random::<[u8; 16]>());
+    let info = ControlInfo {
+        port,
+        token: token.clone(),
+    };
+    let raw = serde_json::to_vec(&info).context("序列化控制信息失败")?;
+    write_private(&control_path(), &raw)?;
+
     tokio::spawn(async move {
-        let listener = match UnixListener::bind(&socket) {
-            Ok(listener) => listener,
-            Err(error) => {
-                error!(%error, "启动控制 socket 失败");
-                return;
-            }
-        };
         loop {
             let Ok((stream, _)) = listener.accept().await else {
                 continue;
             };
             let sender = sender.clone();
+            let token = token.clone();
             tokio::spawn(async move {
-                let mut reader = BufReader::new(stream);
-                let mut line = String::new();
-                if reader.read_line(&mut line).await.is_err() {
-                    return;
-                }
-                let command = match line.trim() {
-                    "reload" => Some(ControlCommand::Reload),
-                    "retry" => Some(ControlCommand::Retry),
-                    "shutdown" => Some(ControlCommand::Shutdown),
-                    "ping" => Some(ControlCommand::Ping),
-                    _ => None,
-                };
-                let response = match command {
-                    Some(command) => {
-                        let _ = sender.send(command);
-                        "ok\n".to_string()
-                    }
-                    None => "unknown\n".to_string(),
-                };
-                let mut stream = reader.into_inner();
-                let _ = stream.write_all(response.as_bytes()).await;
+                handle_control_connection(stream, sender, token).await;
             });
         }
     });
+    Ok(())
+}
+
+async fn handle_control_connection(
+    stream: TcpStream,
+    sender: mpsc::UnboundedSender<ControlCommand>,
+    expected_token: String,
+) {
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    if reader.read_line(&mut line).await.is_err() {
+        return;
+    }
+    let trimmed = line.trim();
+    let (provided_token, command_name) = trimmed.split_once(' ').unwrap_or(("", trimmed));
+
+    let command = if provided_token != expected_token {
+        None
+    } else {
+        match command_name {
+            "reload" => Some(ControlCommand::Reload),
+            "retry" => Some(ControlCommand::Retry),
+            "shutdown" => Some(ControlCommand::Shutdown),
+            "ping" => Some(ControlCommand::Ping),
+            _ => None,
+        }
+    };
+
+    let response = match command {
+        Some(command) => {
+            let _ = sender.send(command);
+            "ok\n"
+        }
+        None if provided_token != expected_token => "unauthorized\n",
+        None => "unknown\n",
+    };
+    let mut stream = reader.into_inner();
+    let _ = stream.write_all(response.as_bytes()).await;
 }
 
 pub async fn send_control(command: &str) -> Result<String> {
-    let socket = socket_path();
-    let mut stream = UnixStream::connect(&socket)
+    let path = control_path();
+    let raw = fs::read_to_string(&path)
+        .with_context(|| format!("后台进程未运行（{}）", path.display()))?;
+    let info: ControlInfo = serde_json::from_str(&raw).context("控制信息损坏，重启后台进程")?;
+    let mut stream = TcpStream::connect(("127.0.0.1", info.port))
         .await
-        .with_context(|| format!("后台进程未运行（{}）", socket.display()))?;
-    stream.write_all(format!("{command}\n").as_bytes()).await?;
+        .context("后台进程未运行")?;
+    stream
+        .write_all(format!("{} {command}\n", info.token).as_bytes())
+        .await?;
     let mut reader = BufReader::new(stream);
     let mut response = String::new();
     reader.read_line(&mut response).await?;
@@ -305,7 +339,7 @@ pub async fn send_control(command: &str) -> Result<String> {
 }
 
 pub async fn is_running() -> bool {
-    if !socket_path().exists() {
+    if !control_path().exists() {
         return false;
     }
     send_control("ping").await.is_ok()
@@ -320,13 +354,20 @@ pub async fn start_detached() -> Result<()> {
     let output = OpenOptions::new().create(true).append(true).open(&log)?;
     let stderr = output.try_clone()?;
     let executable = std::env::current_exe().context("无法定位 afi 可执行文件")?;
-    Command::new(executable)
+    let mut command = Command::new(executable);
+    command
         .arg("daemon")
         .stdin(Stdio::null())
         .stdout(Stdio::from(output))
-        .stderr(Stdio::from(stderr))
-        .spawn()
-        .context("启动后台进程失败")?;
+        .stderr(Stdio::from(stderr));
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+    }
+    command.spawn().context("启动后台进程失败")?;
 
     for _ in 0..50 {
         if is_running().await {
@@ -344,7 +385,7 @@ fn afi_home_log() -> PathBuf {
 struct DaemonGuard {
     _lock: std::fs::File,
     pid_path: PathBuf,
-    socket_path: PathBuf,
+    control_path: PathBuf,
 }
 
 impl DaemonGuard {
@@ -359,12 +400,12 @@ impl DaemonGuard {
             bail!("后台进程已经在运行");
         }
         let pid_path = pid_path();
-        let socket_path = socket_path();
+        let control_path = control_path();
         fs::write(&pid_path, std::process::id().to_string())?;
         Ok(Self {
             _lock: lock,
             pid_path,
-            socket_path,
+            control_path,
         })
     }
 }
@@ -372,7 +413,7 @@ impl DaemonGuard {
 impl Drop for DaemonGuard {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.pid_path);
-        let _ = fs::remove_file(&self.socket_path);
+        let _ = fs::remove_file(&self.control_path);
     }
 }
 

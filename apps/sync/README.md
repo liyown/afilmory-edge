@@ -10,6 +10,12 @@
 curl -fsSL https://raw.githubusercontent.com/liyown/afilmory-edge/main/scripts/install-afi.sh | sh
 ```
 
+Windows（PowerShell）：
+
+```powershell
+irm https://raw.githubusercontent.com/liyown/afilmory-edge/main/scripts/install-afi.ps1 | iex
+```
+
 默认安装到 `~/.local/bin/afi`，可以用 `AFI_INSTALL_DIR` 改目录：
 
 ```bash
@@ -113,7 +119,8 @@ afi service uninstall
 - 网络挂载或某些网盘目录可能不产生文件系统事件；本工具不会退化成轮询。
 - 服务端单文件上限 1 GiB。
 - 上传权限等同于站点 owner：令牌可以上传、修改和删除照片，请妥善保管。
-- Windows 不在首版范围。
+- Windows 使用 x64 预编译包；ARM64 Windows 会以 x64 模拟方式运行。
+- Windows 的本地控制通道使用 loopback，不使用 Unix socket。
 
 ## 发布预编译包
 
@@ -135,6 +142,6 @@ git push origin afi-v0.1.0
 config.toml        # 服务器地址和文件夹列表
 credentials.json   # 令牌（0600）
 state.sqlite       # 文件/上传队列
-control.sock       # 后台进程控制 socket
+control.json       # 后台进程控制信息（本机 loopback）
 daemon.log         # 后台日志
 ```

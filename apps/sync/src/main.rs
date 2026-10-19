@@ -463,6 +463,22 @@ fn install_service() -> Result<()> {
         return Ok(());
     }
 
+    #[cfg(windows)]
+    {
+        let task = "AfilmorySync";
+        let command = format!("\"{}\" daemon", executable.display());
+        let status = std::process::Command::new("schtasks")
+            .args([
+                "/Create", "/F", "/SC", "ONLOGON", "/TN", task, "/TR", &command,
+            ])
+            .status()?;
+        if !status.success() {
+            bail!("schtasks 创建登录任务失败");
+        }
+        println!("已安装 Windows 登录任务: {task}");
+        return Ok(());
+    }
+
     #[allow(unreachable_code)]
     {
         bail!("当前系统不支持自动安装服务，请手动运行 `afi daemon`")
@@ -498,6 +514,19 @@ fn uninstall_service() -> Result<()> {
         return Ok(());
     }
 
+    #[cfg(windows)]
+    {
+        let task = "AfilmorySync";
+        let status = std::process::Command::new("schtasks")
+            .args(["/Delete", "/F", "/TN", task])
+            .status()?;
+        if !status.success() {
+            bail!("删除 Windows 登录任务失败");
+        }
+        println!("已卸载 Windows 登录任务。");
+        return Ok(());
+    }
+
     #[allow(unreachable_code)]
     {
         bail!("当前系统不支持自动卸载服务")
@@ -520,6 +549,7 @@ fn dirs_systemd_user() -> Result<PathBuf> {
     Ok(path)
 }
 
+#[cfg(target_os = "macos")]
 fn xml_escape(value: &str) -> String {
     value
         .replace('&', "&amp;")

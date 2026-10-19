@@ -78,7 +78,17 @@ The `afi` CLI watches a folder and uploads new photos automatically:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/liyown/afilmory-edge/main/scripts/install-afi.sh | sh
+```
 
+On Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/liyown/afilmory-edge/main/scripts/install-afi.ps1 | iex
+```
+
+Then:
+
+```bash
 afi login -s https://photos.example.com
 cd ~/Pictures/import
 afi add

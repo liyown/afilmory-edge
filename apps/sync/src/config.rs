@@ -172,6 +172,11 @@ pub fn afi_home() -> PathBuf {
     {
         return PathBuf::from(home).join(".afi");
     }
+    if let Ok(home) = std::env::var("USERPROFILE")
+        && !home.trim().is_empty()
+    {
+        return PathBuf::from(home).join(".afi");
+    }
     PathBuf::from(".afi")
 }
 
@@ -187,8 +192,8 @@ pub fn state_path() -> PathBuf {
     afi_home().join("state.sqlite")
 }
 
-pub fn socket_path() -> PathBuf {
-    afi_home().join("control.sock")
+pub fn control_path() -> PathBuf {
+    afi_home().join("control.json")
 }
 
 pub fn pid_path() -> PathBuf {
@@ -202,6 +207,18 @@ pub fn lock_path() -> PathBuf {
 pub fn ensure_home() -> Result<()> {
     let home = afi_home();
     fs::create_dir_all(&home).with_context(|| format!("创建目录失败: {}", home.display()))?;
+    Ok(())
+}
+
+pub fn write_private(path: &Path, contents: &[u8]) -> Result<()> {
+    fs::write(path, contents).with_context(|| format!("写入文件失败: {}", path.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = fs::metadata(path)?.permissions();
+        permissions.set_mode(0o600);
+        fs::set_permissions(path, permissions)?;
+    }
     Ok(())
 }
 
@@ -221,7 +238,9 @@ pub fn same_path(left: &str, right: &str) -> bool {
 }
 
 pub fn display_path(path: &Path) -> String {
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_default();
     if !home.is_empty()
         && let Ok(stripped) = path.strip_prefix(&home)
     {
