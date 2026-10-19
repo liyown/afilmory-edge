@@ -1,11 +1,14 @@
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $Repo = if ($env:AFI_REPO) { $env:AFI_REPO } else { "liyown/afilmory-edge" }
 $Version = if ($env:AFI_VERSION) { $env:AFI_VERSION } else { "latest" }
 $InstallDir = if ($env:AFI_INSTALL_DIR) {
     $env:AFI_INSTALL_DIR
 } else {
-    Join-Path $env:LOCALAPPDATA "afi\bin"
+    $localAppData = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path $HOME "AppData\Local" }
+    Join-Path $localAppData "afi\bin"
 }
 $FromSource = $env:AFI_FROM_SOURCE -eq "1"
 
