@@ -1,5 +1,7 @@
+import { Buffer } from 'node:buffer'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import path, { join } from 'node:path'
+import process from 'node:process'
 
 import sharp from 'sharp'
 
@@ -16,10 +18,7 @@ function createRoundedCornersMask(size: number, cornerRadius: number) {
 }
 
 // 为图片添加圆角
-async function addRoundedCorners(
-  imageBuffer: Buffer,
-  size: number,
-): Promise<Buffer> {
+async function addRoundedCorners(imageBuffer: Buffer, size: number): Promise<Buffer> {
   // 计算圆角半径，约为尺寸的 12%
   const cornerRadius = Math.round(size * 0.12)
 
@@ -106,9 +105,7 @@ export async function generateFavicons() {
 
     // PWA manifest 由 vite-plugin-pwa 生成，这里不再生成重复的文件
 
-    console.info(
-      `🎨 All favicons generated successfully from logo.jpg with rounded corners!`,
-    )
+    console.info(`🎨 All favicons generated successfully from logo.jpg with rounded corners!`)
   } catch (error) {
     console.error('❌ Error generating favicons:', error)
     throw error

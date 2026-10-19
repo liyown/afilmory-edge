@@ -126,7 +126,7 @@ export function SiteSettingsForm() {
     const entries: SiteSettingEntryInput[] = []
 
     for (const [key, value] of Object.entries(formState)) {
-      if (!Object.prototype.hasOwnProperty.call(initialState, key)) {
+      if (!Object.hasOwn(initialState, key)) {
         continue
       }
 
@@ -151,7 +151,7 @@ export function SiteSettingsForm() {
   const handleChange = useCallback(
     (key: string, value: SchemaFormValue) => {
       const field = fieldMap.get(key)
-      const normalizedValue: SchemaFormValue = value == null ? (field?.component.type === 'switch' ? false : '') : value
+      const normalizedValue: SchemaFormValue = value ?? (field?.component.type === 'switch' ? false : '')
 
       setFormState((prev) => ({
         ...prev,

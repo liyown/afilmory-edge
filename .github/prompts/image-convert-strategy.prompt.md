@@ -10,7 +10,7 @@ mode: agent
 
 ### 1. 策略类模板
 
-```typescript
+```text
 export class [FormatName]ConverterStrategy implements ImageConverterStrategy {
   getName(): string {
     return '[Format Display Name]'
@@ -74,7 +74,7 @@ export class [FormatName]ConverterStrategy implements ImageConverterStrategy {
 
 ### 2. 注册策略
 
-```typescript
+```text
 // 在 image-converter-strategies.ts 的构造函数中添加
 imageConverterManager.registerStrategy(new [FormatName]ConverterStrategy())
 ```

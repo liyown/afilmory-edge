@@ -2,6 +2,7 @@
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import process from 'node:process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import type { RouteConfig } from '../src/routes'

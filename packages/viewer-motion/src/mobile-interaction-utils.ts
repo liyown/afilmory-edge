@@ -2,8 +2,8 @@ import type { MobileViewerDismissSnapshot } from './types'
 
 export const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 
-export const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3)
-export const easeOutQuad = (value: number) => 1 - Math.pow(1 - value, 2)
+export const easeOutCubic = (value: number) => 1 - (1 - value) ** 3
+export const easeOutQuad = (value: number) => 1 - (1 - value) ** 2
 
 export const resolveInspectorSheetHeight = (viewportHeight: number) =>
   clamp(viewportHeight * 0.68, 360, viewportHeight - 72)

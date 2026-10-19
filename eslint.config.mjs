@@ -8,15 +8,18 @@ import recursiveSort from './plugins/eslint/eslint-recursive-sort.js'
 // In flat config, some large generated folders slipped through. To be extra safe,
 // put ignores in a top-level config object first, then append the rest.
 const rootIgnores = globalIgnores([
+  '.specstory/**',
+  '**/generated-routes.ts',
   'apps/edge/public/**',
   'apps/web/public/**',
   'packages/docs/public/**',
   'scripts/webgpu-hdr-spike/**',
 ])
 
-const hyobanConfig = await defineConfig(
+const hyobanConfig = defineConfig(
   {
-    formatting: false,
+    // Prettier owns formatting; the stylistic preset would fight it.
+    stylistic: false,
     lessOpinionated: true,
     preferESM: false,
     react: true,
@@ -42,17 +45,21 @@ const hyobanConfig = await defineConfig(
     rules: {
       'unicorn/prefer-response-static-json': 0,
       'unicorn/no-abusive-eslint-disable': 0,
-      '@typescript-eslint/triple-slash-reference': 0,
+      'ts/triple-slash-reference': 0,
       'unicorn/prefer-math-trunc': 'off',
       'unicorn/no-static-only-class': 'off',
-      '@eslint-react/no-clone-element': 0,
+      'react/no-clone-element': 0,
+      // Contexts, hooks, and constants are intentionally co-located with providers.
+      'react-refresh/only-export-components': 'off',
       // TailwindCSS v4 not support
       'tailwindcss/no-custom-classname': 0,
-      '@eslint-react/hooks-extra/no-direct-set-state-in-use-effect': 0,
+      'react-hooks-extra/no-direct-set-state-in-use-effect': 0,
       // NOTE: Disable this temporarily
       'react-compiler/react-compiler': 0,
       'no-restricted-syntax': 0,
-      '@typescript-eslint/no-unsafe-function-type': 0,
+      'ts/no-unsafe-function-type': 0,
+      // Build tooling and browser diagnostics legitimately use info-level logs.
+      'no-console': ['error', { allow: ['warn', 'error', 'info'] }],
       // disable react compiler rules for now
       'react-hooks/no-unused-directives': 'off',
       'react-hooks/static-components': 'off',
@@ -101,13 +108,6 @@ const hyobanConfig = await defineConfig(
       'check-i18n-json/no-extra-keys': 'error',
     },
   },
-  {
-    files: ['**/*.tsx'],
-    rules: {
-      '@stylistic/jsx-self-closing-comp': 'error',
-    },
-  },
-
   // Backend framework isn't React — disable React-specific hooks rule there.
   {
     files: ['be/packages/framework/**/*.{ts,tsx}'],
@@ -116,12 +116,23 @@ const hyobanConfig = await defineConfig(
     },
   },
 
+  // viewer-motion runs its tests with `tsx --test`, not vitest.
+  {
+    files: ['packages/viewer-motion/**/*.test.ts'],
+    rules: {
+      'test/no-import-node-test': 'off',
+    },
+  },
+
   // Redundant but harmless: keep a local ignore in case this block is used standalone somewhere
   globalIgnores(['apps/web/public/**', 'packages/docs/public/**']),
 )
 
+// Prettier owns Markdown formatting too; these presets only add opinionated churn.
+hyobanConfig.remove('hyoban/md/rules').remove('hyoban/hyoban/rules')
+
 export default [
   // Ensure ignores are applied globally before any other configs
   rootIgnores,
-  ...hyobanConfig,
+  ...await hyobanConfig,
 ]

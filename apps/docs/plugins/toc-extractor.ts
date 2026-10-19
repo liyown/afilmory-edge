@@ -238,8 +238,11 @@ function extractHeadings(content: string, maxDepth: number): TocItem[] {
   // eslint-disable-next-line regexp/no-super-linear-backtracking
   const headingRegex = /^(#{1,6})\s+(.+)$/gm
 
-  let match
-  while ((match = headingRegex.exec(contentWithoutCodeBlocks)) !== null) {
+  for (
+    let match = headingRegex.exec(contentWithoutCodeBlocks);
+    match !== null;
+    match = headingRegex.exec(contentWithoutCodeBlocks)
+  ) {
     const level = match[1].length
 
     if (level > maxDepth) continue

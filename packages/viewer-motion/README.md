@@ -91,7 +91,7 @@ If the hook cannot find a valid trigger element, it degrades gracefully:
 By default the hook looks up triggers with:
 
 ```html
-data-viewer-transition-id="<item.id>"
+data-viewer-transition-id="<item.id>"</item.id>
 ```
 
 Use `getViewerTransitionTriggerProps(item.id)` on the clickable thumbnail shell:
@@ -99,7 +99,7 @@ Use `getViewerTransitionTriggerProps(item.id)` on the clickable thumbnail shell:
 ```tsx
 import { getViewerTransitionTriggerProps } from '@afilmory/viewer-motion'
 
-<button
+;<button
   type="button"
   {...getViewerTransitionTriggerProps(item.id)}
   onClick={(event) => openViewer(item, event.currentTarget)}
@@ -115,12 +115,12 @@ You can replace the attribute name with `triggerAttribute` if your app already h
 The snippet below shows the minimal wiring for a generic React lightbox.
 
 ```tsx
-import { useState } from 'react'
 import {
   getViewerTransitionTriggerProps,
   SharedElementTransitionPreview,
   useViewerTransitions,
 } from '@afilmory/viewer-motion'
+import { useState } from 'react'
 
 type MediaItem = {
   id: string
@@ -238,10 +238,7 @@ export function Gallery({ items }: { items: MediaItem[] }) {
       )}
 
       {exitTransition && (
-        <SharedElementTransitionPreview
-          transition={exitTransition}
-          onComplete={handleExitAnimationComplete}
-        />
+        <SharedElementTransitionPreview transition={exitTransition} onComplete={handleExitAnimationComplete} />
       )}
     </>
   )
@@ -312,35 +309,39 @@ import {
   useViewerMobileInteractions,
 } from '@afilmory/viewer-motion'
 
-const { bindStage, dismissX, viewerLiftY, viewerScale, viewerRotate, viewerBorderRadius } =
-  useViewerMobileInteractions({
-    enabled: isMobile && isOpen,
-    isImageZoomed,
-    onDismiss: (snapshot) => {
-      const projectedFrame = projectDismissedViewerMediaFrame({
-        item: currentItem,
-        isMobile: true,
-        layout,
-        snapshot,
-        viewportRect: containerRef.current?.getBoundingClientRect() ?? null,
-      })
+function MobilePhoto({ isMobile, isOpen, isImageZoomed, currentItem, layout, containerRef }) {
+  const { bindStage, dismissX, viewerLiftY, viewerScale, viewerRotate, viewerBorderRadius } =
+    useViewerMobileInteractions({
+      enabled: isMobile && isOpen,
+      isImageZoomed,
+      onDismiss: (snapshot) => {
+        const projectedFrame = projectDismissedViewerMediaFrame({
+          item: currentItem,
+          isMobile: true,
+          layout,
+          snapshot,
+          viewportRect: containerRef.current?.getBoundingClientRect() ?? null,
+        })
 
-      setExitOverrideFrame(projectedFrame)
-      setIsOpen(false)
-    },
-  })
+        setExitOverrideFrame(projectedFrame)
+        setIsOpen(false)
+      },
+    })
 
-<motion.div
-  {...bindStage()}
-  style={{
-    x: dismissX,
-    y: viewerLiftY,
-    scale: viewerScale,
-    rotate: viewerRotate,
-    borderRadius: viewerBorderRadius,
-    transformOrigin: DEFAULT_MOBILE_VIEWER_MEDIA_TRANSFORM_ORIGIN,
-  }}
-/>
+  return (
+    <motion.div
+      {...bindStage()}
+      style={{
+        x: dismissX,
+        y: viewerLiftY,
+        scale: viewerScale,
+        rotate: viewerRotate,
+        borderRadius: viewerBorderRadius,
+        transformOrigin: DEFAULT_MOBILE_VIEWER_MEDIA_TRANSFORM_ORIGIN,
+      }}
+    />
+  )
+}
 ```
 
 ### Important
@@ -367,9 +368,7 @@ That is useful when:
   transition={entryTransition}
   onReady={handleEntryTransitionReady}
   onComplete={handleEntryTransitionComplete}
-  renderPlaceholder={(thumbHash) => (
-    <MyHashPlaceholder thumbHash={thumbHash} />
-  )}
+  renderPlaceholder={(thumbHash) => <MyHashPlaceholder thumbHash={thumbHash} />}
 />
 ```
 

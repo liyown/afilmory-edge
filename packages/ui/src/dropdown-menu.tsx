@@ -105,7 +105,7 @@ const DropdownMenuItem = ({
         ref={ref}
         className={mergedClassName}
         style={{
-          // @ts-ignore - CSS variable for data-highlighted state
+          // @ts-expect-error - CSS variable for data-highlighted state
           '--highlight-bg':
             'linear-gradient(to right, color-mix(in srgb, var(--color-accent) 8%, transparent), color-mix(in srgb, var(--color-accent) 5%, transparent))',
         }}
@@ -122,7 +122,7 @@ const DropdownMenuItem = ({
       ref={ref}
       className={mergedClassName}
       style={{
-        // @ts-ignore - CSS variable for data-highlighted state
+        // @ts-expect-error - CSS variable for data-highlighted state
         '--highlight-bg':
           'linear-gradient(to right, color-mix(in srgb, var(--color-accent) 8%, transparent), color-mix(in srgb, var(--color-accent) 5%, transparent))',
       }}
@@ -163,7 +163,7 @@ const DropdownMenuCheckboxItem = ({
     )}
     checked={checked}
     style={{
-      // @ts-ignore - CSS variable for data-highlighted state
+      // @ts-expect-error - CSS variable for data-highlighted state
       '--highlight-bg':
         'linear-gradient(to right, color-mix(in srgb, var(--color-accent) 8%, transparent), color-mix(in srgb, var(--color-accent) 5%, transparent))',
     }}

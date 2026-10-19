@@ -41,8 +41,8 @@ grid view, image cropping/editing, adding the file list to `ProcessingStep` or
 `FileProgressEntry` gains two fields:
 
 ```ts
-id: string                  // stable fingerprint, stable across removeEntry index renumbering
-previewUrl: string | null   // null = not previewable; UI shows icon
+id: string // stable fingerprint, stable across removeEntry index renumbering
+previewUrl: string | null // null = not previewable; UI shows icon
 ```
 
 `id` is `${file.name}|${file.size}|${file.lastModified}` — the same fingerprint
@@ -106,7 +106,7 @@ discarded store closure can leak its blobs because its `cleanup()` never runs.
 **Resolution**: `createPhotoUploadStore` produces entries with
 `previewUrl: null`. A new store action does the allocation:
 
-```ts
+```text
 ensurePreviews(): void
 ```
 
@@ -147,10 +147,7 @@ attempt.
 Helper:
 
 ```ts
-export function revokePreviewUrls(
-  cache: PreviewCache,
-  fingerprintsToRevoke?: string[],
-): void
+export function revokePreviewUrls(cache: PreviewCache, fingerprintsToRevoke?: string[]): void
 ```
 
 When called with no filter it revokes all; with a filter it revokes only the
@@ -189,11 +186,11 @@ Thumbnail rendering rules:
 
 - If `previewUrl !== null`:
   `<img src={previewUrl} class="size-10 rounded object-cover" loading="lazy"
-  decoding="async" alt="" />`. Local `useState` `hasLoadError`; on `onError`
+decoding="async" alt="" />`. Local `useState` `hasLoadError`; on `onError`
   flip to the icon fallback for that row.
 - If `previewUrl === null`: render
   `<div class="size-10 rounded bg-fill/30 flex items-center justify-center
-  text-text-tertiary" aria-hidden="true">…</div>` with the icon chosen by file
+text-text-tertiary" aria-hidden="true">…</div>` with the icon chosen by file
   extension:
   - `.mov` → lucide `Film`
   - `.raw`, `.dng`, `.arw`, `.cr2`, `.nef` → lucide `Aperture`
@@ -204,11 +201,16 @@ Filename remains the row's accessible label; the thumbnail/icon is decorative.
 Per-file progress bar should expose:
 
 ```html
-<div role="progressbar"
-     aria-valuemin={0}
-     aria-valuemax={100}
-     aria-valuenow={Math.round(entry.progress * 100)}
-     aria-label={`${entry.name} 上传进度`}>
+<div
+  role="progressbar"
+  aria-valuemin="{0}"
+  aria-valuemax="{100}"
+  aria-valuenow="{Math.round(entry.progress"
+  *
+  100)}
+  aria-label="{`${entry.name}"
+  上传进度`}
+></div>
 ```
 
 The existing top-of-list overall progress bar gets the same treatment.

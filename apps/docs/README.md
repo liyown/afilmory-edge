@@ -128,14 +128,10 @@ description: Page description  # Optional page description
 
 Create reusable components in `src/components/` and use them in MDX files:
 
-```typescript
+```tsx
 // src/components/InfoBox.tsx
 export function InfoBox({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-      {children}
-    </div>
-  );
+  return <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">{children}</div>
 }
 ```
 

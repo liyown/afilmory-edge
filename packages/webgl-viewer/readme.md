@@ -5,16 +5,16 @@ React 19 图片查看器，优先使用 WebGPU。WebGPU 不可用、初始化失
 ```tsx
 import { ImageViewer } from '@afilmory/webgl-viewer'
 
-<ImageViewer
+;<ImageViewer
   src="/photo.jpg"
   alt="Photo description"
   minScale={1}
   maxScale={20}
-  onLoad={() => console.log('First frame rendered')}
+  onLoad={() => console.info('First frame rendered')}
   onError={console.error}
-  onHDRChange={hdr => console.log({ hdr })}
-  onRendererChange={renderer => console.log({ renderer })}
-  onViewportChange={viewport => console.log(viewport)}
+  onHDRChange={(hdr) => console.info({ hdr })}
+  onRendererChange={(renderer) => console.info({ renderer })}
+  onViewportChange={(viewport) => console.info(viewport)}
 />
 ```
 

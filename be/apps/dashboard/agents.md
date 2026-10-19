@@ -19,7 +19,7 @@ Repository rules (must follow):
 
 - Never edit auto-generated files (e.g., src/generated-routes.ts). Add/rename files under src/pages/ to affect routing.
 - Use the path alias ~/ for all src imports (configured in tsconfig).
-- Use Framer Motion’s LazyMotion with m._ components only. Do not use motion._ directly.
+- Use Framer Motion’s LazyMotion with `m._` components only. Do not use `motion._` directly.
 - Prefer Spring presets from @afilmory/utils for animations.
 - Use the Pastel color system classes instead of raw Tailwind colors.
 - Follow component organization:
@@ -53,7 +53,7 @@ Providers:
   - ModalContainer and Toaster
 - Add new cross-cutting providers here, keeping order and side effects in mind.
 
-### i18n usage
+## i18n usage
 
 - Localization lives under `locales/dashboard/*.json`. Follow the same flat-key rules documented in the repo root AGENTS instructions (no nested parents vs. leaf conflicts). Update English first before translating other languages.
 - Resource metadata/types live in `src/@types/constants.ts`, `src/@types/resources.ts`, and `src/@types/i18next.d.ts`. Keep these files in sync when adding new locales or namespaces.
@@ -158,7 +158,7 @@ UI Component Import Pattern:
 
 ```tsx
 // ✅ Preferred: Import from @afilmory/ui
-import { Input, Label, FormError, Button, ScrollArea } from '@afilmory/ui'
+import { Button, FormError, Input, Label, ScrollArea } from '@afilmory/ui'
 
 // ❌ Avoid: Manual inline styling for common elements
 ;<input className="w-full rounded-lg border..." />
@@ -229,7 +229,7 @@ Form Elements (Inputs, Textareas, Selects):
 Example (using UI components):
 
 ```tsx
-import { Input, Label, FormError } from '@afilmory/ui'
+import { FormError, Input, Label } from '@afilmory/ui'
 ;<div className="space-y-2">
   <Label htmlFor="field-id">Field Label</Label>
   <Input id="field-id" type="text" placeholder="Enter value..." error={!!errors.field} />
@@ -263,7 +263,7 @@ Example (manual styling):
 Example (textarea using UI components):
 
 ```tsx
-import { Textarea, Label, FormError } from '@afilmory/ui'
+import { FormError, Label, Textarea } from '@afilmory/ui'
 ;<div className="space-y-2">
   <Label htmlFor="description">Description</Label>
   <Textarea id="description" rows={3} placeholder="Enter description..." error={!!errors.description} />
@@ -486,7 +486,7 @@ Common agent playbook:
 
 3. Add animated UI:
 
-- Use m._ components with Spring presets. Do not import motion._.
+- Use `m._` components with Spring presets. Do not import `motion._`.
 
 4. Add a provider:
 

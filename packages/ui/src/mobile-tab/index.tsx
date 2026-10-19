@@ -17,7 +17,6 @@ export const MobileTabGroup = (props: ComponentType<MobileTabGroupProps>) => {
   const componentId = useId()
 
   return (
-    // eslint-disable-next-line @eslint-react/no-context-provider
     <MobileTabGroupContext.Provider
       value={useMemo(
         () => ({

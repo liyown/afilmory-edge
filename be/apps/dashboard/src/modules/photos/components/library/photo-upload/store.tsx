@@ -26,7 +26,6 @@ type PhotoUploadStoreParams = {
 
 const PhotoUploadStoreContext = createContext<PhotoUploadStore | null>(null)
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUploadStore {
   const previewCache: PreviewCache = new Map()
 
@@ -72,7 +71,6 @@ export function PhotoUploadStoreProvider({
   return <PhotoUploadStoreContext value={store}>{children}</PhotoUploadStoreContext>
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function usePhotoUploadStore<U>(selector: (state: PhotoUploadStoreState) => U) {
   const store = use(PhotoUploadStoreContext)
   if (!store) {

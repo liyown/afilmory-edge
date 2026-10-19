@@ -145,14 +145,12 @@ function SlidingNumber({
 
   const intDigitCount = newIntStr?.length ?? 0
   const intPlaces = React.useMemo(
-    () => Array.from({ length: intDigitCount }, (_, i) => Math.pow(10, intDigitCount - i - 1)),
+    () => Array.from({ length: intDigitCount }, (_, i) => 10 ** (intDigitCount - i - 1)),
     [intDigitCount],
   )
   const decPlaces = React.useMemo(
     () =>
-      newDecStrRaw
-        ? Array.from({ length: newDecStrRaw.length }, (_, i) => Math.pow(10, newDecStrRaw.length - i - 1))
-        : [],
+      newDecStrRaw ? Array.from({ length: newDecStrRaw.length }, (_, i) => 10 ** (newDecStrRaw.length - i - 1)) : [],
     [newDecStrRaw],
   )
 

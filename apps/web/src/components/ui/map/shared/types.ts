@@ -1,4 +1,5 @@
 import type { FeatureCollection } from 'geojson'
+
 import type { PhotoMarker } from '~/types/map'
 
 // LayerProps type definition for compatibility

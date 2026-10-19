@@ -1,4 +1,3 @@
-/* eslint-disable unicorn/prefer-code-point */
 /**
  * Modified version of https://github.com/vercel/satori/blob/main/playground/utils/twemoji.ts
  */
@@ -18,16 +17,16 @@ export function get_icon_code(char: string) {
 
 function to_code_point(unicodeSurrogates: string) {
   const r: string[] = []
-  let c = 0,
-    p = 0,
-    i = 0
+  let c = 0
+  let p = 0
+  let i = 0
 
   while (i < unicodeSurrogates.length) {
     c = unicodeSurrogates.charCodeAt(i++)
     if (p) {
       r.push((65536 + ((p - 55296) << 10) + (c - 56320)).toString(16))
       p = 0
-    } else if (55296 <= c && c <= 56319) {
+    } else if (c >= 55296 && c <= 56319) {
       p = c
     } else {
       r.push(c.toString(16))

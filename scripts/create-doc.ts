@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 import * as clack from '@clack/prompts'
@@ -33,10 +34,7 @@ function getCurrentTimestamp(): string {
       second: '2-digit',
       hour12: false,
     })
-    .replace(
-      /(\d{2})\/(\d{2})\/(\d{4}), (\d{2}:\d{2}:\d{2})/,
-      '$3-$2-$1T$4+08:00',
-    )
+    .replace(/(\d{2})\/(\d{2})\/(\d{4}), (\d{2}:\d{2}:\d{2})/, '$3-$2-$1T$4+08:00')
 }
 
 /**
@@ -45,7 +43,6 @@ function getCurrentTimestamp(): string {
 function getCategories(): string[] {
   const contentsDir = join(__dirname, '..', 'packages', 'docs', 'contents')
   try {
-    const { readdirSync, statSync } = require('node:fs')
     return readdirSync(contentsDir)
       .filter((item) => {
         const fullPath = join(contentsDir, item)
@@ -402,9 +399,7 @@ async function main() {
     // Check if file already exists
     if (existsSync(filePath)) {
       spinner.stop('File already exists!')
-      clack.log.error(
-        `Document ${category ? `${category}/` : ''}${filename}.mdx already exists`,
-      )
+      clack.log.error(`Document ${category ? `${category}/` : ''}${filename}.mdx already exists`)
       process.exit(1)
     }
 
@@ -434,9 +429,7 @@ async function main() {
     clack.outro('✨ Happy writing!')
   } catch (error) {
     spinner.stop('Failed to create document')
-    clack.log.error(
-      `Error: ${error instanceof Error ? error.message : String(error)}`,
-    )
+    clack.log.error(`Error: ${error instanceof Error ? error.message : String(error)}`)
     process.exit(1)
   }
 }

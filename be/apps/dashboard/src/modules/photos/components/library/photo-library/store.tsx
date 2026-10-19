@@ -125,7 +125,6 @@ export function PhotoLibraryProvider({ isActive, children }: PhotoLibraryProvide
   return <PhotoLibraryStoreContext value={store}>{children}</PhotoLibraryStoreContext>
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function usePhotoLibraryStore<T>(selector: (state: PhotoLibraryStoreState) => T): T {
   const store = use(PhotoLibraryStoreContext)
   if (!store) {

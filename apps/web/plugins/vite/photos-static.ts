@@ -13,7 +13,7 @@ const projectRoot = path.resolve(__dirname, '../../../..')
  */
 export function photosStaticPlugin(): Plugin {
   // URL 路径验证正则：只允许字母、数字、点、下划线、连字符、斜杠和空格
-  const pathValidationRegex = /^[\w\u4e00-\u9fa5\s\-./[\]()]+$/
+  const pathValidationRegex = /^[\w\u4E00-\u9FA5\s\-./[\]()]+$/
 
   // 危险路径模式
   const dangerousPatterns = [

@@ -27,7 +27,7 @@ export const rgbToHex = ({ r, g, b }: RGB): string => {
 export const luminance = ({ r, g, b }: RGB): number => {
   const srgb = [r, g, b].map((v) => {
     const x = v / 255
-    return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4
   })
   return 0.2126 * srgb[0]! + 0.7152 * srgb[1]! + 0.0722 * srgb[2]!
 }
@@ -86,10 +86,10 @@ export const averageColorFromImage = (img: HTMLImageElement): string | null => {
   ctx.drawImage(img, 0, 0, w, h)
   try {
     const { data } = ctx.getImageData(0, 0, w, h)
-    let r = 0,
-      g = 0,
-      b = 0,
-      count = 0
+    let r = 0
+    let g = 0
+    let b = 0
+    let count = 0
     for (let i = 0; i < data.length; i += 4) {
       const alpha = data[i + 3]
       if (alpha === 0) continue

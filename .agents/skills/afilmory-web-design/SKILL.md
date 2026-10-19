@@ -27,7 +27,7 @@ current photo, not from a brand. Controls that aren't needed right now sit at `o
 Every floating surface is these four things together. Missing one is what makes a component look
 foreign:
 
-```tsx
+```text
 <div className="bg-material-medium rounded-xl border border-accent/20 backdrop-blur-2xl">
 ```
 
@@ -42,45 +42,45 @@ Motion on top of that: `transition={Spring.presets.smooth}` from `@afilmory/util
 
 **Color — semantic tokens only.** Hierarchy = walk down one family, never change hue.
 
-| Need | Use |
-| --- | --- |
-| Text | `text-text` → `-secondary` → `-tertiary` → `-quaternary` |
-| Control / hairline fill | `bg-fill` → `-secondary` → `-tertiary` → `-quaternary` |
-| Translucent surface | `bg-material-ultra-thin` … `-medium` … `-ultra-thick`, `-opaque` |
-| Accent tint | `border-accent/20`, `bg-accent/5`, `hover:bg-accent/10` |
-| Accent solid | `bg-accent`, `hover:bg-accent/90` (primary button, active toggle only) |
-| Over a photograph | `text-white`, `border-white/10`, `hover:bg-black/40` |
+| Need                    | Use                                                                    |
+| ----------------------- | ---------------------------------------------------------------------- |
+| Text                    | `text-text` → `-secondary` → `-tertiary` → `-quaternary`               |
+| Control / hairline fill | `bg-fill` → `-secondary` → `-tertiary` → `-quaternary`                 |
+| Translucent surface     | `bg-material-ultra-thin` … `-medium` … `-ultra-thick`, `-opaque`       |
+| Accent tint             | `border-accent/20`, `bg-accent/5`, `hover:bg-accent/10`                |
+| Accent solid            | `bg-accent`, `hover:bg-accent/90` (primary button, active toggle only) |
+| Over a photograph       | `text-white`, `border-white/10`, `hover:bg-black/40`                   |
 
 **Blur — by role, three steps only.**
 
-| Role | Class |
-| --- | --- |
-| Floating panel, menu, popover, toast, viewer chrome | `backdrop-blur-2xl` |
-| Secondary control sitting on a photo | `backdrop-blur-md` |
-| Scrim behind a modal | `backdrop-blur-sm` |
-| Fade band under fixed top/bottom chrome | `<LinearBlur side="top" tint="var(--color-background)" />` |
+| Role                                                | Class                                                      |
+| --------------------------------------------------- | ---------------------------------------------------------- |
+| Floating panel, menu, popover, toast, viewer chrome | `backdrop-blur-2xl`                                        |
+| Secondary control sitting on a photo                | `backdrop-blur-md`                                         |
+| Scrim behind a modal                                | `backdrop-blur-sm`                                         |
+| Fade band under fixed top/bottom chrome             | `<LinearBlur side="top" tint="var(--color-background)" />` |
 
 **Radius — by container size. Items are one step tighter than their container.**
 
-| Radius | Use |
-| --- | --- |
-| `rounded-full` | Circular icon buttons, pill badges, chips, grab handles |
-| `rounded-2xl` | Large floating containers — dialog, hover-card, toast, hero |
-| `rounded-xl` | Menus, tooltips, mid-size panels |
-| `rounded-lg` | Control containers — segments, inputs, header buttons |
-| `rounded-md` / `-sm` | Items inside a control container |
+| Radius               | Use                                                         |
+| -------------------- | ----------------------------------------------------------- |
+| `rounded-full`       | Circular icon buttons, pill badges, chips, grab handles     |
+| `rounded-2xl`        | Large floating containers — dialog, hover-card, toast, hero |
+| `rounded-xl`         | Menus, tooltips, mid-size panels                            |
+| `rounded-lg`         | Control containers — segments, inputs, header buttons       |
+| `rounded-md` / `-sm` | Items inside a control container                            |
 
 **Motion — two systems, split by what moves.**
 
-| Moving | Use |
-| --- | --- |
+| Moving                                       | Use                                                                              |
+| -------------------------------------------- | -------------------------------------------------------------------------------- |
 | Position, size, layout, gestures, enter/exit | `Spring.presets.smooth` (default) / `.snappy` (controls) / `.bouncy` (sparingly) |
-| Opacity, color only | `duration-200` (default), `duration-300` (slow fade), `duration-150` (press) |
+| Opacity, color only                          | `duration-200` (default), `duration-300` (slow fade), `duration-150` (press)     |
 
 **z-index — two tiers, no other values exist.**
 
-| Surface tier (`fixed` / portal) | Intra-surface tier |
-| --- | --- |
+| Surface tier (`fixed` / portal)                                                                                  | Intra-surface tier                                                                                    |
+| ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `z-30` page chrome · `z-40` scrim · `z-50` modal surface · `z-60` popper from a surface · `z-70` toast + tooltip | `z-1` hairline · `z-10` decoration · `z-20` badges, nav arrows · `z-30` chrome bar inside the surface |
 
 **Sizing.** Icon buttons are `size-8` (default) or `size-7` (dense). Header is `h-12`. Type scale
@@ -115,14 +115,14 @@ These are binary. There is no case where the surrounding code justifies them.
 
 Older files contradict the rules above. Proximity is not permission.
 
-| File | What's wrong |
-| --- | --- |
-| `packages/ui/src/button/Button.tsx` | Vendored Tremor — `gray-*` ramps, hand-rolled `dark:` pairs |
-| `packages/utils/src/cn.ts` | `focusRing` hardcodes `outline-blue-500` instead of accent |
-| `apps/web/src/modules/gallery/ActionPanel.tsx:25` | `bg-white/80 dark:bg-black/80 border-zinc-200` |
-| `packages/ui/src/dialog/dialog.tsx` | `z-100000000`; context-menu uses `z-10060`, tooltip `z-9999` |
-| `packages/ui/src/select/index.tsx`, `sonner.tsx` | `backdrop-blur-background` — not a real class, compiles to nothing |
-| `Button.tsx`, `modal/Dialog.tsx` | `shape-squircle` is a no-op in `apps/web` (only defined in the dashboard's CSS) |
+| File                                              | What's wrong                                                                    |
+| ------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `packages/ui/src/button/Button.tsx`               | Vendored Tremor — `gray-*` ramps, hand-rolled `dark:` pairs                     |
+| `packages/utils/src/cn.ts`                        | `focusRing` hardcodes `outline-blue-500` instead of accent                      |
+| `apps/web/src/modules/gallery/ActionPanel.tsx:25` | `bg-white/80 dark:bg-black/80 border-zinc-200`                                  |
+| `packages/ui/src/dialog/dialog.tsx`               | `z-100000000`; context-menu uses `z-10060`, tooltip `z-9999`                    |
+| `packages/ui/src/select/index.tsx`, `sonner.tsx`  | `backdrop-blur-background` — not a real class, compiles to nothing              |
+| `Button.tsx`, `modal/Dialog.tsx`                  | `shape-squircle` is a no-op in `apps/web` (only defined in the dashboard's CSS) |
 
 Full list with rationale: `/DESIGN.md` §13.
 

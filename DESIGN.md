@@ -8,7 +8,7 @@ different system, see `be/apps/dashboard/AGENTS.md`).
 **Authority.** This document is derived from the shipped code, not from intent. It is
 normative for new code. A handful of existing files predate it and contradict it — those are
 enumerated in [§13 Known Deviations](#13-known-deviations). Do not copy a deviation just
-because it is nearby in the tree. If you find code that contradicts this document and is *not*
+because it is nearby in the tree. If you find code that contradicts this document and is _not_
 listed in §13, the document is stale: fix the document in the same PR.
 
 ---
@@ -17,7 +17,7 @@ listed in §13, the document is stale: fix the document in the same PR.
 
 > **The photograph is the only light source. Everything else is glass in front of it.**
 
-Chrome is dark, semi-transparent, and made of *material* that the content shows through. Depth
+Chrome is dark, semi-transparent, and made of _material_ that the content shows through. Depth
 comes from stacking translucent layers, not from drop shadows. The accent colour is not the
 brand's — it is derived from the current photo. Every control that is not needed right now
 recedes to zero opacity.
@@ -33,14 +33,14 @@ materials, and SwiftUI's `spring(duration:bounce:)` motion model.
 
 The palette comes from `tailwindcss-uikit-colors/v4/macos.css` (imported in
 `apps/web/src/styles/tailwind.css`). There are four families, and hierarchy is expressed by
-walking *down a family*, never by picking a different hue.
+walking _down a family_, never by picking a different hue.
 
-| Family | Use for | Ladder |
-| --- | --- | --- |
-| `text-text-*` | Foreground text | `text-text` → `-secondary` → `-tertiary` → `-quaternary` → `-quinary` |
-| `bg-fill-*` / `border-fill-*` | Opaque-ish control and surface fills, hairlines | `-fill` → `-secondary` → `-tertiary` → `-quaternary` → `-quinary` |
-| `bg-material-*` | Translucent surfaces sitting over content (see §3) | `-ultra-thin` → `-thin` → `-medium` → `-thick` → `-ultra-thick` → `-opaque` |
-| System hues (`red`, `green`, `blue`, `orange`…) | Semantic status only | — |
+| Family                                          | Use for                                            | Ladder                                                                      |
+| ----------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------- |
+| `text-text-*`                                   | Foreground text                                    | `text-text` → `-secondary` → `-tertiary` → `-quaternary` → `-quinary`       |
+| `bg-fill-*` / `border-fill-*`                   | Opaque-ish control and surface fills, hairlines    | `-fill` → `-secondary` → `-tertiary` → `-quaternary` → `-quinary`           |
+| `bg-material-*`                                 | Translucent surfaces sitting over content (see §3) | `-ultra-thin` → `-thin` → `-medium` → `-thick` → `-ultra-thick` → `-opaque` |
+| System hues (`red`, `green`, `blue`, `orange`…) | Semantic status only                               | —                                                                           |
 
 **Rules**
 
@@ -69,11 +69,11 @@ Consume it as `accent`: `bg-accent`, `text-accent`, `border-accent/20`. Never ha
 
 Accent is a tint, not a fill, everywhere except a primary button and an active state.
 
-| Role | Class |
-| --- | --- |
-| Border on a glass surface | `border-accent/20` |
-| Wash on a glass surface | `bg-accent/5`, `bg-accent/[0.03]` |
-| Hover on a text button | `hover:bg-accent/10` |
+| Role                                       | Class                             |
+| ------------------------------------------ | --------------------------------- |
+| Border on a glass surface                  | `border-accent/20`                |
+| Wash on a glass surface                    | `bg-accent/5`, `bg-accent/[0.03]` |
+| Hover on a text button                     | `hover:bg-accent/10`              |
 | Solid fill (primary button, active toggle) | `bg-accent`, `hover:bg-accent/90` |
 
 Reach for `color-mix(in srgb, var(--color-accent) N%, transparent)` in an inline style **only**
@@ -98,14 +98,14 @@ together: a material fill, a backdrop blur matched to its role, and a hairline b
 
 ### 3.1 Blur is chosen by role, not by taste
 
-| Role | Class | Canonical examples |
-| --- | --- | --- |
+| Role                                                | Class               | Canonical examples                                                                                                                                        |
+| --------------------------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Floating panel, menu, popover, toast, viewer chrome | `backdrop-blur-2xl` | `context-menu`, `dropdown-menu`, `hover-card`, `dialog`, `sonner`, `tooltip`, `InspectorPanel`, `ExifPanel`, `FloatingActionButton`, `PhotoViewer` chrome |
-| Secondary control floating **on a photograph** | `backdrop-blur-md` | `MasonryPhotoItem` badges, `ListView` overlays, map markers, `FilterChip`, `GlassButton` |
-| Scrim / overlay behind a modal | `backdrop-blur-sm` | `Dialog.Overlay`, `ActionPanel` overlay |
-| Top / bottom fade band over scrolling content | `<LinearBlur />` | `PageHeader`, `PageFooter` |
+| Secondary control floating **on a photograph**      | `backdrop-blur-md`  | `MasonryPhotoItem` badges, `ListView` overlays, map markers, `FilterChip`, `GlassButton`                                                                  |
+| Scrim / overlay behind a modal                      | `backdrop-blur-sm`  | `Dialog.Overlay`, `ActionPanel` overlay                                                                                                                   |
+| Top / bottom fade band over scrolling content       | `<LinearBlur />`    | `PageHeader`, `PageFooter`                                                                                                                                |
 
-`LinearBlur` (`packages/ui/src/progressive-blur`) is a *progressive* blur: 8 stacked
+`LinearBlur` (`packages/ui/src/progressive-blur`) is a _progressive_ blur: 8 stacked
 `backdrop-filter` layers under `linear-gradient` masks. It is not interchangeable with
 `backdrop-blur-*` — use it whenever content must fade under a fixed edge rather than hit a hard
 boundary.
@@ -127,12 +127,12 @@ deviations (§13.2).
 `bg-material-*` and `backdrop-blur-*` are always used together — a material without a blur is
 just a flat translucent rectangle.
 
-| Material | Use for |
-| --- | --- |
-| `bg-material-ultra-thick` | Chrome sitting directly on a photo, where legibility wins (`PhotoViewer` buttons) |
-| `bg-material-thick` / `-medium` | Standard floating panels and menus |
-| `bg-material-thin` / `-ultra-thin` | Light washes where the content below must stay readable |
-| `bg-material-opaque` | Full-bleed backdrops that must fully hide what is behind (`PhotoViewer` backdrop) |
+| Material                           | Use for                                                                           |
+| ---------------------------------- | --------------------------------------------------------------------------------- |
+| `bg-material-ultra-thick`          | Chrome sitting directly on a photo, where legibility wins (`PhotoViewer` buttons) |
+| `bg-material-thick` / `-medium`    | Standard floating panels and menus                                                |
+| `bg-material-thin` / `-ultra-thin` | Light washes where the content below must stay readable                           |
+| `bg-material-opaque`               | Full-bleed backdrops that must fully hide what is behind (`PhotoViewer` backdrop) |
 
 ### 3.3 Borders are hairlines that fade
 
@@ -165,13 +165,13 @@ Prefer it over Tailwind's `shadow-md` / `shadow-lg` scale for any glass surface.
 
 ### 4.1 Radius maps to container size
 
-| Radius | Use for |
-| --- | --- |
-| `rounded-full` | Circular icon buttons, pill badges, filter chips, drag handles |
-| `rounded-2xl` | Large floating containers — dialog, hover-card, toast, hero blocks, map info panel |
-| `rounded-xl` | Menus, tooltips, mid-size cards and panels |
-| `rounded-lg` | Control containers — segmented controls, inputs, header buttons, small cards |
-| `rounded-md` / `rounded-sm` | Items *inside* a control container — segment items, list rows, EXIF rows, command items |
+| Radius                      | Use for                                                                                 |
+| --------------------------- | --------------------------------------------------------------------------------------- |
+| `rounded-full`              | Circular icon buttons, pill badges, filter chips, drag handles                          |
+| `rounded-2xl`               | Large floating containers — dialog, hover-card, toast, hero blocks, map info panel      |
+| `rounded-xl`                | Menus, tooltips, mid-size cards and panels                                              |
+| `rounded-lg`                | Control containers — segmented controls, inputs, header buttons, small cards            |
+| `rounded-md` / `rounded-sm` | Items _inside_ a control container — segment items, list rows, EXIF rows, command items |
 
 The pattern that recurs: **a container is one step rounder than the items inside it**
 (`context-menu` is `rounded-xl`, its items are `rounded-lg`).
@@ -180,10 +180,10 @@ The pattern that recurs: **a container is one step rounder than the items inside
 
 Circular icon buttons come in two sizes and nothing else:
 
-| Size | Use |
-| --- | --- |
+| Size     | Use                                                 |
+| -------- | --------------------------------------------------- |
 | `size-8` | Default icon button (viewer chrome, header actions) |
-| `size-7` | Compact / dense contexts |
+| `size-7` | Compact / dense contexts                            |
 
 Text buttons use the `Button` size scale from `packages/ui/src/button/Button.tsx`
 (`xs` h-6 · `sm` h-8 · `md` h-10 · `lg` h-11 · `xl` h-12), default `sm`.
@@ -217,7 +217,7 @@ Two systems, split by what is moving.
 Layout, entry/exit, gestures, and shared-element transitions use `motion` springs from the shared
 preset object — **never** a hand-written `cubic-bezier` or a `duration`-only tween.
 
-```ts
+```text
 import { Spring } from '@afilmory/utils'
 
 transition={Spring.presets.smooth}   // duration 0.4, bounce 0    — default
@@ -235,13 +235,13 @@ Import `m` from `motion/react` (not `motion`) so the tree-shaken build is used.
 
 Opacity, colour, and other non-spatial state changes use plain CSS transitions:
 
-| Duration | Use |
-| --- | --- |
+| Duration       | Use                                     |
+| -------------- | --------------------------------------- |
 | `duration-200` | Default hover / focus / active feedback |
-| `duration-300` | Slower fades, reveals |
-| `duration-150` | Fast acknowledgement (pressed states) |
+| `duration-300` | Slower fades, reveals                   |
+| `duration-150` | Fast acknowledgement (pressed states)   |
 
-If a property changes *position or size*, it belongs in §6.1, not here.
+If a property changes _position or size_, it belongs in §6.1, not here.
 
 ### 6.3 Shared-element transition into the viewer
 
@@ -276,22 +276,22 @@ z-index is scoped to the nearest positioned ancestor, so there are two tiers, no
 
 ### 7.1 Surface tier — for `fixed` roots and portals
 
-| z | Layer |
-| --- | --- |
+| z      | Layer                                                                            |
+| ------ | -------------------------------------------------------------------------------- |
 | `z-30` | Persistent page chrome — `PageHeader`, `FloatingActionButton`, `ViewModeSegment` |
-| `z-40` | Scrim / overlay behind a modal |
-| `z-50` | Modal surface — dialog, drawer, `PhotoViewer`, command palette |
-| `z-60` | Popper spawned *from* a surface — dropdown, select, context menu |
-| `z-70` | Toast and tooltip — always on top |
+| `z-40` | Scrim / overlay behind a modal                                                   |
+| `z-50` | Modal surface — dialog, drawer, `PhotoViewer`, command palette                   |
+| `z-60` | Popper spawned _from_ a surface — dropdown, select, context menu                 |
+| `z-70` | Toast and tooltip — always on top                                                |
 
 ### 7.2 Intra-surface tier — inside a card or a modal surface
 
-| z | Layer |
-| --- | --- |
-| `z-1` | Hairline borders and structural gradients |
-| `z-10` | Decoration — gradients, hover scrims, image overlays |
+| z      | Layer                                                                           |
+| ------ | ------------------------------------------------------------------------------- |
+| `z-1`  | Hairline borders and structural gradients                                       |
+| `z-10` | Decoration — gradients, hover scrims, image overlays                            |
 | `z-20` | Badges and inline affordances — `LivePhotoBadge`, `HDRBadge`, viewer nav arrows |
-| `z-30` | Chrome bar inside the surface — the viewer's top button row |
+| `z-30` | Chrome bar inside the surface — the viewer's top button row                     |
 
 **Never invent a value outside these tables.** If something needs to be above a tooltip, the
 stacking is wrong, not the number. Values like `z-9999` and `z-100000000` in the tree are
@@ -412,21 +412,21 @@ Existing code is not required to migrate immediately; new code must not add to t
 
 ### 13.1 Colour
 
-| Where | What | Rule broken |
-| --- | --- | --- |
-| `packages/ui/src/button/Button.tsx` | Vendored Tremor component using `text-gray-900 dark:text-gray-50`, `bg-gray-200 dark:bg-gray-900`, `bg-red-600` | §2.1 — neutral ramps and hand-rolled light/dark pairs instead of UIKit tokens |
-| `packages/utils/src/cn.ts` (`focusRing`, `hasErrorInput`) | `outline-blue-500`, `border-red-500`, `ring-red-200` | §2.1 / §2.2 — focus ring should follow `--color-accent` |
-| `apps/web/src/modules/gallery/ActionPanel.tsx:25` | `bg-white/80 dark:bg-black/80 border-zinc-200 dark:border-zinc-800` | §2.1 / §3.2 — should be `bg-material-thick` |
+| Where                                                     | What                                                                                                            | Rule broken                                                                   |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `packages/ui/src/button/Button.tsx`                       | Vendored Tremor component using `text-gray-900 dark:text-gray-50`, `bg-gray-200 dark:bg-gray-900`, `bg-red-600` | §2.1 — neutral ramps and hand-rolled light/dark pairs instead of UIKit tokens |
+| `packages/utils/src/cn.ts` (`focusRing`, `hasErrorInput`) | `outline-blue-500`, `border-red-500`, `ring-red-200`                                                            | §2.1 / §2.2 — focus ring should follow `--color-accent`                       |
+| `apps/web/src/modules/gallery/ActionPanel.tsx:25`         | `bg-white/80 dark:bg-black/80 border-zinc-200 dark:border-zinc-800`                                             | §2.1 / §3.2 — should be `bg-material-thick`                                   |
 
 ### 13.2 Blur
 
-| Where | What |
-| --- | --- |
-| `HistogramChart`, `ActionPanel`, `PageHeaderRight`, `Reaction`, `manifest.tsx`, `PhotoViewer`, `ActionButton` | `backdrop-blur-xl` — a step that has no assigned role |
-| `MobilePhotoInspectorSheet`, `ScrollArea` | `backdrop-blur-3xl` |
-| `Reaction` | `backdrop-blur-lg` |
-| `ActiveFiltersHero/index.tsx` (×2), `inspector/LoadingIndicator.tsx` | bare `backdrop-blur` (Tailwind's unsuffixed 8px default) |
-| `packages/ui/src/select/index.tsx`, `packages/ui/src/sonner.tsx` | `backdrop-blur-background` — **not a valid Tailwind class**; no `--blur-background` theme key exists, so it compiles to nothing |
+| Where                                                                                                         | What                                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `HistogramChart`, `ActionPanel`, `PageHeaderRight`, `Reaction`, `manifest.tsx`, `PhotoViewer`, `ActionButton` | `backdrop-blur-xl` — a step that has no assigned role                                                                           |
+| `MobilePhotoInspectorSheet`, `ScrollArea`                                                                     | `backdrop-blur-3xl`                                                                                                             |
+| `Reaction`                                                                                                    | `backdrop-blur-lg`                                                                                                              |
+| `ActiveFiltersHero/index.tsx` (×2), `inspector/LoadingIndicator.tsx`                                          | bare `backdrop-blur` (Tailwind's unsuffixed 8px default)                                                                        |
+| `packages/ui/src/select/index.tsx`, `packages/ui/src/sonner.tsx`                                              | `backdrop-blur-background` — **not a valid Tailwind class**; no `--blur-background` theme key exists, so it compiles to nothing |
 
 ### 13.3 z-index
 
@@ -440,11 +440,11 @@ Existing code is not required to migrate immediately; new code must not add to t
 
 ### 13.5 Dead / no-op code
 
-| Where | What |
-| --- | --- |
-| `apps/web/package.json` | `@headlessui/react` is a dependency with **zero** imports in `src` |
-| `packages/ui/src/button/Button.tsx`, `packages/ui/src/modal/Dialog.tsx` | `shape-squircle` class is applied, but it is only *defined* in `be/apps/dashboard/src/styles/tailwind.css`. In `apps/web` it is a **no-op** — those components do not actually get `corner-shape: squircle` |
-| `packages/ui/src/index.ts` | `./checkbox` and `./sonner` are each exported twice |
+| Where                                                                   | What                                                                                                                                                                                                        |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/package.json`                                                 | `@headlessui/react` is a dependency with **zero** imports in `src`                                                                                                                                          |
+| `packages/ui/src/button/Button.tsx`, `packages/ui/src/modal/Dialog.tsx` | `shape-squircle` class is applied, but it is only _defined_ in `be/apps/dashboard/src/styles/tailwind.css`. In `apps/web` it is a **no-op** — those components do not actually get `corner-shape: squircle` |
+| `packages/ui/src/index.ts`                                              | `./checkbox` and `./sonner` are each exported twice                                                                                                                                                         |
 
 ---
 

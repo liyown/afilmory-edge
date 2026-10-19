@@ -11,8 +11,7 @@ export default {
       meta: {
         type: 'problem',
         docs: {
-          description:
-            'Ensure i18n JSON keys are flat and valid as object paths',
+          description: 'Ensure i18n JSON keys are flat and valid as object paths',
           category: 'Possible Errors',
           recommended: true,
         },
@@ -71,8 +70,7 @@ export default {
       meta: {
         type: 'problem',
         docs: {
-          description:
-            "Ensure non-English JSON files don't have extra keys not present in en.json",
+          description: "Ensure non-English JSON files don't have extra keys not present in en.json",
           category: 'Possible Errors',
           recommended: true,
         },
@@ -96,12 +94,7 @@ export default {
 
             try {
               currentJson = JSON.parse(sourceCode.text)
-              const englishFilePath = path.join(
-                path.dirname(filename),
-                '../',
-                namespace,
-                'en.json',
-              )
+              const englishFilePath = path.join(path.dirname(filename), '../', namespace, 'en.json')
               englishJson = JSON.parse(fs.readFileSync(englishFilePath, 'utf8'))
             } catch (error) {
               context.report({
@@ -111,9 +104,7 @@ export default {
               return
             }
 
-            const extraKeys = Object.keys(currentJson).filter(
-              (key) => !Object.prototype.hasOwnProperty.call(englishJson, key),
-            )
+            const extraKeys = Object.keys(currentJson).filter((key) => !Object.hasOwn(englishJson, key))
 
             for (const key of extraKeys) {
               context.report({
@@ -121,9 +112,7 @@ export default {
                 message: `Key "${key}" is present in ${lang}.json but not in en.json for namespace "${namespace}"`,
                 fix(fixer) {
                   const newJson = Object.fromEntries(
-                    Object.entries(currentJson).filter(
-                      ([k]) => !extraKeys.includes(k),
-                    ),
+                    Object.entries(currentJson).filter(([k]) => !extraKeys.includes(k)),
                   )
 
                   const newText = `${JSON.stringify(newJson, null, 2)}\n`

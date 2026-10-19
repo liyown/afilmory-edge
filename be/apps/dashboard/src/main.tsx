@@ -8,12 +8,16 @@ import { router } from './router'
 
 const $container = document.querySelector('#root') as HTMLElement
 
-if (import.meta.env.DEV) {
-  const { start } = await import('react-scan')
-  start()
+async function bootstrap() {
+  if (import.meta.env.DEV) {
+    const { start } = await import('react-scan')
+    start()
+  }
+  createRoot($container).render(
+    <React.StrictMode>
+      <RouterProvider router={router} />
+    </React.StrictMode>,
+  )
 }
-createRoot($container).render(
-  <React.StrictMode>
-    <RouterProvider router={router} />
-  </React.StrictMode>,
-)
+
+void bootstrap()

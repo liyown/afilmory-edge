@@ -60,14 +60,14 @@ const translateExifValue = (
   return translated || cleanedValue
 }
 
-const createTranslator
-  = (category: string) =>
-    (value: string | number | null, props?: Record<string, string | number>): string | null => {
-      if (value === null || value === undefined) {
-        return null
-      }
-      return translateExifValue(category, value, props)
+const createTranslator =
+  (category: string) =>
+  (value: string | number | null, props?: Record<string, string | number>): string | null => {
+    if (value === null || value === undefined) {
+      return null
     }
+    return translateExifValue(category, value, props)
+  }
 
 // Specific translation functions for different EXIF fields
 const translateExposureMode = createTranslator('exposure.mode')
@@ -153,8 +153,7 @@ const processFujiRecipe = (recipe: FujiRecipe): any => {
   if (recipe.DynamicRangeSetting) {
     if (recipe.DynamicRangeSetting === 'Manual') {
       processed.DynamicRange = `DR${recipe.DevelopmentDynamicRange}`
-    }
-    else {
+    } else {
       processed.DynamicRange = 'Auto'
     }
   }
@@ -167,8 +166,7 @@ const processFujiRecipe = (recipe: FujiRecipe): any => {
       processed.WhiteBalance = translateFujiWhiteBalance('Kelvin', {
         kelvin: recipe.ColorTemperature,
       })
-    }
-    else {
+    } else {
       processed.WhiteBalance = translateFujiWhiteBalance('Auto')
     }
   }
@@ -179,7 +177,6 @@ const processFujiRecipe = (recipe: FujiRecipe): any => {
   return processed
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export const formatExifData = (exif: PickedExif | null) => {
   if (!exif) {
     return null
@@ -212,8 +209,8 @@ export const formatExifData = (exif: PickedExif | null) => {
       return `${exposureTime}s`
     }
     if (exif.ShutterSpeedValue) {
-      const speed
-        = typeof exif.ShutterSpeedValue === 'number'
+      const speed =
+        typeof exif.ShutterSpeedValue === 'number'
           ? exif.ShutterSpeedValue
           : Number.parseFloat(String(exif.ShutterSpeedValue))
       if (speed >= 1) {
