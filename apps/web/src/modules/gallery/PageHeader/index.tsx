@@ -21,10 +21,12 @@ export const PageHeader = ({ dateRange, location, showDateRange }: PageHeaderPro
         strength={128}
         side="top"
       />
-      <div className="flex h-12 items-center justify-between gap-2 px-3 lg:h-12 lg:gap-3 lg:px-4">
-        <PageHeaderLeft />
+      <div className="flex h-12 items-center justify-between gap-2 px-3 lg:h-14 lg:gap-3 lg:px-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <PageHeaderLeft />
+          <PageHeaderCenter dateRange={dateRange} location={location} showDateRange={showDateRange} />
+        </div>
         <PageHeaderSearch />
-        <PageHeaderCenter dateRange={dateRange} location={location} showDateRange={showDateRange} />
         <div className="flex items-center gap-1.5 lg:gap-2">
           <div className="hidden sm:block">
             <ViewModeSegment />

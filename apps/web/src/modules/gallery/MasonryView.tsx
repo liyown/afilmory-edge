@@ -11,17 +11,17 @@ import { MasonryPhotoItem } from './MasonryPhotoItem'
 
 const COLUMN_WIDTH_CONFIG = {
   auto: {
-    mobile: 150,
-    desktop: 250,
-    maxColumns: 8,
+    mobile: 165,
+    desktop: 300,
+    maxColumns: 6,
   },
   min: {
-    mobile: 120,
-    desktop: 200,
+    mobile: 140,
+    desktop: 220,
   },
   max: {
-    mobile: 250,
-    desktop: 500,
+    mobile: 280,
+    desktop: 520,
   },
 }
 
@@ -53,8 +53,10 @@ export const MasonryView = ({ photos, onRender }: MasonryViewProps) => {
   // 动态计算列宽
   const columnWidth = useMemo(() => {
     const { auto, min, max } = COLUMN_WIDTH_CONFIG
-    const gutter = 4 // 列间距
-    const availableWidth = containerWidth - (isMobile ? 8 : 32) // 移动端和桌面端的 padding 不同
+    const gutter = isMobile ? 8 : 14 // 列间距
+    // Matches the page container padding: px-4 / lg:px-8 / xl:px-12.
+    const horizontalPadding = isMobile ? 32 : containerWidth >= 1280 ? 96 : containerWidth >= 1024 ? 64 : 32
+    const availableWidth = containerWidth - horizontalPadding
 
     if (columns === 'auto') {
       const autoWidth = isMobile ? auto.mobile : auto.desktop
@@ -81,6 +83,8 @@ export const MasonryView = ({ photos, onRender }: MasonryViewProps) => {
     return Math.max(Math.min(calculatedWidth, maxWidth), minWidth)
   }, [isMobile, columns, containerWidth])
 
+  const gutter = isMobile ? 8 : 14
+
   return (
     <Masonry<PhotoManifest>
       ref={masonryRef}
@@ -93,9 +97,9 @@ export const MasonryView = ({ photos, onRender }: MasonryViewProps) => {
       )}
       onRender={onRender}
       columnWidth={columnWidth}
-      columnGutter={4}
-      rowGutter={4}
-      itemHeightEstimate={400}
+      columnGutter={gutter}
+      rowGutter={gutter}
+      itemHeightEstimate={420}
       itemKey={useCallback((data, _index) => {
         return data.id
       }, [])}

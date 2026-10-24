@@ -68,7 +68,7 @@ export const Masonry = <Item,>(props: MasonryProps<Item> & { ref?: React.Ref<Mas
     initialWidth: props.ssrWidth,
     initialHeight: props.ssrHeight,
   })
-  const containerPos = useContainerPosition(containerRef, windowSize)
+  const containerPos = useContainerPosition(containerRef)
 
   const nextProps = Object.assign(
     {
@@ -102,7 +102,11 @@ export const Masonry = <Item,>(props: MasonryProps<Item> & { ref?: React.Ref<Mas
   nextProps.positioner = usePositioner(nextProps, [shrunk ? Math.random() + positionIndex : positionIndex])
 
   nextProps.resizeObserver = useResizeObserver(nextProps.positioner)
-  nextProps.scrollTop = scrollTop
+  // Item offsets are relative to this container, but the scroll position is
+  // absolute. Without shifting by the container offset the virtual window
+  // starts too far down whenever content precedes the grid (the editorial
+  // hero), leaving blank rows at the top.
+  nextProps.scrollTop = Math.max(0, scrollTop - containerPos.offset)
   nextProps.isScrolling = isScrolling
   nextProps.height = window.innerHeight
 
@@ -159,12 +163,10 @@ function MasonryScroller<Item>(
   })
 }
 
-function useContainerPosition(
-  elementRef: React.MutableRefObject<HTMLElement | null>,
-  deps: React.DependencyList = [],
-): ContainerPosition & {
+function useContainerPosition(elementRef: React.MutableRefObject<HTMLElement | null>): ContainerPosition & {
   height: number
 } {
+  const scrollElement = useScrollViewElement()
   const [containerPosition, setContainerPosition] = React.useState<
     ContainerPosition & {
       height: number
@@ -175,27 +177,44 @@ function useContainerPosition(
     height: 0,
   })
 
+  // The container offset is the distance between the grid and the top of the
+  // scroll element's content, and item positions are relative to that origin.
+  // It changes when content above the grid appears after photos load (the
+  // editorial hero), or when fonts settle. Measuring on every commit via the
+  // offsetParent chain is scroll-independent, so it cannot race with scrolling
+  // and collapse to the current scrollTop the way a rect-based measurement can.
+  // Runs after every commit on purpose: the grid's position depends on
+  // sibling content that mounts later (the editorial hero) and on font/image
+  // settling, neither of which is captured by a dependency list.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useLayoutEffect(() => {
-    const { current } = elementRef
-    if (current !== null) {
-      let offset = 0
-      let el = current
-
-      do {
-        offset += el.offsetTop || 0
-        el = el.offsetParent as HTMLElement
-      } while (el)
-
-      if (offset !== containerPosition.offset || current.offsetWidth !== containerPosition.width) {
-        setContainerPosition({
-          offset,
-          width: current.offsetWidth,
-          height: current.offsetHeight,
-        })
-      }
+    const current = elementRef.current
+    if (!current) {
+      return
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps)
+
+    const documentOffset = (element: HTMLElement): number => {
+      let offset = 0
+      let node: HTMLElement | null = element
+      while (node) {
+        offset += node.offsetTop || 0
+        node = node.offsetParent as HTMLElement | null
+      }
+      return offset
+    }
+
+    const scrollOrigin = scrollElement && scrollElement !== document.body ? documentOffset(scrollElement) : 0
+    const offset = Math.max(0, documentOffset(current) - scrollOrigin)
+    const width = current.offsetWidth
+    const height = current.offsetHeight
+
+    setContainerPosition((prev) => {
+      if (prev.offset === offset && prev.width === width && prev.height === height) {
+        return prev
+      }
+      return { offset, width, height }
+    })
+  })
 
   React.useEffect(() => {
     const resizeObserver = new ResizeObserver(() => {

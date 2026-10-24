@@ -64,14 +64,18 @@ export const PageHeaderCenter = ({ dateRange, location, showDateRange }: PageHea
     <AnimatePresence>
       {visible && (
         <m.div
-          initial={{ y: 20, opacity: 0, filter: 'blur(8px)' }}
-          animate={{ y: 0, opacity: 1, filter: 'blur(0px)' }}
-          exit={{ y: 20, opacity: 0, filter: 'blur(8px)' }}
+          initial={{ y: 6, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 6, opacity: 0 }}
           transition={Spring.presets.smooth}
-          className="absolute left-1/2 hidden -translate-x-1/2 flex-col items-center lg:flex"
+          className="hidden min-w-0 items-center gap-2 border-l border-white/10 pl-3 lg:flex"
         >
-          <span className="text-xs font-semibold text-white lg:text-sm">{formattedDate}</span>
-          {location && <span className="text-[10px] text-white/60 lg:text-xs">{location}</span>}
+          <span className="truncate font-mono text-[10px] tracking-[0.16em] text-white/55 uppercase">
+            {formattedDate}
+          </span>
+          {location && (
+            <span className="truncate font-mono text-[9px] tracking-[0.14em] text-white/30 uppercase">{location}</span>
+          )}
         </m.div>
       )}
     </AnimatePresence>

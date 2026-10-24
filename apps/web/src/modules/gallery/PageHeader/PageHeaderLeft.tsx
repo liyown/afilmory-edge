@@ -24,23 +24,25 @@ export const PageHeaderLeft = () => {
         <AvatarPrimitive.Root>
           <AvatarPrimitive.Image
             src={siteConfig.author.avatar}
-            className="size-7 rounded-lg lg:size-8"
+            className="size-6 rounded-full lg:size-7"
             alt={siteConfig.author.name}
           />
           <AvatarPrimitive.Fallback>
-            <div className="flex size-7 items-center justify-center rounded-lg bg-white/10 lg:size-8">
+            <div className="flex size-6 items-center justify-center rounded-full bg-white/10 lg:size-7">
               <i className="i-mingcute-camera-2-line text-sm text-white/60 lg:text-base" />
             </div>
           </AvatarPrimitive.Fallback>
         </AvatarPrimitive.Root>
       ) : (
-        <div className="flex size-7 items-center justify-center rounded-lg bg-white/10 lg:size-8">
+        <div className="flex size-6 items-center justify-center rounded-full bg-white/10 lg:size-7">
           <i className="i-mingcute-camera-2-line text-sm text-white/60 lg:text-base" />
         </div>
       )}
-      <div className="flex items-center gap-1.5">
-        <h1 className="truncate text-sm font-semibold text-white lg:text-base">{siteConfig.name}</h1>
-        <span className="text-xs text-white/40 lg:text-sm">{visiblePhotoCount}</span>
+      <div className="flex items-baseline gap-2">
+        <span className="truncate text-[12px] font-medium tracking-[0.14em] text-white/90 uppercase lg:text-[13px]">
+          {siteConfig.name}
+        </span>
+        <span className="font-mono text-[10px] tracking-[0.12em] text-white/35 tabular-nums">{visiblePhotoCount}</span>
       </div>
       {(githubUrl || twitterUrl || hasRss) && (
         <div className="ml-1 hidden items-center gap-1 border-l border-white/10 pl-2 lg:flex">

@@ -1,7 +1,7 @@
 import { Thumbhash } from '@afilmory/ui'
 import { getViewerTransitionTriggerProps } from '@afilmory/viewer-motion'
 import clsx from 'clsx'
-import { m } from 'motion/react'
+import { m, useReducedMotion } from 'motion/react'
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -21,6 +21,7 @@ export const MasonryPhotoItem = memo(({ data, width }: { data: PhotoManifest; wi
   const photos = useContextPhotos()
   const photoViewer = usePhotoViewer()
   const { t } = useTranslation()
+  const reduceMotion = useReducedMotion()
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
 
@@ -175,6 +176,9 @@ export const MasonryPhotoItem = memo(({ data, width }: { data: PhotoManifest; wi
         width,
         height: calculatedHeight,
       }}
+      initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
       {...getViewerTransitionTriggerProps(data.id)}
       onClick={handleClick}
       onMouseEnter={handleMouseEnter}
@@ -189,7 +193,10 @@ export const MasonryPhotoItem = memo(({ data, width }: { data: PhotoManifest; wi
           src={data.thumbnailUrl}
           alt={data.title}
           loading="lazy"
-          className={'absolute inset-0 h-full w-full object-cover duration-300 group-hover:scale-105'}
+          className={clsx(
+            'absolute inset-0 h-full w-full object-cover transition-[opacity,transform] duration-700 ease-out group-hover:scale-[1.02]',
+            imageLoaded ? 'opacity-100' : 'opacity-0',
+          )}
           onLoad={handleImageLoad}
           onError={handleImageError}
         />
@@ -200,7 +207,7 @@ export const MasonryPhotoItem = memo(({ data, width }: { data: PhotoManifest; wi
         <video
           ref={videoRef}
           className={clsx(
-            'absolute inset-0 h-full w-full object-cover duration-300 group-hover:scale-105',
+            'absolute inset-0 h-full w-full object-cover duration-700 group-hover:scale-[1.02]',
             isPlayingLivePhoto ? 'z-10' : 'pointer-events-none opacity-0',
           )}
           muted
@@ -257,39 +264,39 @@ export const MasonryPhotoItem = memo(({ data, width }: { data: PhotoManifest; wi
       {imageLoaded && (
         <div className="pointer-events-none">
           {/* 渐变背景 - 独立的层 */}
-          <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+          <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/75 via-black/10 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
 
-          {/* 内容层 - 独立的层以支持 backdrop-filter */}
-          <div className="absolute inset-x-0 bottom-0 p-4 pb-0 text-white">
+          {/* 内容层 */}
+          <div className="absolute inset-x-0 bottom-0 px-4 pb-4 text-white">
             {/* 基本信息和标签 section */}
-            <div className="mb-3 **:duration-300">
-              <h3 className="mb-2 truncate text-sm font-medium opacity-0 group-hover:opacity-100">{data.title}</h3>
+            <div className="mb-1 **:duration-500">
+              <h3 className="mb-1.5 truncate text-[13px] font-normal tracking-wide opacity-0 group-hover:opacity-100">
+                {data.title}
+              </h3>
               {data.description && (
-                <p className="mb-2 line-clamp-2 text-sm text-white/80 opacity-0 group-hover:opacity-100">
+                <p className="mb-2 line-clamp-2 text-xs text-white/60 opacity-0 group-hover:opacity-100">
                   {data.description}
                 </p>
               )}
 
               {/* 基本信息 */}
-              <div className="mb-2 flex flex-wrap gap-2 text-xs text-white/80 opacity-0 group-hover:opacity-100">
+              <div className="mt-2 flex flex-wrap gap-2 font-mono text-[9px] tracking-[0.18em] text-white/50 uppercase opacity-0 group-hover:opacity-100">
                 <span>{data.format}</span>
-                <span>•</span>
+                <span>·</span>
                 <span>
                   {data.width} × {data.height}
                 </span>
-                <span>•</span>
+                <span>·</span>
                 <span>{(data.size / 1024 / 1024).toFixed(1)}MB</span>
               </div>
 
               {/* Tags */}
               {data.tags && data.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {data.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-full bg-white/20 px-2 py-0.5 text-xs text-white/90 opacity-0 backdrop-blur-sm group-hover:opacity-100"
-                    >
+                <div className="mt-2 flex flex-wrap gap-x-2 font-mono text-[9px] tracking-[0.16em] text-white/45 uppercase opacity-0 group-hover:opacity-100">
+                  {data.tags.map((tag, tagIndex) => (
+                    <span key={tag}>
                       {tag}
+                      {tagIndex < data.tags.length - 1 ? ' ·' : ''}
                     </span>
                   ))}
                 </div>
@@ -298,32 +305,32 @@ export const MasonryPhotoItem = memo(({ data, width }: { data: PhotoManifest; wi
 
             {/* EXIF 信息网格 */}
             {calculatedHeight >= 200 && exifData && (
-              <div className="grid grid-cols-2 gap-2 pb-4 text-xs">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 pt-3 font-mono text-[9px] tracking-[0.14em] text-white/55 uppercase">
                 {exifData.focalLength35mm && (
-                  <div className="flex items-center gap-1.5 rounded-md bg-white/10 px-2 py-1 opacity-0 backdrop-blur-md transition-opacity duration-300 group-hover:opacity-100">
-                    <StreamlineImageAccessoriesLensesPhotosCameraShutterPicturePhotographyPicturesPhotoLens className="text-white/70" />
-                    <span className="text-white/90">{exifData.focalLength35mm}mm</span>
+                  <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-500 group-hover:opacity-100">
+                    <StreamlineImageAccessoriesLensesPhotosCameraShutterPicturePhotographyPicturesPhotoLens className="text-white/45" />
+                    <span>{exifData.focalLength35mm}mm</span>
                   </div>
                 )}
 
                 {exifData.aperture && (
-                  <div className="flex items-center gap-1.5 rounded-md bg-white/10 px-2 py-1 opacity-0 backdrop-blur-md transition-opacity duration-300 group-hover:opacity-100">
-                    <TablerAperture className="text-white/70" />
-                    <span className="text-white/90">{exifData.aperture}</span>
+                  <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-500 group-hover:opacity-100">
+                    <TablerAperture className="text-white/45" />
+                    <span>{exifData.aperture}</span>
                   </div>
                 )}
 
                 {exifData.shutterSpeed && (
-                  <div className="flex items-center gap-1.5 rounded-md bg-white/10 px-2 py-1 opacity-0 backdrop-blur-md transition-opacity duration-300 group-hover:opacity-100">
-                    <MaterialSymbolsShutterSpeed className="text-white/70" />
-                    <span className="text-white/90">{exifData.shutterSpeed}</span>
+                  <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-500 group-hover:opacity-100">
+                    <MaterialSymbolsShutterSpeed className="text-white/45" />
+                    <span>{exifData.shutterSpeed}</span>
                   </div>
                 )}
 
                 {exifData.iso && (
-                  <div className="flex items-center gap-1.5 rounded-md bg-white/10 px-2 py-1 opacity-0 backdrop-blur-md transition-opacity duration-300 group-hover:opacity-100">
-                    <CarbonIsoOutline className="text-white/70" />
-                    <span className="text-white/90">ISO {exifData.iso}</span>
+                  <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-500 group-hover:opacity-100">
+                    <CarbonIsoOutline className="text-white/45" />
+                    <span>ISO {exifData.iso}</span>
                   </div>
                 )}
               </div>
