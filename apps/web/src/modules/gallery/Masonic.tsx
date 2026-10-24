@@ -180,41 +180,57 @@ function useContainerPosition(elementRef: React.MutableRefObject<HTMLElement | n
   // The container offset is the distance between the grid and the top of the
   // scroll element's content, and item positions are relative to that origin.
   // It changes when content above the grid appears after photos load (the
-  // editorial hero), or when fonts settle. Measuring on every commit via the
-  // offsetParent chain is scroll-independent, so it cannot race with scrolling
-  // and collapse to the current scrollTop the way a rect-based measurement can.
-  // Runs after every commit on purpose: the grid's position depends on
-  // sibling content that mounts later (the editorial hero) and on font/image
-  // settling, neither of which is captured by a dependency list.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // editorial hero) or when fonts settle, but not while scrolling. Measure it
+  // via the offsetParent chain (scroll-independent) whenever the content
+  // wrapper resizes, instead of reading layout on every scroll-driven render.
   React.useLayoutEffect(() => {
-    const current = elementRef.current
-    if (!current) {
-      return
-    }
+    const measure = () => {
+      const current = elementRef.current
+      if (!current) {
+        return
+      }
 
-    const documentOffset = (element: HTMLElement): number => {
       let offset = 0
-      let node: HTMLElement | null = element
+      let node: HTMLElement | null = current
       while (node) {
         offset += node.offsetTop || 0
         node = node.offsetParent as HTMLElement | null
       }
-      return offset
+
+      if (scrollElement && scrollElement !== document.body) {
+        let scrollOrigin = 0
+        let originNode: HTMLElement | null = scrollElement
+        while (originNode) {
+          scrollOrigin += originNode.offsetTop || 0
+          originNode = originNode.offsetParent as HTMLElement | null
+        }
+        offset = Math.max(0, offset - scrollOrigin)
+      }
+
+      const width = current.offsetWidth
+      const height = current.offsetHeight
+
+      setContainerPosition((prev) => {
+        if (prev.offset === offset && prev.width === width && prev.height === height) {
+          return prev
+        }
+        return { offset, width, height }
+      })
     }
 
-    const scrollOrigin = scrollElement && scrollElement !== document.body ? documentOffset(scrollElement) : 0
-    const offset = Math.max(0, documentOffset(current) - scrollOrigin)
-    const width = current.offsetWidth
-    const height = current.offsetHeight
+    measure()
 
-    setContainerPosition((prev) => {
-      if (prev.offset === offset && prev.width === width && prev.height === height) {
-        return prev
-      }
-      return { offset, width, height }
-    })
-  })
+    const container = scrollElement ?? document.body
+    const target = (container.firstElementChild as HTMLElement | null) ?? container
+    const resizeObserver = new ResizeObserver(measure)
+    resizeObserver.observe(target)
+    window.addEventListener('resize', measure)
+
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [elementRef, scrollElement])
 
   React.useEffect(() => {
     const resizeObserver = new ResizeObserver(() => {

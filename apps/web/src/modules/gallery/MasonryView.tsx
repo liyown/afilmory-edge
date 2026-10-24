@@ -85,6 +85,29 @@ export const MasonryView = ({ photos, onRender }: MasonryViewProps) => {
 
   const gutter = isMobile ? 8 : 14
 
+  // Masonic estimates the height of not-yet-measured items. A fixed guess is
+  // far off when the archive is portrait- or landscape-heavy, which makes the
+  // document height collapse as items get measured mid-scroll. Derive the
+  // average from the real aspect ratios instead.
+  const itemHeightEstimate = useMemo(() => {
+    const fallback = isMobile ? 180 : 260
+    if (photos.length === 0 || columnWidth <= 0) {
+      return fallback
+    }
+
+    let total = 0
+    let count = 0
+    for (const photo of photos) {
+      const ratio = photo.aspectRatio
+      if (typeof ratio === 'number' && ratio > 0.1 && ratio < 10) {
+        total += columnWidth / ratio
+        count++
+      }
+    }
+
+    return count > 0 ? Math.round(total / count) : fallback
+  }, [photos, columnWidth, isMobile])
+
   return (
     <Masonry<PhotoManifest>
       ref={masonryRef}
@@ -99,7 +122,7 @@ export const MasonryView = ({ photos, onRender }: MasonryViewProps) => {
       columnWidth={columnWidth}
       columnGutter={gutter}
       rowGutter={gutter}
-      itemHeightEstimate={420}
+      itemHeightEstimate={itemHeightEstimate}
       itemKey={useCallback((data, _index) => {
         return data.id
       }, [])}
