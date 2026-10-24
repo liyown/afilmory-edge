@@ -1,6 +1,7 @@
 import { ImageResponse } from 'workers-og'
 
 import { GEIST_MEDIUM_B64 } from './assets/geist-medium.b64'
+import { thumbnailKeyFor } from './modules/photos/photo-ai-utils'
 import type { OgSiteConfig } from './og-site'
 import type { OgExif, OgExifInfo, OgPhoto } from './og-template'
 import { buildHomepageOgHtml, buildPhotoOgHtml, OG_HEIGHT, OG_WIDTH } from './og-template'
@@ -9,7 +10,7 @@ import { storageGet } from './storage'
 const CJK_FONT_PATH = '/fonts/HarmonyOS_Sans_SC_Medium.ttf'
 // Satori embeds the picture into the SVG it renders; keeping the source image
 // bounded keeps both the data URL and the wasm rasteriser inside Worker memory.
-const MAX_OG_SOURCE_BYTES = 12 * 1024 * 1024
+const MAX_OG_SOURCE_BYTES = 4 * 1024 * 1024
 const MAX_OG_HOMEPAGE_BYTES = 12 * 1024 * 1024
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024
 const SUPPORTED_IMAGE_FORMATS = new Set(['JPG', 'JPEG', 'PNG', 'WEBP', 'GIF'])
@@ -93,25 +94,32 @@ function toDataUrl(buffer: ArrayBuffer, contentType: string): string {
 }
 
 async function resolvePhotoImage(env: OgEnv, photo: OgPhoto, budget: ImageBudget): Promise<string | null> {
-  const format = (photo.format ?? '').toUpperCase()
-  if (!SUPPORTED_IMAGE_FORMATS.has(format)) {
-    return null
-  }
-
-  const contentType = CONTENT_TYPES[format] ?? 'image/jpeg'
-
   if (!photo.s3Key) {
     return null
   }
 
-  const object = await storageGet(photo.s3Key)
-  if (!object || object.size > budget.remaining) {
-    return null
+  const format = (photo.format ?? '').toUpperCase()
+  // Prefer the 600px sidecar: full-size originals regularly exceed the Worker
+  // CPU/memory budget, which is what left cards with a "No Preview" frame.
+  const candidates: Array<{ key: string; contentType: string }> = [
+    { key: thumbnailKeyFor(photo.s3Key), contentType: 'image/jpeg' },
+  ]
+  if (SUPPORTED_IMAGE_FORMATS.has(format)) {
+    candidates.push({ key: photo.s3Key, contentType: CONTENT_TYPES[format] ?? 'image/jpeg' })
   }
 
-  const buffer = await object.response.arrayBuffer()
-  budget.remaining -= buffer.byteLength
-  return toDataUrl(buffer, object.response.headers.get('content-type') ?? contentType)
+  for (const candidate of candidates) {
+    const object = await storageGet(candidate.key)
+    if (!object || object.size > budget.remaining) {
+      continue
+    }
+
+    const buffer = await object.response.arrayBuffer()
+    budget.remaining -= buffer.byteLength
+    return toDataUrl(buffer, object.response.headers.get('content-type') ?? candidate.contentType)
+  }
+
+  return null
 }
 
 async function resolveAvatar(avatarUrl: string | null | undefined): Promise<string | null> {

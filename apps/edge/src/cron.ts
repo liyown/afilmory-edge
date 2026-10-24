@@ -22,7 +22,7 @@ export const DAILY_BACKUP_CRON = '30 2 * * *'
 
 const OG_PREFIX = 'og/'
 // Bump when the card template or font changes so cached PNGs are re-rendered.
-const OG_TEMPLATE_VERSION = 'v3'
+const OG_TEMPLATE_VERSION = 'v4'
 const MAX_OG_PER_RUN = 50
 const OG_CACHE_CONTROL = 'public, max-age=86400'
 // The assets binding resolves by pathname; the host only matters in local dev,

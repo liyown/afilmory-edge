@@ -14,6 +14,8 @@ import { ShareActionButton } from './ShareActionButton'
 
 // OG image aspect ratio: 1200:628 (from og.renderer.tsx)
 const OG_ASPECT_RATIO = 1200 / 628
+// Bump alongside the edge OG template so browsers drop stale previews.
+const OG_PREVIEW_VERSION = '4'
 
 interface ShareModalTriggerProps {
   photo: PhotoManifest
@@ -81,7 +83,7 @@ const ShareSheet: ModalComponent<ShareSheetProps> = ({ photo, blobSrc, dismiss }
   }, [photo.id, resolvedBaseUrl])
 
   const ogPreviewUrl = useMemo(() => {
-    const path = `/og/${photo.id}`
+    const path = `/og/${photo.id}?v=${OG_PREVIEW_VERSION}`
     if (!resolvedBaseUrl) {
       return path
     }
@@ -118,8 +120,7 @@ const ShareSheet: ModalComponent<ShareSheetProps> = ({ photo, blobSrc, dismiss }
         ...(files.length > 0 ? { files } : {}),
       })
       dismiss()
-    }
-    catch {
+    } catch {
       await navigator.clipboard.writeText(shareLink)
       toast.success(t('photo.share.linkCopied'))
       dismiss()
@@ -130,8 +131,7 @@ const ShareSheet: ModalComponent<ShareSheetProps> = ({ photo, blobSrc, dismiss }
     try {
       await navigator.clipboard.writeText(shareLink)
       toast.success(t('photo.share.linkCopied'))
-    }
-    catch {
+    } catch {
       toast.error(t('photo.share.copy.failed'))
       throw new Error('Failed to copy')
     }
@@ -141,8 +141,7 @@ const ShareSheet: ModalComponent<ShareSheetProps> = ({ photo, blobSrc, dismiss }
     try {
       await navigator.clipboard.writeText(embedCode)
       toast.success(t('photo.share.embed.copied'))
-    }
-    catch {
+    } catch {
       toast.error(t('photo.share.copy.failed'))
       throw new Error('Failed to copy')
     }
@@ -153,11 +152,9 @@ const ShareSheet: ModalComponent<ShareSheetProps> = ({ photo, blobSrc, dismiss }
       setIsDownloadingOriginal(true)
       await downloadFile(photo.originalUrl, `${photo.id}.jpg`)
       toast.success(t('photo.share.download.original'))
-    }
-    catch {
+    } catch {
       toast.error(t('photo.share.copy.failed'))
-    }
-    finally {
+    } finally {
       setIsDownloadingOriginal(false)
     }
   }, [photo.id, photo.originalUrl, t])
@@ -167,11 +164,9 @@ const ShareSheet: ModalComponent<ShareSheetProps> = ({ photo, blobSrc, dismiss }
       setIsDownloadingPreview(true)
       await downloadFile(ogPreviewUrl, `${photo.id}-og.png`)
       toast.success(t('photo.share.downloadPreview'))
-    }
-    catch {
+    } catch {
       toast.error(t('photo.share.copy.failed'))
-    }
-    finally {
+    } finally {
       setIsDownloadingPreview(false)
     }
   }, [ogPreviewUrl, photo.id, t])
@@ -257,7 +252,7 @@ const ShareSheet: ModalComponent<ShareSheetProps> = ({ photo, blobSrc, dismiss }
             />
           )}
           {/* Social share buttons */}
-          {socialOptions.map(option => (
+          {socialOptions.map((option) => (
             <ShareActionButton
               key={option.id}
               icon={option.icon}
@@ -319,8 +314,7 @@ async function buildShareFiles(photo: PhotoManifest, blobSrc?: string) {
     const response = await fetch(imageUrl)
     const blob = await response.blob()
     return [new File([blob], `${photo.title || photo.id}.jpg`, { type: blob.type || 'image/jpeg' })]
-  }
-  catch {
+  } catch {
     return []
   }
 }
