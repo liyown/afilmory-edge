@@ -3,6 +3,7 @@ import type { StoreApi } from 'zustand'
 import { PhotoUploadBatchError } from '../../../api'
 import type { PhotoSyncProgressEvent } from '../../../types'
 import type { PhotoUploadRequestOptions } from '../upload.types'
+import { MAX_UPLOAD_CONCURRENCY, MIN_UPLOAD_CONCURRENCY } from './constants'
 import type { PhotoUploadState } from './initialState'
 import type { FileProgressEntry, PreviewCache, ProcessingLogEntry } from './types'
 import {
@@ -18,6 +19,7 @@ import {
   normalizeStageCount,
   primePreviewCache,
   rememberRecentTags,
+  rememberUploadConcurrency,
   revokePreviewUrls,
 } from './utils'
 
@@ -172,6 +174,7 @@ export class PhotoUploadActionImpl {
       const directory = deriveDirectoryFromTags(tags)
       const fileList = createFileList(this.#get().files)
       await this.#onUpload(fileList, {
+        concurrency: this.#get().concurrency,
         signal: controller.signal,
         directory: directory ?? undefined,
         onUploadProgress: this.#handleUploadProgress,
@@ -266,6 +269,12 @@ export class PhotoUploadActionImpl {
 
   setSelectedTags = (tags: string[]): void => {
     this.#set({ selectedTags: tags })
+  }
+
+  setConcurrency = (value: number): void => {
+    const concurrency = Math.min(MAX_UPLOAD_CONCURRENCY, Math.max(MIN_UPLOAD_CONCURRENCY, Math.round(value)))
+    rememberUploadConcurrency(concurrency)
+    this.#set({ concurrency })
   }
 
   ensurePreviews = (): void => {

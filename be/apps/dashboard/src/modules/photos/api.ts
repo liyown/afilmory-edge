@@ -11,7 +11,8 @@ import type { PhotoAssetListItem, PhotoAssetSummary, PhotoSyncProgressEvent } fr
 const MAX_UPLOAD_FILE_BYTES = 1024 * 1024 * 1024
 const MAX_UPLOAD_BATCH_FILES = 128
 const MAX_UPLOAD_BATCH_BYTES = 5 * 1024 * 1024 * 1024
-const UPLOAD_CONCURRENCY = 3
+const DEFAULT_UPLOAD_CONCURRENCY = 3
+const MAX_UPLOAD_CONCURRENCY = 10
 const THUMBHASH_MAX_DIMENSION = 100
 const THUMBNAIL_WIDTH = 600
 
@@ -113,6 +114,7 @@ export type PhotoUploadProgressSnapshot = {
 }
 
 export type UploadPhotoAssetsOptions = {
+  concurrency?: number
   directory?: string
   signal?: AbortSignal
   onProgress?: (snapshot: PhotoUploadProgressSnapshot) => void
@@ -689,7 +691,15 @@ export async function uploadPhotoAssets(
     }
   }
 
-  const runUploadTask = async (index: number): Promise<PhotoAssetListItem> => {
+  type PreparedUpload = {
+    index: number
+    videoKey: string | null
+    inspection: ImageInspection | null
+    intent: UploadIntent
+    parts: UploadPart[]
+  }
+
+  const prepareUpload = async (index: number): Promise<PreparedUpload> => {
     const file = files[index]
     options?.signal?.throwIfAborted()
 
@@ -705,6 +715,12 @@ export async function uploadPhotoAssets(
     if (inspection?.thumbnail) {
       await uploadThumbnail(intent.photoId, file, inspection.thumbnail)
     }
+    return { index, videoKey, inspection, intent, parts }
+  }
+
+  const completeUpload = async (prepared: PreparedUpload): Promise<PhotoAssetListItem> => {
+    const { index, videoKey, inspection, intent, parts } = prepared
+    const file = files[index]
     return await withCompletionLock(() =>
       coreApi<PhotoAssetListItem>('/photos/upload-complete', {
         method: 'POST',
@@ -725,6 +741,21 @@ export async function uploadPhotoAssets(
     )
   }
 
+  const recordFailure = (index: number, error: unknown): void => {
+    const videoIndex = videoIndexForImage.get(index)
+    failures.push({
+      index,
+      indices: videoIndex === undefined ? [index] : [index, videoIndex],
+      name: files[index].name,
+      message: error instanceof Error ? error.message : '上传失败',
+    })
+  }
+
+  // Completions stay serialized so they cannot publish conflicting manifest
+  // snapshots, but each worker immediately starts the next file's upload
+  // instead of waiting for its own completion to finish.
+  const pendingCompletions: Array<Promise<void>> = []
+
   const runUploadWorker = async (): Promise<void> => {
     while (!options?.signal?.aborted) {
       const taskPosition = nextTask++
@@ -733,25 +764,33 @@ export async function uploadPhotoAssets(
       }
       const index = uploadTaskIndices[taskPosition]
       try {
-        const asset = await runUploadTask(index)
-        results.push({ index, asset })
+        const prepared = await prepareUpload(index)
+        pendingCompletions.push(
+          completeUpload(prepared).then(
+            (asset) => {
+              results.push({ index, asset })
+            },
+            (error) => {
+              if (!options?.signal?.aborted) {
+                recordFailure(index, error)
+              }
+            },
+          ),
+        )
       } catch (error) {
         if (options?.signal?.aborted) {
           return
         }
-        const videoIndex = videoIndexForImage.get(index)
-        failures.push({
-          index,
-          indices: videoIndex === undefined ? [index] : [index, videoIndex],
-          name: files[index].name,
-          message: error instanceof Error ? error.message : '上传失败',
-        })
+        recordFailure(index, error)
       }
     }
   }
 
-  const workerCount = Math.min(UPLOAD_CONCURRENCY, uploadTaskIndices.length)
+  const requestedConcurrency = Math.floor(options?.concurrency ?? DEFAULT_UPLOAD_CONCURRENCY)
+  const concurrency = Math.min(MAX_UPLOAD_CONCURRENCY, Math.max(1, requestedConcurrency))
+  const workerCount = Math.min(concurrency, uploadTaskIndices.length)
   await Promise.all(Array.from({ length: workerCount }, runUploadWorker))
+  await Promise.all(pendingCompletions)
 
   options?.signal?.throwIfAborted()
 

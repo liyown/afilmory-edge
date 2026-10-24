@@ -81,6 +81,7 @@ export function PhotoLibraryProvider({ isActive, children }: PhotoLibraryProvide
       requestUploadAssets: async (files, options) => {
         await uploadMutationRef.current.mutateAsync({
           files,
+          concurrency: options?.concurrency,
           onProgress: options?.onUploadProgress,
           signal: options?.signal,
           directory: options?.directory ?? undefined,

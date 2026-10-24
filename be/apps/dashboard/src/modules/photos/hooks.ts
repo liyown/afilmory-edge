@@ -32,7 +32,7 @@ export function useDeletePhotoAssetsMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (variables: { ids: string[], deleteFromStorage?: boolean }) => {
+    mutationFn: async (variables: { ids: string[]; deleteFromStorage?: boolean }) => {
       await deletePhotoAssets(variables.ids, {
         deleteFromStorage: variables.deleteFromStorage,
       })
@@ -51,7 +51,7 @@ export function useDeletePhotoAssetsMutation() {
           return previous
         }
         const idSet = new Set(ids)
-        return previous.filter(item => !idSet.has(item.id))
+        return previous.filter((item) => !idSet.has(item.id))
       })
     },
   })
@@ -63,6 +63,7 @@ export function useUploadPhotoAssetsMutation() {
   return useMutation({
     mutationFn: async ({
       files,
+      concurrency,
       directory,
       signal,
       onProgress,
@@ -70,6 +71,7 @@ export function useUploadPhotoAssetsMutation() {
       onServerEvent,
     }: {
       files: File[]
+      concurrency?: number
       directory?: string | null
       signal?: AbortSignal
       onProgress?: UploadPhotoAssetsOptions['onProgress']
@@ -77,6 +79,7 @@ export function useUploadPhotoAssetsMutation() {
       onServerEvent?: UploadPhotoAssetsOptions['onServerEvent']
     }) => {
       return await uploadPhotoAssets(files, {
+        concurrency,
         directory: directory ?? undefined,
         signal,
         onProgress,
@@ -99,7 +102,7 @@ export function useUpdatePhotoTagsMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (variables: { id: string, tags: string[] }) => {
+    mutationFn: async (variables: { id: string; tags: string[] }) => {
       return await updatePhotoAssetTags(variables.id, variables.tags)
     },
     onSuccess: (asset) => {
@@ -107,7 +110,7 @@ export function useUpdatePhotoTagsMutation() {
         if (!previous) {
           return previous
         }
-        return previous.map(item => (item.id === asset.id ? asset : item))
+        return previous.map((item) => (item.id === asset.id ? asset : item))
       })
     },
   })

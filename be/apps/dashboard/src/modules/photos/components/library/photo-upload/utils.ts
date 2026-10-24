@@ -1,11 +1,12 @@
 import { getStorageNS } from '~/lib/ns'
 
 import type { PhotoSyncProgressStage, PhotoSyncStageTotals } from '../../../types'
-import { STAGE_ORDER } from './constants'
+import { DEFAULT_UPLOAD_CONCURRENCY, MAX_UPLOAD_CONCURRENCY, MIN_UPLOAD_CONCURRENCY, STAGE_ORDER } from './constants'
 import type { FileProgressEntry, PreviewCache, ProcessingStageState } from './types'
 
 const RECENT_TAGS_STORAGE_KEY = getStorageNS('photo-upload-recent-tags')
 const RECENT_TAGS_LIMIT = 8
+const CONCURRENCY_STORAGE_KEY = getStorageNS('photo-upload-concurrency')
 
 const IMAGE_EXTENSIONS = new Set([
   'jpg',
@@ -163,11 +164,11 @@ export function getErrorMessage(error: unknown, fallback: string): string {
 export function createFileList(fileArray: File[]): FileList {
   if (typeof DataTransfer !== 'undefined') {
     const transfer = new DataTransfer()
-    fileArray.forEach(file => transfer.items.add(file))
+    fileArray.forEach((file) => transfer.items.add(file))
     return transfer.files
   }
 
-  const fallback: Record<number, File> & { length: number, item: (index: number) => File | null } = {
+  const fallback: Record<number, File> & { length: number; item: (index: number) => File | null } = {
     length: fileArray.length,
     item: (index: number) => fileArray[index] ?? null,
   }
@@ -198,7 +199,7 @@ export function deriveDirectoryFromTags(tags: string[]): string | null {
   if (!Array.isArray(tags) || tags.length === 0) {
     return null
   }
-  const segments = tags.map(element => sanitizeTagSegment(element)).filter(segment => segment.length > 0)
+  const segments = tags.map((element) => sanitizeTagSegment(element)).filter((segment) => segment.length > 0)
 
   if (segments.length === 0) {
     return null
@@ -209,14 +210,14 @@ export function deriveDirectoryFromTags(tags: string[]): string | null {
 
 export function collectUnmatchedMovFiles(files: File[]) {
   const imageBaseNames = new Set(
-    files.filter(file => IMAGE_EXTENSIONS.has(getFileExtension(file.name))).map(file => getBaseName(file.name)),
+    files.filter((file) => IMAGE_EXTENSIONS.has(getFileExtension(file.name))).map((file) => getBaseName(file.name)),
   )
 
-  const unmatched = files.filter(file => isMovFile(file.name) && !imageBaseNames.has(getBaseName(file.name)))
+  const unmatched = files.filter((file) => isMovFile(file.name) && !imageBaseNames.has(getBaseName(file.name)))
 
   return {
     unmatched,
-    hasMov: files.some(file => isMovFile(file.name)),
+    hasMov: files.some((file) => isMovFile(file.name)),
   }
 }
 
@@ -226,6 +227,33 @@ export function calculateTotalSize(files: File[]): number {
 
 export function calculateUploadedBytes(entries: FileProgressEntry[]): number {
   return entries.reduce((sum, entry) => sum + Math.min(entry.uploadedBytes, entry.size), 0)
+}
+
+export function readUploadConcurrency(): number {
+  if (typeof localStorage === 'undefined') {
+    return DEFAULT_UPLOAD_CONCURRENCY
+  }
+  try {
+    const raw = localStorage.getItem(CONCURRENCY_STORAGE_KEY)
+    const parsed = raw === null ? Number.NaN : Number.parseInt(raw, 10)
+    if (!Number.isFinite(parsed)) {
+      return DEFAULT_UPLOAD_CONCURRENCY
+    }
+    return Math.min(MAX_UPLOAD_CONCURRENCY, Math.max(MIN_UPLOAD_CONCURRENCY, parsed))
+  } catch {
+    return DEFAULT_UPLOAD_CONCURRENCY
+  }
+}
+
+export function rememberUploadConcurrency(concurrency: number): void {
+  if (typeof localStorage === 'undefined') {
+    return
+  }
+  try {
+    localStorage.setItem(CONCURRENCY_STORAGE_KEY, String(concurrency))
+  } catch {
+    // ignore quota errors
+  }
 }
 
 export function readRecentTags(): string[] {
@@ -258,8 +286,7 @@ export function readRecentTags(): string[] {
       }
     }
     return result
-  }
-  catch {
+  } catch {
     return []
   }
 }
@@ -284,12 +311,11 @@ export function rememberRecentTags(tags: string[]): void {
   if (incoming.length === 0) {
     return
   }
-  const existing = readRecentTags().filter(tag => !seen.has(tag))
+  const existing = readRecentTags().filter((tag) => !seen.has(tag))
   const next = [...incoming, ...existing].slice(0, RECENT_TAGS_LIMIT)
   try {
     localStorage.setItem(RECENT_TAGS_STORAGE_KEY, JSON.stringify(next))
-  }
-  catch {
+  } catch {
     // ignore quota errors
   }
 }

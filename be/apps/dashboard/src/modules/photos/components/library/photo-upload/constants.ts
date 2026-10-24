@@ -1,6 +1,10 @@
 import type { PhotoSyncProgressStage, PhotoSyncResultSummary } from '../../../types'
 import type { WorkflowPhase } from './types'
 
+export const MIN_UPLOAD_CONCURRENCY = 1
+export const MAX_UPLOAD_CONCURRENCY = 10
+export const DEFAULT_UPLOAD_CONCURRENCY = 3
+
 export const WORKFLOW_STEP_LABEL: Record<Exclude<WorkflowPhase, 'error'>, string> = {
   review: '校验文件',
   uploading: '上传中',

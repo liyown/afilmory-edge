@@ -1,10 +1,11 @@
 import type { FileProgressEntry, PreviewCache, ProcessingLogEntry, ProcessingState, WorkflowPhase } from './types'
-import { calculateTotalSize, collectUnmatchedMovFiles, createFileEntries } from './utils'
+import { calculateTotalSize, collectUnmatchedMovFiles, createFileEntries, readUploadConcurrency } from './utils'
 
 export type PhotoUploadState = {
   files: File[]
   totalSize: number
   uploadedBytes: number
+  concurrency: number
   availableTags: string[]
   selectedTags: string[]
   unmatchedMovFiles: File[]
@@ -36,6 +37,7 @@ export const createInitialPhotoUploadState = ({
     files,
     totalSize,
     uploadedBytes: 0,
+    concurrency: readUploadConcurrency(),
     availableTags,
     selectedTags: [],
     unmatchedMovFiles: unmatched,
