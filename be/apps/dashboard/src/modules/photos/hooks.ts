@@ -67,6 +67,7 @@ export function useUploadPhotoAssetsMutation() {
       directory,
       signal,
       onProgress,
+      onFinalizeProgress,
       timeoutMs,
       onServerEvent,
     }: {
@@ -75,6 +76,7 @@ export function useUploadPhotoAssetsMutation() {
       directory?: string | null
       signal?: AbortSignal
       onProgress?: UploadPhotoAssetsOptions['onProgress']
+      onFinalizeProgress?: UploadPhotoAssetsOptions['onFinalizeProgress']
       timeoutMs?: UploadPhotoAssetsOptions['timeoutMs']
       onServerEvent?: UploadPhotoAssetsOptions['onServerEvent']
     }) => {
@@ -83,6 +85,7 @@ export function useUploadPhotoAssetsMutation() {
         directory: directory ?? undefined,
         signal,
         onProgress,
+        onFinalizeProgress,
         timeoutMs,
         onServerEvent,
       })

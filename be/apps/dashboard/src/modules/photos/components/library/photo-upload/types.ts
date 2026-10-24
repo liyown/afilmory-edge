@@ -20,6 +20,13 @@ export type FileProgressEntry = {
 
 export type PreviewCache = Map<string, string | null>
 
+export type FinalizeProgressState = {
+  completed: number
+  total: number
+  failed: number
+  publishing: boolean
+}
+
 export type WorkflowPhase = 'review' | 'uploading' | 'processing' | 'completed' | 'error'
 
 export type ProcessingStageState = {

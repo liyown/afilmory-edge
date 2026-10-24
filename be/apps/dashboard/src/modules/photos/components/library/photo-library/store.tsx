@@ -83,6 +83,7 @@ export function PhotoLibraryProvider({ isActive, children }: PhotoLibraryProvide
           files,
           concurrency: options?.concurrency,
           onProgress: options?.onUploadProgress,
+          onFinalizeProgress: options?.onFinalizeProgress,
           signal: options?.signal,
           directory: options?.directory ?? undefined,
           timeoutMs: options?.timeoutMs,

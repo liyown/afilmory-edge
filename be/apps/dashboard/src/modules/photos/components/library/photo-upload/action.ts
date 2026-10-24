@@ -1,5 +1,6 @@
 import type { StoreApi } from 'zustand'
 
+import type { PhotoUploadFinalizeEvent } from '../../../api'
 import { PhotoUploadBatchError } from '../../../api'
 import type { PhotoSyncProgressEvent } from '../../../types'
 import type { PhotoUploadRequestOptions } from '../upload.types'
@@ -154,6 +155,7 @@ export class PhotoUploadActionImpl {
       uploadError: null,
       processingError: null,
       processingState: null,
+      finalizeProgress: null,
       phase: 'uploading',
       processingLogs: [],
     })
@@ -178,13 +180,14 @@ export class PhotoUploadActionImpl {
         signal: controller.signal,
         directory: directory ?? undefined,
         onUploadProgress: this.#handleUploadProgress,
+        onFinalizeProgress: this.#handleFinalizeProgress,
         timeoutMs: UPLOAD_REQUEST_TIMEOUT_MS,
         onServerEvent: this.#handleProcessingEvent,
       })
     } catch (error) {
       const isAbort = (error as DOMException)?.name === 'AbortError'
       if (isAbort) {
-        this.#set({ phase: 'review' })
+        this.#set({ phase: 'review', finalizeProgress: null })
         const currentFiles = this.#get().files
         this.#updateEntries(() => createFileEntries(currentFiles, this.#previewCache))
       } else {
@@ -227,7 +230,7 @@ export class PhotoUploadActionImpl {
     if (phase === 'uploading') {
       this.#uploadAbortController?.abort()
       this.#uploadAbortController = null
-      this.#set({ phase: 'review' })
+      this.#set({ phase: 'review', finalizeProgress: null })
       const currentFiles = this.#get().files
       this.#updateEntries(() => createFileEntries(currentFiles, this.#previewCache))
       return
@@ -256,6 +259,7 @@ export class PhotoUploadActionImpl {
       uploadError: null,
       processingError: null,
       processingState: null,
+      finalizeProgress: null,
       processingLogs: [],
     })
     const currentFiles = this.#get().files
@@ -308,6 +312,57 @@ export class PhotoUploadActionImpl {
         uploadedBytes: computeUploadedBytes(nextEntries),
       }
     })
+  }
+
+  #handleFinalizeProgress = (event: PhotoUploadFinalizeEvent): void => {
+    if (event.type === 'start') {
+      this.#set({
+        finalizeProgress: {
+          completed: event.completed,
+          total: event.total,
+          failed: event.failed,
+          publishing: false,
+        },
+      })
+      this.#updateEntries((entries) =>
+        entries.map((entry) => (entry.index === event.index ? { ...entry, status: 'processing' } : entry)),
+      )
+      return
+    }
+
+    if (event.type === 'publish') {
+      this.#set({
+        finalizeProgress: {
+          completed: event.completed,
+          total: event.total,
+          failed: event.failed,
+          publishing: true,
+        },
+      })
+      return
+    }
+
+    const status: FileProgressEntry['status'] = event.type === 'complete' ? 'done' : 'error'
+    this.#set({
+      finalizeProgress: {
+        completed: event.completed,
+        total: event.total,
+        failed: event.failed,
+        publishing: false,
+      },
+    })
+    this.#updateEntries((entries) =>
+      entries.map((entry) =>
+        entry.index === event.index
+          ? {
+              ...entry,
+              status,
+              progress: status === 'done' ? 1 : entry.progress,
+              uploadedBytes: status === 'done' ? entry.size : entry.uploadedBytes,
+            }
+          : entry,
+      ),
+    )
   }
 
   #handleProcessingEvent = (event: PhotoSyncProgressEvent): void => {

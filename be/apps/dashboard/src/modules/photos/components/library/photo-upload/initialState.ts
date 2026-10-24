@@ -1,4 +1,11 @@
-import type { FileProgressEntry, PreviewCache, ProcessingLogEntry, ProcessingState, WorkflowPhase } from './types'
+import type {
+  FileProgressEntry,
+  FinalizeProgressState,
+  PreviewCache,
+  ProcessingLogEntry,
+  ProcessingState,
+  WorkflowPhase,
+} from './types'
 import { calculateTotalSize, collectUnmatchedMovFiles, createFileEntries, readUploadConcurrency } from './utils'
 
 export type PhotoUploadState = {
@@ -16,6 +23,7 @@ export type PhotoUploadState = {
   processingError: string | null
   processingState: ProcessingState | null
   processingLogs: ProcessingLogEntry[]
+  finalizeProgress: FinalizeProgressState | null
 }
 
 export type CreateInitialPhotoUploadStateParams = {
@@ -48,5 +56,6 @@ export const createInitialPhotoUploadState = ({
     processingError: null,
     processingState: null,
     processingLogs: [],
+    finalizeProgress: null,
   }
 }

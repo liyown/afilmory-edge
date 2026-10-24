@@ -113,11 +113,18 @@ export type PhotoUploadProgressSnapshot = {
   files: PhotoUploadFileProgress[]
 }
 
+export type PhotoUploadFinalizeEvent =
+  | { type: 'start'; index: number; completed: number; failed: number; total: number }
+  | { type: 'complete'; index: number; completed: number; failed: number; total: number }
+  | { type: 'failed'; index: number; completed: number; failed: number; total: number }
+  | { type: 'publish'; completed: number; failed: number; total: number }
+
 export type UploadPhotoAssetsOptions = {
   concurrency?: number
   directory?: string
   signal?: AbortSignal
   onProgress?: (snapshot: PhotoUploadProgressSnapshot) => void
+  onFinalizeProgress?: (event: PhotoUploadFinalizeEvent) => void
   timeoutMs?: number
   onServerEvent?: (event: PhotoSyncProgressEvent) => void
 }
@@ -672,6 +679,16 @@ export async function uploadPhotoAssets(
   const failures: PhotoUploadFailure[] = []
   let nextTask = 0
 
+  // Bytes reaching 100% is not the end of an upload: the server still has to
+  // record the asset. Report that phase so the modal can show real progress
+  // instead of a stalled 100%.
+  const finalizeTotal = uploadTaskIndices.length
+  let finalizedCount = 0
+  let failedCount = 0
+  const emitFinalizeProgress = (event: PhotoUploadFinalizeEvent): void => {
+    options?.onFinalizeProgress?.(event)
+  }
+
   const requestedConcurrency = Math.floor(options?.concurrency ?? DEFAULT_UPLOAD_CONCURRENCY)
   const concurrency = Math.min(MAX_UPLOAD_CONCURRENCY, Math.max(1, requestedConcurrency))
 
@@ -788,13 +805,37 @@ export async function uploadPhotoAssets(
         const prepared = await prepareUpload(index)
         // Enqueue the finalize and immediately start the next file's upload.
         enqueueCompletion(async () => {
+          emitFinalizeProgress({
+            type: 'start',
+            index,
+            completed: finalizedCount,
+            failed: failedCount,
+            total: finalizeTotal,
+          })
           try {
             const asset = await completeUpload(prepared)
             results.push({ index, asset })
+            finalizedCount++
+            emitFinalizeProgress({
+              type: 'complete',
+              index,
+              completed: finalizedCount,
+              failed: failedCount,
+              total: finalizeTotal,
+            })
           } catch (error) {
+            finalizedCount++
             if (!options?.signal?.aborted) {
               recordFailure(index, error)
+              failedCount++
             }
+            emitFinalizeProgress({
+              type: 'failed',
+              index,
+              completed: finalizedCount,
+              failed: failedCount,
+              total: finalizeTotal,
+            })
           }
         })
       } catch (error) {
@@ -811,6 +852,12 @@ export async function uploadPhotoAssets(
   await waitForCompletions()
 
   if (results.length > 0) {
+    emitFinalizeProgress({
+      type: 'publish',
+      completed: finalizedCount,
+      failed: failedCount,
+      total: finalizeTotal,
+    })
     await coreApi('/photos/manifest/publish', { method: 'POST' })
   }
 
