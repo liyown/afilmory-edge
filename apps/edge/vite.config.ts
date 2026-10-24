@@ -7,7 +7,7 @@ import { defineConfig } from 'vite'
 // Single Worker = one assets root. Both SPAs build into this tree:
 //   apps/web       -> apps/edge/public
 //   dashboard      -> apps/edge/public/dashboard
-const SPA_DIST = new URL('./public/', import.meta.url).pathname
+const SPA_DIST = fileURLToPath(new URL('./public/', import.meta.url))
 const CORE_SRC = fileURLToPath(new URL('../../be/apps/core/src/', import.meta.url))
 
 export default defineConfig({
