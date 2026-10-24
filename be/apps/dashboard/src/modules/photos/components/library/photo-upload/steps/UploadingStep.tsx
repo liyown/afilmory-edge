@@ -12,12 +12,17 @@ export function UploadingStep() {
     })),
   )
   const abortCurrent = usePhotoUploadStore((state) => state.abortCurrent)
+  const finalizing = progress >= 1
 
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <h2 className="text-text text-lg font-semibold">正在上传文件</h2>
-        <p className="text-text-tertiary text-sm">正在处理选中的文件，请保持页面打开，以免中断进度。</p>
+        <h2 className="text-text text-lg font-semibold">{finalizing ? '正在完成入库' : '正在上传文件'}</h2>
+        <p className="text-text-tertiary text-sm">
+          {finalizing
+            ? '文件已全部上传，正在写入数据库并更新图库。'
+            : '正在处理选中的文件，请保持页面打开，以免中断进度。'}
+        </p>
       </div>
 
       <UploadFileList entries={uploadEntries} overallProgress={progress} />
@@ -33,7 +38,7 @@ export function UploadingStep() {
           停止上传
         </Button>
         <Button type="button" variant="primary" size="sm" disabled isLoading>
-          上传中...
+          {finalizing ? '处理中...' : '上传中...'}
         </Button>
       </div>
     </div>

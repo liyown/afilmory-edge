@@ -67,6 +67,12 @@ export class PersonalPhotoController {
     )
   }
 
+  @Post('manifest/publish')
+  async publishManifest() {
+    await this.photos.publishManifest()
+    return { published: true }
+  }
+
   @Post('ai/reindex')
   async reindexAi(@Body() body: { limit?: number; force?: boolean }) {
     const limit = Number.isFinite(body?.limit) ? Math.min(Math.max(Number(body?.limit), 1), 50) : 10

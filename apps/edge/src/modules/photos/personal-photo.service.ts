@@ -61,6 +61,8 @@ export interface UploadCompleteInput {
   uploadId?: string | null
   parts?: MultipartPart[] | null
   videoKey?: string | null
+  /** Set false to defer the manifest rewrite to an explicit publish call. */
+  publish?: boolean
 }
 
 function sanitizeSegment(value: string, fallback: string): string {
@@ -274,7 +276,7 @@ export class PersonalPhotoService {
     const db = this.dbAccessor.get()
     const existing = await db.select().from(photoAssets).where(eq(photoAssets.storageKey, input.key)).limit(1)
     if (existing[0]) {
-      return await this.finalizeAsset(db, existing[0], waitUntil)
+      return await this.finalizeAsset(db, existing[0], waitUntil, input.publish !== false)
     }
 
     const object = await this.storage.head(input.key)
@@ -380,22 +382,29 @@ export class PersonalPhotoService {
       .returning()
 
     if (inserted[0]) {
-      return await this.finalizeAsset(db, inserted[0], waitUntil)
+      return await this.finalizeAsset(db, inserted[0], waitUntil, input.publish !== false)
     }
 
     const raced = await db.select().from(photoAssets).where(eq(photoAssets.storageKey, input.key)).limit(1)
     if (!raced[0]) {
       throw new BizException(ErrorCode.COMMON_CONFLICT, { message: 'Unable to record the uploaded asset' })
     }
-    return await this.finalizeAsset(db, raced[0], waitUntil)
+    return await this.finalizeAsset(db, raced[0], waitUntil, input.publish !== false)
+  }
+
+  async publishManifest(): Promise<void> {
+    await this.publisher.publish()
   }
 
   private async finalizeAsset(
     db: ReturnType<DbAccessor['get']>,
     record: typeof photoAssets.$inferSelect,
     waitUntil?: (promise: Promise<unknown>) => void,
+    publish = true,
   ): Promise<PhotoAssetListItem & { change: PhotoChange | null }> {
-    await this.publisher.publish()
+    if (publish) {
+      await this.publisher.publish()
+    }
 
     let finalRecord = record
     if (record.syncStatus !== 'synced') {

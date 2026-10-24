@@ -672,23 +672,50 @@ export async function uploadPhotoAssets(
   const failures: PhotoUploadFailure[] = []
   let nextTask = 0
 
-  // Each completion rewrites the full manifest. Upload bytes concurrently,
-  // but finalize one asset at a time so two completions cannot publish
-  // snapshots that overwrite each other.
-  let completionLock = Promise.resolve()
-  const withCompletionLock = async <T>(task: () => Promise<T>): Promise<T> => {
-    const previous = completionLock
-    let release = () => {}
-    completionLock = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    await previous
-    try {
-      options?.signal?.throwIfAborted()
-      return await task()
-    } finally {
-      release()
+  const requestedConcurrency = Math.floor(options?.concurrency ?? DEFAULT_UPLOAD_CONCURRENCY)
+  const concurrency = Math.min(MAX_UPLOAD_CONCURRENCY, Math.max(1, requestedConcurrency))
+
+  // Upload-complete skips manifest publication; the batch publishes once at
+  // the end. Finalizes still run through a pool so a large batch does not
+  // flood the API with concurrent EXIF/DB work.
+  const completionQueue: Array<() => Promise<void>> = []
+  let activeCompletions = 0
+  let resolveCompletionsIdle: (() => void) | null = null
+
+  const settleCompletions = (): void => {
+    if (activeCompletions === 0 && completionQueue.length === 0) {
+      resolveCompletionsIdle?.()
+      resolveCompletionsIdle = null
     }
+  }
+
+  const drainCompletions = (): void => {
+    while (activeCompletions < concurrency && completionQueue.length > 0) {
+      const task = completionQueue.shift()
+      if (!task) {
+        return
+      }
+      activeCompletions++
+      void task().finally(() => {
+        activeCompletions--
+        drainCompletions()
+        settleCompletions()
+      })
+    }
+  }
+
+  const enqueueCompletion = (task: () => Promise<void>): void => {
+    completionQueue.push(task)
+    drainCompletions()
+  }
+
+  const waitForCompletions = (): Promise<void> => {
+    if (activeCompletions === 0 && completionQueue.length === 0) {
+      return Promise.resolve()
+    }
+    return new Promise((resolve) => {
+      resolveCompletionsIdle = resolve
+    })
   }
 
   type PreparedUpload = {
@@ -721,24 +748,23 @@ export async function uploadPhotoAssets(
   const completeUpload = async (prepared: PreparedUpload): Promise<PhotoAssetListItem> => {
     const { index, videoKey, inspection, intent, parts } = prepared
     const file = files[index]
-    return await withCompletionLock(() =>
-      coreApi<PhotoAssetListItem>('/photos/upload-complete', {
-        method: 'POST',
-        body: {
-          key: intent.key,
-          photoId: intent.photoId,
-          filename: file.name,
-          width: inspection?.width ?? null,
-          height: inspection?.height ?? null,
-          thumbHash: inspection?.thumbHash ?? null,
-          toneAnalysis: inspection?.toneAnalysis ?? null,
-          takenAt: Number.isFinite(file.lastModified) ? new Date(file.lastModified).toISOString() : null,
-          uploadId: intent.mode === 'multipart' ? intent.uploadId : null,
-          parts: parts.length > 0 ? parts : null,
-          videoKey,
-        },
-      }),
-    )
+    return await coreApi<PhotoAssetListItem>('/photos/upload-complete', {
+      method: 'POST',
+      body: {
+        publish: false,
+        key: intent.key,
+        photoId: intent.photoId,
+        filename: file.name,
+        width: inspection?.width ?? null,
+        height: inspection?.height ?? null,
+        thumbHash: inspection?.thumbHash ?? null,
+        toneAnalysis: inspection?.toneAnalysis ?? null,
+        takenAt: Number.isFinite(file.lastModified) ? new Date(file.lastModified).toISOString() : null,
+        uploadId: intent.mode === 'multipart' ? intent.uploadId : null,
+        parts: parts.length > 0 ? parts : null,
+        videoKey,
+      },
+    })
   }
 
   const recordFailure = (index: number, error: unknown): void => {
@@ -751,11 +777,6 @@ export async function uploadPhotoAssets(
     })
   }
 
-  // Completions stay serialized so they cannot publish conflicting manifest
-  // snapshots, but each worker immediately starts the next file's upload
-  // instead of waiting for its own completion to finish.
-  const pendingCompletions: Array<Promise<void>> = []
-
   const runUploadWorker = async (): Promise<void> => {
     while (!options?.signal?.aborted) {
       const taskPosition = nextTask++
@@ -765,18 +786,17 @@ export async function uploadPhotoAssets(
       const index = uploadTaskIndices[taskPosition]
       try {
         const prepared = await prepareUpload(index)
-        pendingCompletions.push(
-          completeUpload(prepared).then(
-            (asset) => {
-              results.push({ index, asset })
-            },
-            (error) => {
-              if (!options?.signal?.aborted) {
-                recordFailure(index, error)
-              }
-            },
-          ),
-        )
+        // Enqueue the finalize and immediately start the next file's upload.
+        enqueueCompletion(async () => {
+          try {
+            const asset = await completeUpload(prepared)
+            results.push({ index, asset })
+          } catch (error) {
+            if (!options?.signal?.aborted) {
+              recordFailure(index, error)
+            }
+          }
+        })
       } catch (error) {
         if (options?.signal?.aborted) {
           return
@@ -786,11 +806,13 @@ export async function uploadPhotoAssets(
     }
   }
 
-  const requestedConcurrency = Math.floor(options?.concurrency ?? DEFAULT_UPLOAD_CONCURRENCY)
-  const concurrency = Math.min(MAX_UPLOAD_CONCURRENCY, Math.max(1, requestedConcurrency))
   const workerCount = Math.min(concurrency, uploadTaskIndices.length)
   await Promise.all(Array.from({ length: workerCount }, runUploadWorker))
-  await Promise.all(pendingCompletions)
+  await waitForCompletions()
+
+  if (results.length > 0) {
+    await coreApi('/photos/manifest/publish', { method: 'POST' })
+  }
 
   options?.signal?.throwIfAborted()
 
