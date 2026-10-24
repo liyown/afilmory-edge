@@ -1,16 +1,10 @@
-import { useEffect } from 'react'
 import { Outlet } from 'react-router'
 
 import { useCommandPaletteShortcut } from './hooks/useCommandPaletteShortcut'
 import { CommandPalette } from './modules/cmdk/CommandPalette'
 import { RootProviders } from './providers/root-providers'
 
-// prefetch preview page route
 function App() {
-  useEffect(() => {
-    import('~/pages/(main)/photos/[photoId]/index')
-  }, [])
-
   return (
     <RootProviders>
       <div className="overflow-hidden lg:h-svh">

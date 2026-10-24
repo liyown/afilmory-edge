@@ -13,6 +13,25 @@ import { storageGet, storageHead, storagePut } from './storage'
 const DASHBOARD_BASENAME = '/platform'
 const DASHBOARD_ALIAS = '/dashboard'
 const ASSET_EXTENSION_PATTERN = /\.[a-z0-9]+$/i
+// Vite fingerprints everything under these prefixes, so the bytes behind a URL
+// never change. Workers Assets defaults to `max-age=0, must-revalidate`, which
+// forces a revalidation round-trip on every visit.
+const IMMUTABLE_ASSET_PREFIXES = ['/assets/', '/vendor/', '/platform/assets/', '/platform/vendor/']
+
+function withImmutableAssetCache(response: Response, pathname: string): Response {
+  if (!IMMUTABLE_ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+    return response
+  }
+
+  const headers = new Headers(response.headers)
+  headers.set('cache-control', 'public, max-age=31536000, immutable')
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
+}
+
 // These responses exist to be embedded by third-party sites.
 const EMBEDDABLE_PATHS = new Set(['/share/iframe', '/share/embed.js'])
 
@@ -59,7 +78,7 @@ async function serveDashboardAsset(request: Request): Promise<Response> {
   const url = new URL(request.url)
 
   if (ASSET_EXTENSION_PATTERN.test(url.pathname)) {
-    return await env.ASSETS.fetch(request)
+    return withImmutableAssetCache(await env.ASSETS.fetch(request), url.pathname)
   }
 
   const assetResponse = await env.ASSETS.fetch(new URL(`${DASHBOARD_BASENAME}/index.html`, request.url))
@@ -288,7 +307,7 @@ async function handleRequest(request: Request, executionCtx?: ExecutionContext):
   }
 
   if (ASSET_EXTENSION_PATTERN.test(url.pathname)) {
-    return await env.ASSETS.fetch(request)
+    return withImmutableAssetCache(await env.ASSETS.fetch(request), url.pathname)
   }
 
   // Any other extensionless path is a gallery client-side route (`/map`,

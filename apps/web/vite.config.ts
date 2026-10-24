@@ -64,6 +64,9 @@ const staticWebBuildPlugins: PluginOption[] = [
     base: '/',
     scope: '/',
     registerType: 'autoUpdate',
+    // Registered from main.tsx after the app settles so the precache download
+    // does not compete with the first screen on slow connections.
+    injectRegister: null,
     includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
     manifest: {
       name: siteConfig.title,
@@ -96,7 +99,22 @@ const staticWebBuildPlugins: PluginOption[] = [
       maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10MB
       navigateFallback: '',
       globPatterns: ['**/*.{js,css,ico,png,svg,webp}'],
-      globIgnores: ['**/*.{jpg,jpeg}'], // 忽略大图片文件
+      // Keep the install-time download small: these chunks are large and only
+      // needed for optional routes/features, and their URLs are immutable so
+      // the HTTP cache covers repeat visits.
+      globIgnores: [
+        '**/*.{jpg,jpeg}',
+        '**/vendor/0-*.js',
+        '**/maplibre-gl-*.js',
+        '**/maplibre-gl-worker-*.js',
+        '**/esm-*.js',
+        '**/MapSection-*.js',
+        '**/MapLibre-*.js',
+        '**/worker-*.js',
+        '**/worker.*.css',
+        '**/webgpu-*.js',
+        '**/_photoId_-*.js',
+      ],
       runtimeCaching: [
         {
           urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -222,8 +240,7 @@ export default defineConfig(() => {
 function getGitHash() {
   try {
     return execSync('git rev-parse HEAD').toString().trim()
-  }
-  catch (e) {
+  } catch (e) {
     console.error('Failed to get git hash', e)
     return ''
   }

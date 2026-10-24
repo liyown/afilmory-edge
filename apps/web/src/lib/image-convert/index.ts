@@ -8,9 +8,30 @@ import { jotaiStore } from '~/lib/jotai'
 import type { LoadingCallbacks } from '../image-loader-manager'
 import type { PipelineOptions } from './pipeline'
 import { ImageConversionPipeline } from './pipeline'
-import { HeicConverterStrategy } from './strategies/heic'
-import { TiffConverterStrategy } from './strategies/tiff'
 import type { ConversionResult, ImageConverterStrategy } from './type'
+
+// The conversion backends are heavy (heic-to alone is several MB), and most
+// visits never open a HEIC/TIFF original. Keep the strategies out of the
+// initial bundle and load them only when a matching file is encountered.
+let heicStrategyPromise: Promise<ImageConverterStrategy> | null = null
+let tiffStrategyPromise: Promise<ImageConverterStrategy> | null = null
+
+function loadHeicStrategy(): Promise<ImageConverterStrategy> {
+  heicStrategyPromise ??= import('./strategies/heic').then(({ HeicConverterStrategy }) => new HeicConverterStrategy())
+  return heicStrategyPromise
+}
+
+function loadTiffStrategy(): Promise<ImageConverterStrategy> {
+  tiffStrategyPromise ??= import('./strategies/tiff').then(({ TiffConverterStrategy }) => new TiffConverterStrategy())
+  return tiffStrategyPromise
+}
+
+const STRATEGY_LOADERS = new Map<string, () => Promise<ImageConverterStrategy>>([
+  ['image/heic', loadHeicStrategy],
+  ['image/heif', loadHeicStrategy],
+  ['image/tiff', loadTiffStrategy],
+  ['image/tif', loadTiffStrategy],
+])
 
 // 图像转换策略管理器
 export class ImageConverterManager {
@@ -22,9 +43,6 @@ export class ImageConverterManager {
     this.conversionPipeline = new ImageConversionPipeline({
       maxConcurrent: options.maxConcurrent ?? 2,
     })
-    // 注册默认策略
-    this.registerStrategy(new HeicConverterStrategy())
-    this.registerStrategy(new TiffConverterStrategy())
   }
 
   /**
@@ -83,9 +101,17 @@ export class ImageConverterManager {
 
       console.info(`Detected file type: ${fileType.ext} (${fileType.mime})`)
 
-      // 直接根据 MIME 类型查找策略
-      const strategy = this.strategies.get(fileType.mime)
+      let strategy = this.strategies.get(fileType.mime)
 
+      if (!strategy) {
+        const loadStrategy = STRATEGY_LOADERS.get(fileType.mime)
+        if (loadStrategy) {
+          strategy = await loadStrategy()
+          this.registerStrategy(strategy)
+        }
+      }
+
+      // 直接根据 MIME 类型查找策略
       if (strategy) {
         // 验证策略是否确实需要转换这个文件
         const shouldConvert = await strategy.shouldConvert(blob)

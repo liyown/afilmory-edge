@@ -18,7 +18,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useMobile } from '~/hooks/useMobile'
 import { useContextPhotos, usePhotoViewer } from '~/hooks/usePhotoViewer'
-import { formatExifData } from '~/modules/metadata'
+import { formatExifData } from '~/modules/metadata/formatExifData'
 import type { PhotoManifest } from '~/types/photo'
 
 interface ListViewProps {
@@ -98,10 +98,10 @@ const PhotoCard = ({ photo }: { photo: PhotoManifest }) => {
   const imageRef = useRef<HTMLImageElement>(null)
 
   const handleClick = () => {
-    const photoIndex = photos.findIndex(p => p.id === photo.id)
+    const photoIndex = photos.findIndex((p) => p.id === photo.id)
     if (photoIndex !== -1) {
-      const triggerEl
-        = imageRef.current?.parentElement instanceof HTMLElement ? imageRef.current.parentElement : imageRef.current
+      const triggerEl =
+        imageRef.current?.parentElement instanceof HTMLElement ? imageRef.current.parentElement : imageRef.current
 
       photoViewer.openViewer(photoIndex, triggerEl ?? undefined)
     }
@@ -160,7 +160,7 @@ const PhotoCard = ({ photo }: { photo: PhotoManifest }) => {
         {/* Tags 覆盖在图片上 */}
         {photo.tags && photo.tags.length > 0 && (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap gap-1 p-2">
-            {photo.tags.map(tag => (
+            {photo.tags.map((tag) => (
               <span
                 key={tag}
                 className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white/90 backdrop-blur-sm"
@@ -214,10 +214,7 @@ const PhotoCard = ({ photo }: { photo: PhotoManifest }) => {
             <div className="flex items-center gap-1">
               <ImageIcon className="size-2.5" />
               <span>
-                {photo.width}
-                {' '}
-                x
-                {photo.height}
+                {photo.width} x{photo.height}
               </span>
             </div>
           </div>
