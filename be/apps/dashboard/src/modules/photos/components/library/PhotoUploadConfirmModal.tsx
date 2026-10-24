@@ -18,11 +18,11 @@ export const PhotoUploadConfirmModal: ModalComponent<PhotoUploadConfirmModalProp
 }) => {
   return (
     <PhotoUploadStoreProvider files={files} availableTags={availableTags} onUpload={onUpload} onClose={dismiss}>
-      <div className="flex max-h-[80vh] w-full flex-col gap-5 min-w-0">
+      <div className="flex max-h-[85vh] w-full flex-col gap-5 min-w-0">
         <PhotoUploadSteps />
       </div>
     </PhotoUploadStoreProvider>
   )
 }
 
-PhotoUploadConfirmModal.contentClassName = 'w-[min(520px,92vw)]'
+PhotoUploadConfirmModal.contentClassName = 'w-[min(760px,94vw)]'

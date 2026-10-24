@@ -65,10 +65,7 @@ export function UploadFileList({ entries, overallProgress, onRemoveEntry }: Uplo
     <div>
       <div className="flex items-center justify-between text-xs text-text-tertiary">
         <span>上传进度</span>
-        <span>
-          {Math.round(overallProgress * 100)}
-          %
-        </span>
+        <span>{Math.round(overallProgress * 100)}%</span>
       </div>
       <div
         className="bg-fill/20 mt-2 h-2 rounded-full"
@@ -86,14 +83,14 @@ export function UploadFileList({ entries, overallProgress, onRemoveEntry }: Uplo
         />
       </div>
 
-      <ScrollArea rootClassName="h-60 mt-4 -mx-3" viewportClassName="px-3">
+      <ScrollArea rootClassName="h-[min(45vh,22rem)] mt-4 -mx-3" viewportClassName="px-3">
         <m.ul
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={Spring.presets.smooth}
           className="divide-fill-tertiary/30"
         >
-          {entries.map(entry => (
+          {entries.map((entry) => (
             <li key={entry.id} className="text-text-secondary flex items-center gap-3 px-2 py-2 text-sm">
               <UploadEntryThumbnail entry={entry} />
               <div className="flex-1 min-w-0">
