@@ -3,6 +3,8 @@ export const ROUTE_PATHS = {
   CLI_AUTHORIZE: '/cli/authorize',
   DEFAULT_AUTHENTICATED: '/',
   NO_ACCESS: '/no-access',
+  PHOTOS: '/photos',
+  UPLOAD: '/upload',
 } as const
 
 export const PUBLIC_ROUTES = new Set<string>([ROUTE_PATHS.LOGIN, ROUTE_PATHS.CLI_AUTHORIZE, ROUTE_PATHS.NO_ACCESS])

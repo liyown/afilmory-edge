@@ -5,6 +5,7 @@ import { LinearBorderPanel } from '~/components/common/LinearBorderPanel'
 
 import { ProcessingPanel } from '../ProcessingPanel'
 import { usePhotoUploadStore } from '../store'
+import { STEP_ACTION_BUTTON_CLASS, STEP_ACTIONS_CLASS } from './actions'
 
 export function ErrorStep() {
   const { processingState, processingLogs, errorMessage } = usePhotoUploadStore(
@@ -30,17 +31,17 @@ export function ErrorStep() {
 
       <ProcessingPanel state={processingState} logs={processingLogs} />
 
-      <div className="flex items-center justify-end gap-2">
+      <div className={STEP_ACTIONS_CLASS}>
         <Button
           type="button"
           variant="ghost"
           size="sm"
           onClick={closeModal}
-          className="text-text-secondary hover:text-text"
+          className={`${STEP_ACTION_BUTTON_CLASS} text-text-secondary hover:text-text`}
         >
           关闭
         </Button>
-        <Button type="button" variant="primary" size="sm" onClick={reset}>
+        <Button type="button" variant="primary" size="sm" onClick={reset} className={STEP_ACTION_BUTTON_CLASS}>
           重新上传
         </Button>
       </div>

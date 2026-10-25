@@ -8,7 +8,8 @@ import { useShallow } from 'zustand/shallow'
 
 import { usePhotoLibraryStore } from './photo-library'
 import { PhotoTagEditorModal } from './PhotoTagEditorModal'
-import { PhotoUploadConfirmModal } from './PhotoUploadConfirmModal'
+import { PHOTO_UPLOAD_ACCEPT } from './upload.types'
+import { useUploadLauncher } from './useUploadLauncher'
 
 const photoLibraryActionKeys = {
   upload: 'photos.library.actions.upload',
@@ -30,7 +31,6 @@ export function PhotoLibraryActionBar() {
     isUploading,
     isDeleting,
     availableTags,
-    uploadAssets,
     deleteSelected,
     clearSelection,
     selectAll,
@@ -43,7 +43,6 @@ export function PhotoLibraryActionBar() {
       isUploading: state.isUploading,
       isDeleting: state.isDeleting,
       availableTags: state.availableTags,
-      uploadAssets: state.uploadAssets,
       deleteSelected: state.deleteSelected,
       clearSelection: state.clearSelection,
       selectAll: state.selectAll,
@@ -52,6 +51,7 @@ export function PhotoLibraryActionBar() {
     })),
   )
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const launchUpload = useUploadLauncher()
   const hasSelection = selectionCount > 0
   const hasAssets = totalCount > 0
   const canSelectAll = hasAssets && selectionCount < totalCount
@@ -80,17 +80,7 @@ export function PhotoLibraryActionBar() {
 
     const selectedFiles = Array.from(files)
 
-    Modal.present(
-      PhotoUploadConfirmModal,
-      {
-        files: selectedFiles,
-        availableTags,
-        onUpload: uploadAssets,
-      },
-      {
-        dismissOnOutsideClick: false,
-      },
-    )
+    launchUpload(selectedFiles)
 
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -114,7 +104,7 @@ export function PhotoLibraryActionBar() {
         type="file"
         className="hidden"
         multiple
-        accept="image/*,.heic,.HEIC,.heif,.HEIF,.hif,.HIF,.mov,.MOV"
+        accept={PHOTO_UPLOAD_ACCEPT}
         onChange={handleFileChange}
       />
       <Button

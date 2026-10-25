@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/shallow'
 
 import { usePhotoUploadStore } from '../store'
 import { UploadFileList } from '../UploadFileList'
+import { STEP_ACTION_BUTTON_CLASS, STEP_ACTIONS_CLASS } from './actions'
 
 export function UploadingStep() {
   const { uploadEntries, progress, finalizeProgress } = usePhotoUploadStore(
@@ -63,17 +64,17 @@ export function UploadingStep() {
 
       <UploadFileList entries={uploadEntries} overallProgress={progress} />
 
-      <div className="flex items-center justify-end gap-2">
+      <div className={STEP_ACTIONS_CLASS}>
         <Button
           type="button"
           variant="ghost"
           size="sm"
           onClick={abortCurrent}
-          className="text-rose-300 hover:text-rose-200"
+          className={`${STEP_ACTION_BUTTON_CLASS} text-rose-300 hover:text-rose-200`}
         >
           停止上传
         </Button>
-        <Button type="button" variant="primary" size="sm" disabled isLoading>
+        <Button type="button" variant="primary" size="sm" disabled isLoading className={STEP_ACTION_BUTTON_CLASS}>
           {publishing ? '更新图库...' : finalizing ? '处理中...' : '上传中...'}
         </Button>
       </div>

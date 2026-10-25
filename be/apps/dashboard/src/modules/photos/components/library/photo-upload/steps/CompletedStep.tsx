@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/shallow'
 
 import { usePhotoUploadStore } from '../store'
 import { UploadFileList } from '../UploadFileList'
+import { STEP_ACTION_BUTTON_CLASS, STEP_ACTIONS_CLASS } from './actions'
 
 export function CompletedStep() {
   const { uploadEntries, progress } = usePhotoUploadStore(
@@ -22,8 +23,8 @@ export function CompletedStep() {
 
       <UploadFileList entries={uploadEntries} overallProgress={progress} />
 
-      <div className="flex items-center justify-end">
-        <Button type="button" variant="primary" size="sm" onClick={closeModal}>
+      <div className={STEP_ACTIONS_CLASS}>
+        <Button type="button" variant="primary" size="sm" onClick={closeModal} className={STEP_ACTION_BUTTON_CLASS}>
           完成
         </Button>
       </div>

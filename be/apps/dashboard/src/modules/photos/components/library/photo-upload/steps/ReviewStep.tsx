@@ -9,6 +9,7 @@ import { MAX_UPLOAD_CONCURRENCY, MIN_UPLOAD_CONCURRENCY } from '../constants'
 import { usePhotoUploadStore } from '../store'
 import { UploadFileList } from '../UploadFileList'
 import { formatBytes, readRecentTags } from '../utils'
+import { STEP_ACTION_BUTTON_CLASS, STEP_ACTIONS_CLASS } from './actions'
 
 export function ReviewStep() {
   const { filesCount, totalSize, hasMovFile, unmatchedMovFiles, availableTags, selectedTags, concurrency } =
@@ -100,17 +101,24 @@ export function ReviewStep() {
 
       <UploadFileList entries={uploadEntries} overallProgress={progress} onRemoveEntry={removeEntry} />
 
-      <div className="flex items-center justify-end gap-2">
+      <div className={STEP_ACTIONS_CLASS}>
         <Button
           type="button"
           variant="ghost"
           size="sm"
           onClick={closeModal}
-          className="text-text-secondary hover:text-text"
+          className={`${STEP_ACTION_BUTTON_CLASS} text-text-secondary hover:text-text`}
         >
           取消
         </Button>
-        <Button type="button" variant="primary" size="sm" onClick={() => void beginUpload()} disabled={hasUnmatched}>
+        <Button
+          type="button"
+          variant="primary"
+          size="sm"
+          onClick={() => void beginUpload()}
+          disabled={hasUnmatched}
+          className={STEP_ACTION_BUTTON_CLASS}
+        >
           开始上传
         </Button>
       </div>
