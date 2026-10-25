@@ -1,3 +1,6 @@
+import { useMemo } from 'react'
+
+import { useUserRole } from '~/atoms/auth'
 import { PageTabs } from '~/components/navigation/PageTabs'
 
 const SETTINGS_TABS = [
@@ -13,7 +16,13 @@ const SETTINGS_TABS = [
     path: '/settings/user',
     end: true,
   },
-
+  {
+    id: 'users',
+    labelKey: 'settings.nav.users',
+    path: '/settings/users',
+    end: true,
+    superadminOnly: true,
+  },
   {
     id: 'account',
     labelKey: 'settings.nav.account',
@@ -22,15 +31,24 @@ const SETTINGS_TABS = [
   },
 ] as const
 
+type SettingsTabId = (typeof SETTINGS_TABS)[number]['id']
+
 type SettingsNavigationProps = {
-  active: (typeof SETTINGS_TABS)[number]['id']
+  active: SettingsTabId
 }
 
 export function SettingsNavigation({ active }: SettingsNavigationProps) {
+  const role = useUserRole()
+
+  const tabs = useMemo(
+    () => SETTINGS_TABS.filter((tab) => !('superadminOnly' in tab && tab.superadminOnly) || role === 'superadmin'),
+    [role],
+  )
+
   return (
     <PageTabs
       activeId={active}
-      items={SETTINGS_TABS.map(tab => ({
+      items={tabs.map((tab) => ({
         id: tab.id,
         labelKey: tab.labelKey,
         to: tab.path,
