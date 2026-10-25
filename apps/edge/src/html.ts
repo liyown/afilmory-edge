@@ -118,7 +118,9 @@ async function renderShell(request: Request, env: Env, options: ShellOptions): P
     new HTMLRewriter()
       .on('script#config', {
         element(element) {
-          element.setInnerContent(configScript)
+          // Script contents are raw text: passing `html: true` avoids turning
+          // `&` into `&amp;`, which the browser would expose literally.
+          element.setInnerContent(configScript, { html: true })
         },
       })
       // Only emitted by the static build; the Worker owns runtime config.
@@ -129,7 +131,7 @@ async function renderShell(request: Request, env: Env, options: ShellOptions): P
       })
       .on('script#manifest', {
         element(element) {
-          element.setInnerContent(`window.__MANIFEST__ = ${JSON.stringify(manifest)};`)
+          element.setInnerContent(`window.__MANIFEST__ = ${toInlineJson(manifest)};`, { html: true })
         },
       })
       .on('title', {
