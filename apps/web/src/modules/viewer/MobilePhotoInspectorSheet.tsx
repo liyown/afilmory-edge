@@ -42,7 +42,7 @@ export const MobilePhotoInspectorSheet = ({
   const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState<Tab>('info')
   const sheetRef = useRef<HTMLDivElement>(null)
-  const viewportHeight = useViewport(value => value.h) || (typeof window !== 'undefined' ? window.innerHeight : 844)
+  const viewportHeight = useViewport((value) => value.h) || (typeof window !== 'undefined' ? window.innerHeight : 844)
   const sheetHeight = useMemo(() => resolveHeight(viewportHeight), [resolveHeight, viewportHeight])
 
   const showSocialFeatures = injectConfig.useCloud
@@ -118,25 +118,25 @@ export const MobilePhotoInspectorSheet = ({
           <div className="flex items-center gap-2 pb-1">
             <div className="min-w-0 flex-1">
               {showSocialFeatures ? (
-                <MobileTabGroup value={activeTab} onValueChanged={value => setActiveTab(value as Tab)}>
+                <MobileTabGroup value={activeTab} onValueChanged={(value) => setActiveTab(value as Tab)}>
                   <MobileTabItem
                     value="info"
-                    label={(
+                    label={
                       <div className="flex items-center">
                         <i className="i-mingcute-information-line mr-1.5 text-base" />
                         {t('inspector.tab.info')}
                       </div>
-                    )}
+                    }
                   />
                   <MobileTabItem
                     value="comments"
-                    label={(
+                    label={
                       <div className="flex items-center">
                         <i className="i-mingcute-comment-line mr-1.5 text-base" />
                         {t('inspector.tab.comments')}
                         {hasComments && <div className="bg-accent ml-1.5 size-1.5 rounded-full" />}
                       </div>
-                    )}
+                    }
                   />
                 </MobileTabGroup>
               ) : (
@@ -166,7 +166,7 @@ export const MobilePhotoInspectorSheet = ({
               viewportClassName="px-4 pb-[calc(env(safe-area-inset-bottom)+20px)] **:select-text"
             />
           ) : (
-            <div className="min-h-0 flex-1 pb-[calc(env(safe-area-inset-bottom)+8px)]">
+            <div className="flex min-h-0 flex-1 flex-col pb-[calc(env(safe-area-inset-bottom)+8px)]">
               <CommentsPanel photoId={currentPhoto.id} />
             </div>
           )}
