@@ -13,7 +13,7 @@ export interface SessionPayload {
 }
 
 export function canAccessDashboard(input: { user?: Pick<SessionUser, 'role'> | null }): boolean {
-  return input.user?.role === 'superadmin'
+  return input.user?.role === 'superadmin' || input.user?.role === 'admin'
 }
 
 export interface SocialProvider {

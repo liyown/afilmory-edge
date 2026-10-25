@@ -14,6 +14,10 @@ describe('admin plugin options', () => {
         user: ['list'],
       }),
     ).toEqual({ success: true })
+    // Managers are not Better Auth admins; role changes would be an
+    // escalation path through the admin plugin endpoints.
+    expect(AUTH_ADMIN_PLUGIN_OPTIONS.roles.admin.authorize({ user: ['list'] }).success).toBe(false)
+    expect(AUTH_ADMIN_PLUGIN_OPTIONS.adminRoles).toEqual(['superadmin'])
     expect(AUTH_ADMIN_PLUGIN_OPTIONS.roles.user.authorize({ user: ['list'] }).success).toBe(false)
   })
 })

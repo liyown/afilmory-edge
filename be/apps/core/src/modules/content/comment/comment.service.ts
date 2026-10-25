@@ -42,11 +42,11 @@ interface CommentResponseItem extends CommentViewModel {
   viewerReactions: string[]
 }
 
-type AuthContextValue
-  = | {
-    user?: AuthUser
-    session?: unknown
-  }
+type AuthContextValue =
+  | {
+      user?: AuthUser
+      session?: unknown
+    }
   | undefined
 
 @injectable()
@@ -141,7 +141,7 @@ export class CommentService {
     }
 
     // Fetch user info
-    const userIds = [userId, ...Object.values(relations).map(r => r.userId)].filter(Boolean)
+    const userIds = [userId, ...Object.values(relations).map((r) => r.userId)].filter(Boolean)
     const users = await this.fetchUsersWithProfiles(userIds)
 
     // Emit event asynchronously
@@ -208,22 +208,23 @@ export class CommentService {
 
     const hasMore = rows.length > query.limit
     const items = rows.slice(0, query.limit)
-    const commentIds = items.map(item => item.id)
+    const commentIds = items.map((item) => item.id)
 
     const reactions = await this.fetchReactionAggregations(commentIds, viewerUserId)
 
     const nextCursor = hasMore && items.length > 0 ? items.at(-1)!.id : null
 
-    const commentItems = items.map(item =>
+    const commentItems = items.map((item) =>
       this.toResponse({
         ...item,
         reactionCounts: reactions.counts.get(item.id) ?? {},
         viewerReactions: reactions.viewer.get(item.id) ?? [],
-      }))
+      }),
+    )
 
     // Build relations map (parentId -> parent comment)
     const relations: Record<string, CommentResponseItem> = {}
-    const parentIds = [...new Set(items.filter(item => item.parentId).map(item => item.parentId!))]
+    const parentIds = [...new Set(items.filter((item) => item.parentId).map((item) => item.parentId!))]
 
     if (parentIds.length > 0) {
       const parentRows = await db
@@ -241,7 +242,7 @@ export class CommentService {
         .where(and(inArray(comments.id, parentIds), isNull(comments.deletedAt)))
 
       const parentReactions = await this.fetchReactionAggregations(
-        parentRows.map(p => p.id),
+        parentRows.map((p) => p.id),
         viewerUserId,
       )
 
@@ -256,7 +257,7 @@ export class CommentService {
 
     // Build users map (userId -> user)
     const allUserIds = [
-      ...new Set([...items.map(item => item.userId), ...Object.values(relations).map(r => r.userId)]),
+      ...new Set([...items.map((item) => item.userId), ...Object.values(relations).map((r) => r.userId)]),
     ]
 
     const users = await this.fetchUsersWithProfiles(allUserIds)
@@ -320,22 +321,23 @@ export class CommentService {
 
     const hasMore = rows.length > query.limit
     const items = rows.slice(0, query.limit)
-    const commentIds = items.map(item => item.id)
+    const commentIds = items.map((item) => item.id)
 
     const reactions = await this.fetchReactionAggregations(commentIds, viewerUserId)
 
     const nextCursor = hasMore && items.length > 0 ? items.at(-1)!.id : null
 
-    const commentItems = items.map(item =>
+    const commentItems = items.map((item) =>
       this.toResponse({
         ...item,
         reactionCounts: reactions.counts.get(item.id) ?? {},
         viewerReactions: reactions.viewer.get(item.id) ?? [],
-      }))
+      }),
+    )
 
     // Build relations map (parentId -> parent comment)
     const relations: Record<string, CommentResponseItem> = {}
-    const parentIds = [...new Set(items.filter(item => item.parentId).map(item => item.parentId!))]
+    const parentIds = [...new Set(items.filter((item) => item.parentId).map((item) => item.parentId!))]
 
     if (parentIds.length > 0) {
       const parentRows = await db
@@ -353,7 +355,7 @@ export class CommentService {
         .where(and(inArray(comments.id, parentIds), isNull(comments.deletedAt)))
 
       const parentReactions = await this.fetchReactionAggregations(
-        parentRows.map(p => p.id),
+        parentRows.map((p) => p.id),
         viewerUserId,
       )
 
@@ -368,7 +370,7 @@ export class CommentService {
 
     // Build users map (userId -> user)
     const allUserIds = [
-      ...new Set([...items.map(item => item.userId), ...Object.values(relations).map(r => r.userId)]),
+      ...new Set([...items.map((item) => item.userId), ...Object.values(relations).map((r) => r.userId)]),
     ]
 
     const users = await this.fetchUsersWithProfiles(allUserIds)
@@ -405,8 +407,7 @@ export class CommentService {
 
     if (existing) {
       await db.delete(commentReactions).where(eq(commentReactions.id, existing.id))
-    }
-    else {
+    } else {
       await db.insert(commentReactions).values({
         commentId: comment.id,
         userId,
@@ -495,7 +496,7 @@ export class CommentService {
   }
 
   private isAdminUser(user: AuthUser | undefined): boolean {
-    return user?.role === 'superadmin'
+    return user?.role === 'superadmin' || user?.role === 'admin'
   }
 
   private async ensurePhotoExists(photoId: string): Promise<void> {
@@ -643,7 +644,7 @@ export class CommentService {
     return comment
   }
 
-  private toResponse(model: CommentViewModel & { reactionCounts: Record<string, number>, viewerReactions: string[] }) {
+  private toResponse(model: CommentViewModel & { reactionCounts: Record<string, number>; viewerReactions: string[] }) {
     return {
       id: model.id,
       photoId: model.photoId,

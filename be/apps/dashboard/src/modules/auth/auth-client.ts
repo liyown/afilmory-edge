@@ -17,12 +17,13 @@ export const authClient = createAuthClient({
 })
 
 const { useSession } = authClient
-const { signIn, signOut } = authClient
+const { signIn, signOut, signUp } = authClient
 
 export { useSession }
 
 export const signInAuth = signIn
 export const signOutAuth = signOut
+export const signUpAuth = signUp
 
 export interface SocialSignInOptions {
   provider: string
@@ -44,8 +45,7 @@ export async function signInSocial(options: SocialSignInOptions): Promise<unknow
 export async function signOutBySource() {
   try {
     await signOutAuth()
-  }
-  catch (error) {
+  } catch (error) {
     if (error instanceof FetchError) {
       const status = error.statusCode ?? error.response?.status ?? null
       const recoverableStatuses = new Set([401, 403, 404])

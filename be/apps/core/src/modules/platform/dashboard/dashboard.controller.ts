@@ -4,7 +4,7 @@ import { Controller, Get } from '@tsuki-hono/common'
 import { DashboardService } from './dashboard.service'
 
 @Controller('dashboard')
-@PlatformRoles('superadmin')
+@PlatformRoles('superadmin', 'admin')
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 

@@ -6,7 +6,7 @@ import { UpdateSiteAuthorDto, UpdateSiteSettingsDto } from './site-setting.dto'
 import { SiteSettingService } from './site-setting.service'
 
 @Controller('site/settings')
-@PlatformRoles('superadmin')
+@PlatformRoles('superadmin', 'admin')
 export class SiteSettingController {
   constructor(private readonly siteSettingService: SiteSettingService) {}
 

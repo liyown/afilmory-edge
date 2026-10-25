@@ -8,7 +8,7 @@ import { createLogger, HttpContext } from '@tsuki-hono/common'
 import type { BetterAuthOptions } from 'better-auth'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { APIError, createAuthMiddleware } from 'better-auth/api'
+import { APIError } from 'better-auth/api'
 import { admin } from 'better-auth/plugins'
 import { eq } from 'drizzle-orm'
 import type { Context } from 'hono'
@@ -55,8 +55,9 @@ export class AuthProvider implements OnModuleInit {
       acc[key] = {
         clientId: value.clientId,
         clientSecret: value.clientSecret,
-        // Social sign-in may only attach to the pre-existing owner account.
-        disableSignUp: true,
+        // New visitors may sign in with a social account; the registration
+        // policy is enforced when Better Auth creates the user record.
+        disableSignUp: false,
         ...(redirectUri ? { redirectURI: redirectUri } : {}),
       }
       return acc
@@ -139,8 +140,9 @@ export class AuthProvider implements OnModuleInit {
       emailAndPassword: {
         enabled: true,
         requireEmailVerification: false,
-        // The administrator is created explicitly with `bootstrap:admin`.
-        disableSignUp: true,
+        // Signup stays available; the registration policy (allow toggle and
+        // max user count) is enforced in the user-create hook below.
+        disableSignUp: false,
       },
       trustedOrigins: this.buildTrustedOrigins(),
       session: {
@@ -158,11 +160,27 @@ export class AuthProvider implements OnModuleInit {
         user: {
           create: {
             before: async (user) => {
+              const role = ((user as { role?: string }).role ?? 'user') as 'admin' | 'superadmin' | 'user'
+
+              // Public signups (email or social) must respect the registration
+              // policy. The owner may still create admin accounts while public
+              // registration is closed.
+              if (role === 'user') {
+                try {
+                  await this.systemSettings.ensureRegistrationAllowed()
+                } catch (error) {
+                  if (error instanceof BizException) {
+                    throw new APIError('FORBIDDEN', { message: error.message })
+                  }
+                  throw error
+                }
+              }
+
               return {
                 data: {
                   ...user,
                   email: user.email.trim().toLowerCase(),
-                  role: user.role ?? 'user',
+                  role,
                 },
               }
             },
@@ -198,25 +216,6 @@ export class AuthProvider implements OnModuleInit {
         },
       },
       plugins: [admin(AUTH_ADMIN_PLUGIN_OPTIONS)],
-      hooks: {
-        before: createAuthMiddleware(async (ctx) => {
-          if (ctx.path !== '/sign-up/email') {
-            return
-          }
-
-          try {
-            await this.systemSettings.ensureRegistrationAllowed()
-          } catch (error) {
-            if (error instanceof BizException) {
-              throw new APIError('FORBIDDEN', {
-                message: error.message,
-              })
-            }
-
-            throw error
-          }
-        }),
-      },
     })
 
     return auth as unknown as BetterAuthInstance

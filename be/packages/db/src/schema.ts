@@ -61,7 +61,7 @@ export type PhotoManifestItem = any
 export const CURRENT_PHOTO_MANIFEST_VERSION: ManifestVersion = CURRENT_MANIFEST_VERSION
 export const DATABASE_ONLY_PROVIDER = 'database-only'
 
-export type PlatformRole = 'user' | 'superadmin'
+export type PlatformRole = 'user' | 'admin' | 'superadmin'
 export type PhotoSyncStatus = 'pending' | 'synced' | 'conflict'
 export type CommentStatus = 'pending' | 'approved' | 'rejected' | 'hidden'
 

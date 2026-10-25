@@ -22,7 +22,7 @@ interface UploadCompleteBody extends UploadCompleteInput {
 }
 
 @Controller('photos')
-@PlatformRoles('superadmin')
+@PlatformRoles('superadmin', 'admin')
 export class PersonalPhotoController {
   constructor(private readonly photos: PersonalPhotoService) {}
 

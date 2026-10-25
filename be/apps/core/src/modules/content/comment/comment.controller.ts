@@ -32,7 +32,7 @@ export class CommentController {
   }
 
   @Get('/all')
-  @PlatformRoles('superadmin')
+  @PlatformRoles('superadmin', 'admin')
   async listAllComments(@Query() query: ListAllCommentsQueryDto) {
     return await this.commentService.listAllComments(query)
   }

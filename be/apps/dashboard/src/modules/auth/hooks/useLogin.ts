@@ -43,6 +43,14 @@ export function useLogin() {
       queryClient.setQueryData(AUTH_SESSION_QUERY_KEY, session)
       setAuthUser(session.user)
       setErrorMessage(null)
+
+      // Regular accounts only have gallery/comment access; sending them into
+      // the dashboard would immediately bounce them to the no-access screen.
+      if (session.user.role === 'user') {
+        window.location.href = '/'
+        return
+      }
+
       const redirect = getSafeRedirect(new URLSearchParams(location.search).get('redirect'))
       navigate(redirect, { replace: true })
     },

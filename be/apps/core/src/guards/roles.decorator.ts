@@ -3,7 +3,7 @@ import { applyDecorators } from '@tsuki-hono/common'
 export const AUTH_REQUIRED_METADATA = Symbol.for('core.auth.required')
 export const PLATFORM_ROLES_METADATA = Symbol.for('core.auth.platform_roles')
 
-export type PlatformRole = 'user' | 'superadmin'
+export type PlatformRole = 'user' | 'admin' | 'superadmin'
 
 function defineMetadataDecorator<T>(key: symbol, value: T): MethodDecorator & ClassDecorator {
   return applyDecorators((target: object, _propertyKey: string | symbol, descriptor: PropertyDescriptor) => {

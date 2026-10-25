@@ -6,16 +6,16 @@ import { BizException, ErrorCode } from '@core/errors'
 import { PlatformRoles, RequireAuth } from '@core/guards/roles.decorator'
 import { BypassResponseTransform } from '@core/interceptors/response-transform.decorator'
 import { SystemSettingService } from '@core/modules/configuration/system-setting/system-setting.service'
-import { Body, ContextParam, Controller, createLogger, Get, HttpContext, Post } from '@tsuki-hono/common'
+import { Body, ContextParam, Controller, createLogger, Get, HttpContext, Param, Post } from '@tsuki-hono/common'
 import { freshSessionMiddleware } from 'better-auth/api'
-import { eq } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 
 import { AuthProvider } from './auth.provider'
 
 const logger = createLogger('AuthController')
 
-const SOCIAL_PROVIDER_METADATA: Record<string, { name: string, icon: string }> = {
+const SOCIAL_PROVIDER_METADATA: Record<string, { name: string; icon: string }> = {
   google: {
     name: 'Google',
     icon: 'i-logos-google-icon',
@@ -33,14 +33,14 @@ const SOCIAL_PROVIDER_METADATA: Record<string, { name: string, icon: string }> =
 const PROVIDER_ID_SEPARATOR_PATTERN = /[-_]/g
 const PROVIDER_ID_WORD_START_PATTERN = /\b\w/g
 
-function resolveSocialProviderMetadata(id: string): { name: string, icon: string } {
+function resolveSocialProviderMetadata(id: string): { name: string; icon: string } {
   const metadata = SOCIAL_PROVIDER_METADATA[id]
   if (metadata) {
     return metadata
   }
   const formattedId = id
     .replaceAll(PROVIDER_ID_SEPARATOR_PATTERN, ' ')
-    .replaceAll(PROVIDER_ID_WORD_START_PATTERN, match => match.toUpperCase())
+    .replaceAll(PROVIDER_ID_WORD_START_PATTERN, (match) => match.toUpperCase())
   return {
     name: formattedId.trim() || id,
     icon: 'i-mingcute-earth-2-line',
@@ -137,8 +137,8 @@ export class AuthController {
     const enabledProviders = new Set(await this.auth.getEnabledProviderIds())
     return {
       accounts: accounts
-        .filter(account => account.providerId !== 'credential' && enabledProviders.has(account.providerId))
-        .map(account => this.serializeSocialAccount(account)),
+        .filter((account) => account.providerId !== 'credential' && enabledProviders.has(account.providerId))
+        .map((account) => this.serializeSocialAccount(account)),
     }
   }
 
@@ -200,9 +200,9 @@ export class AuthController {
     const enabledProviders = new Set(await this.auth.getEnabledProviderIds())
     const allAccounts = await auth.api.listUserAccounts({ headers })
     const linkedProviderAccounts = allAccounts.filter(
-      account => account.providerId !== 'credential' && enabledProviders.has(account.providerId),
+      (account) => account.providerId !== 'credential' && enabledProviders.has(account.providerId),
     )
-    const hasTargetAccount = linkedProviderAccounts.some(account => account.providerId === providerId)
+    const hasTargetAccount = linkedProviderAccounts.some((account) => account.providerId === providerId)
     if (hasTargetAccount && linkedProviderAccounts.length <= 1) {
       throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: '至少需要保留一个已绑定的 OAuth Provider' })
     }
@@ -234,7 +234,7 @@ export class AuthController {
   }
 
   @Get('/permissions/dashboard')
-  @PlatformRoles('superadmin')
+  @PlatformRoles('superadmin', 'admin')
   checkDashboardPermission() {
     return { allowed: true }
   }
@@ -245,8 +245,56 @@ export class AuthController {
     return { allowed: true }
   }
 
+  @Get('/users')
+  @PlatformRoles('superadmin')
+  async listUsers() {
+    const db = this.dbAccessor.get()
+    const users = await db
+      .select({
+        id: authUsers.id,
+        name: authUsers.name,
+        email: authUsers.email,
+        image: authUsers.image,
+        role: authUsers.role,
+        createdAt: authUsers.createdAt,
+        lastSignedInAt: authUsers.lastSignedInAt,
+        banned: authUsers.banned,
+      })
+      .from(authUsers)
+      .orderBy(desc(authUsers.createdAt))
+
+    return { users }
+  }
+
+  @Post('/users/:id/role')
+  @PlatformRoles('superadmin')
+  async updateUserRole(@Param('id') id: string, @Body() body: { role?: string }) {
+    const { role } = body
+    if (role !== 'user' && role !== 'admin') {
+      throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: '角色只能是 user 或 admin' })
+    }
+
+    const db = this.dbAccessor.get()
+    const [target] = await db
+      .select({ id: authUsers.id, role: authUsers.role })
+      .from(authUsers)
+      .where(eq(authUsers.id, id))
+      .limit(1)
+
+    if (!target) {
+      throw new BizException(ErrorCode.COMMON_NOT_FOUND, { message: '用户不存在' })
+    }
+    if (target.role === 'superadmin') {
+      throw new BizException(ErrorCode.AUTH_FORBIDDEN, { message: '不能修改站点所有者的角色' })
+    }
+
+    await db.update(authUsers).set({ role, updatedAt: new Date().toISOString() }).where(eq(authUsers.id, id))
+
+    return { id, role }
+  }
+
   @Post('/sign-in/email')
-  async signInEmail(@ContextParam() context: Context, @Body() body: { email: string, password: string }) {
+  async signInEmail(@ContextParam() context: Context, @Body() body: { email: string; password: string }) {
     const email = body.email.trim().toLowerCase()
     if (email.length === 0) {
       throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: '邮箱不能为空' })
@@ -408,8 +456,7 @@ export class AuthController {
         throw new BizException(ErrorCode.COMMON_BAD_REQUEST, { message: '回调地址必须使用 http 或 https 协议' })
       }
       return parsed.toString()
-    }
-    catch (error) {
+    } catch (error) {
       if (error instanceof BizException) {
         throw error
       }
@@ -480,8 +527,7 @@ export class AuthController {
       let payload: unknown
       try {
         payload = await clone.json()
-      }
-      catch {
+      } catch {
         payload = null
       }
 
@@ -529,8 +575,7 @@ export class AuthController {
       })
       parsed.searchParams.set('state', wrapped)
       return parsed.toString()
-    }
-    catch (error) {
+    } catch (error) {
       logger.error(`[AuthController] Failed to wrap OAuth gateway state for url=${url}`, error)
       return url
     }

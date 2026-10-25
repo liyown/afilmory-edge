@@ -9,15 +9,28 @@ import { fetchSetupStatus, SETUP_STATUS_QUERY_KEY } from '~/modules/auth/api/set
 import { OwnerSetupForm } from '~/modules/auth/components/OwnerSetupForm'
 import { SocialAuthButtons } from '~/modules/auth/components/SocialAuthButtons'
 import { useLogin } from '~/modules/auth/hooks/useLogin'
+import { useSignUp } from '~/modules/auth/hooks/useSignUp'
+
+type AuthMode = 'login' | 'signup'
 
 export function Component() {
+  const [mode, setMode] = useState<AuthMode>('login')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const { login, isLoading, error, clearError } = useLogin()
+  const loginState = useLogin()
+  const signUpState = useSignUp()
+  const isLoading = loginState.isLoading || signUpState.isLoading
+  const error = mode === 'login' ? loginState.error : signUpState.error
   const { data: setupStatus, isPending: isCheckingSetup } = useQuery({
     queryKey: SETUP_STATUS_QUERY_KEY,
     queryFn: fetchSetupStatus,
   })
+
+  const clearError = () => {
+    loginState.clearError()
+    signUpState.clearError()
+  }
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -26,7 +39,15 @@ export function Component() {
       return
     }
 
-    login({ email: email.trim(), password })
+    if (mode === 'signup') {
+      if (!name.trim()) {
+        return
+      }
+      signUpState.signUp({ name: name.trim(), email: email.trim(), password })
+      return
+    }
+
+    loginState.login({ email: email.trim(), password })
   }
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -82,8 +103,12 @@ export function Component() {
           <form onSubmit={handleSubmit} className="bg-background-tertiary relative w-[600px]">
             <div className="p-10">
               <div className="mb-8">
-                <h1 className="text-text mb-2 text-3xl font-bold">Login</h1>
-                <p className="text-text-secondary text-sm">Enter your credentials to access the dashboard</p>
+                <h1 className="text-text mb-2 text-3xl font-bold">{mode === 'login' ? 'Login' : 'Create account'}</h1>
+                <p className="text-text-secondary text-sm">
+                  {mode === 'login'
+                    ? 'Enter your credentials to access the dashboard'
+                    : 'Sign up to comment on photos and join the community'}
+                </p>
               </div>
 
               {error && (
@@ -101,6 +126,28 @@ export function Component() {
                 </m.div>
               )}
 
+              {mode === 'signup' && (
+                <div className="mb-5 space-y-2">
+                  <Label htmlFor="name">Name</Label>
+                  <Input
+                    id="name"
+                    type="text"
+                    placeholder="Your name"
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value)
+                      if (error) {
+                        clearError()
+                      }
+                    }}
+                    disabled={isLoading}
+                    error={!!error}
+                    autoComplete="name"
+                    autoFocus
+                  />
+                </div>
+              )}
+
               <div className="mb-5 space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -112,7 +159,7 @@ export function Component() {
                   disabled={isLoading}
                   error={!!error}
                   autoComplete="email"
-                  autoFocus
+                  autoFocus={mode === 'login'}
                 />
               </div>
 
@@ -121,12 +168,12 @@ export function Component() {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="Enter your password"
+                  placeholder={mode === 'signup' ? 'Choose a password' : 'Enter your password'}
                   value={password}
                   onChange={handlePasswordChange}
                   disabled={isLoading}
                   error={!!error}
-                  autoComplete="current-password"
+                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                 />
               </div>
 
@@ -135,12 +182,26 @@ export function Component() {
                 variant="primary"
                 size="md"
                 className="w-full"
-                disabled={!email.trim() || !password.trim()}
+                disabled={!email.trim() || !password.trim() || (mode === 'signup' && !name.trim())}
                 isLoading={isLoading}
-                loadingText="Signing in..."
+                loadingText={mode === 'signup' ? 'Creating account...' : 'Signing in...'}
               >
-                Sign In
+                {mode === 'signup' ? 'Create account' : 'Sign In'}
               </Button>
+
+              <p className="text-text-secondary mt-5 text-center text-sm">
+                {mode === 'signup' ? 'Already have an account?' : "Don't have an account?"}{' '}
+                <button
+                  type="button"
+                  className="text-accent hover:underline"
+                  onClick={() => {
+                    clearError()
+                    setMode(mode === 'signup' ? 'login' : 'signup')
+                  }}
+                >
+                  {mode === 'signup' ? 'Sign in' : 'Sign up'}
+                </button>
+              </p>
 
               <div className="relative my-8">
                 <div className="absolute inset-0 flex items-center">
