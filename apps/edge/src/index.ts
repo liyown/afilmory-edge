@@ -248,6 +248,25 @@ async function handleRequest(request: Request, executionCtx?: ExecutionContext):
       }
     }
 
+    // Thumbnails are immutable and requested by every visitor on every cold
+    // visit. Without an edge cache each one is a Worker -> OSS round-trip,
+    // which dominated first-screen time. Cache full (non-range) reads in the
+    // local PoP; ranged video reads stay uncached.
+    const cache = caches.default
+    const cacheKey = request.method === 'GET' && !requestedRange ? new Request(url.toString(), { method: 'GET' }) : null
+    if (cacheKey) {
+      const cached = await cache.match(cacheKey)
+      if (cached) {
+        const headers = new Headers(cached.headers)
+        headers.set('x-media-cache', 'hit')
+        return new Response(cached.body, {
+          status: cached.status,
+          statusText: cached.statusText,
+          headers,
+        })
+      }
+    }
+
     const object = await storageGet(
       key,
       requestedRange ? { offset: requestedRange.offset, length: requestedRange.length } : undefined,
@@ -272,10 +291,15 @@ async function handleRequest(request: Request, executionCtx?: ExecutionContext):
     }
     headers.set('accept-ranges', 'bytes')
     headers.set('cache-control', 'public, max-age=31536000, immutable')
-    return new Response(object.response.body, {
+    const response = new Response(object.response.body, {
       status: requestedRange && headers.has('content-range') ? 206 : 200,
       headers,
     })
+    if (cacheKey) {
+      executionCtx?.waitUntil(cache.put(cacheKey, response.clone()))
+      response.headers.set('x-media-cache', 'miss')
+    }
+    return response
   }
 
   // Homepage card. Kept separate from the photo route so `/og/` is a valid

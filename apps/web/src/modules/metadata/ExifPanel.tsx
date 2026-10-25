@@ -7,8 +7,9 @@ import { isNil } from 'es-toolkit/compat'
 import { useAtomValue } from 'jotai'
 import { m } from 'motion/react'
 import type { FC } from 'react'
-import { Fragment, useCallback, useMemo, useState } from 'react'
+import { Fragment, lazy, Suspense, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useInView } from 'react-intersection-observer'
 
 import { isExiftoolLoadedAtom } from '~/atoms/app'
 import { useMobile } from '~/hooks/useMobile'
@@ -25,9 +26,30 @@ import { getRenderablePhotoRegions } from '~/modules/viewer/photo-region-bounds'
 import { ExifRowGroup, ExifSection } from './ExifSection'
 import { formatExifData, Row } from './formatExifData'
 import { HistogramChart } from './HistogramChart'
-import { MiniMap } from './MiniMap'
 import { PhotoRegionsSection } from './PhotoRegionsSection'
 import { RawExifViewer } from './RawExifViewer'
+
+// MapLibre is ~1 MB and lives far down the EXIF panel. Loading it only when
+// the GPS section approaches the viewport keeps the viewer's first paint light.
+const MiniMap = lazy(() => import('./MiniMap').then((module) => ({ default: module.MiniMap })))
+
+const miniMapPlaceholder = 'h-40 w-full rounded-lg border border-white/10 bg-white/[0.03]'
+
+function LazyMiniMap({ latitude, longitude, photoId }: { latitude: number; longitude: number; photoId: string }) {
+  const { ref, inView } = useInView({ triggerOnce: true, rootMargin: '240px' })
+
+  return (
+    <div ref={ref}>
+      {inView ? (
+        <Suspense fallback={<div className={miniMapPlaceholder} />}>
+          <MiniMap latitude={latitude} longitude={longitude} photoId={photoId} />
+        </Suspense>
+      ) : (
+        <div className={miniMapPlaceholder} />
+      )}
+    </div>
+  )
+}
 
 const captureChipClassName = 'border-accent/20 bg-accent/10 flex h-6 items-center gap-2 rounded-md border px-2'
 const MAX_VISIBLE_TAGS = 6
@@ -469,7 +491,7 @@ export const ExifPanelContent: FC<ExifPanelContentProps> = ({
                 )}
 
                 {decimalLatitude !== null && decimalLongitude !== null && (
-                  <MiniMap latitude={decimalLatitude} longitude={decimalLongitude} photoId={currentPhoto.id} />
+                  <LazyMiniMap latitude={decimalLatitude} longitude={decimalLongitude} photoId={currentPhoto.id} />
                 )}
               </ExifSection>
             )}

@@ -1,12 +1,12 @@
 import 'maplibre-gl/dist/maplibre-gl.css'
 
+import mapLibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Map from 'react-map-gl/maplibre'
 import { Link } from 'react-router'
 
 import { getMapStyle } from '~/lib/map/style'
-import { mapLibreWorkerUrl } from '~/lib/map/worker'
 
 interface MiniMapProps {
   latitude: number
