@@ -11,11 +11,15 @@ export interface WallFrameInsets {
 }
 
 export interface WallLayoutOptions {
+  /** Width the rows are laid out in; rows are centred inside it. */
   contentWidth: number
-  targetRowHeight: number
-  minRowHeight: number
+  /** Frame height of the widest row (the middle of the cluster). */
   maxRowHeight: number
+  /** Frame height of the narrowest rows (top and bottom of the cluster). */
+  minRowHeight: number
+  /** Minimum space between neighbouring frames. */
   gutter: number
+  /** Minimum space between rows. */
   rowGap: number
   frame: WallFrameInsets
   maxRotation: number
@@ -27,6 +31,7 @@ export interface WallLayoutOptions {
 export interface WallLayoutItem {
   id: string
   index: number
+  /** Row the item belongs to, 0 = top. */
   row: number
   x: number
   y: number
@@ -50,12 +55,8 @@ export interface WallLayout {
   rows: WallLayoutRow[]
   width: number
   height: number
-  topPadding: number
-}
-
-export interface WallVisibleRange {
-  first: number
-  last: number
+  /** Row index whose width is widest, i.e. the vertical centre of the cluster. */
+  centerRow: number
 }
 
 export const WALL_TOP_INSET = 64
@@ -63,6 +64,10 @@ export const WALL_TOP_INSET = 64
 const DEFAULT_ASPECT = 4 / 3
 const MIN_ASPECT = 0.3
 const MAX_ASPECT = 5
+/** Rows never get narrower than this fraction of the widest row. */
+const MIN_ROW_WIDTH_RATIO = 0.26
+/** Photos in narrower rows are scaled down so the silhouette reads as a circle. */
+const MIN_ROW_PHOTO_RATIO = 0.72
 
 const round = (value: number) => Math.round(value * 100) / 100
 
@@ -83,88 +88,153 @@ const hashString = (value: string) => {
 }
 
 const random01 = (seed: number, salt: number) => {
-  let value = (seed + Math.imul(salt, 0x9E3779B1)) | 0
+  let value = (seed + Math.imul(salt, 2654435761)) | 0
   value = Math.imul(value ^ (value >>> 15), value | 1)
   value ^= value + Math.imul(value ^ (value >>> 7), value | 61)
   return ((value ^ (value >>> 14)) >>> 0) / 4294967296
 }
 
-const centeredStart = (contentWidth: number, totalWidth: number) =>
-  totalWidth >= contentWidth ? 0 : (contentWidth - totalWidth) / 2
+/**
+ * Relative half-width of a row, given how far it sits from the vertical centre.
+ * `1` at the centre, tapering to `MIN_ROW_WIDTH_RATIO` at the edges, so the
+ * stacked rows trace an ellipse instead of a rectangle.
+ */
+const rowWidthFactor = (row: number, totalRows: number) => {
+  if (totalRows <= 1) {
+    return 1
+  }
+  const center = (totalRows - 1) / 2
+  const offsetFromCenter = center === 0 ? 0 : (row - center) / center
+  const profile = Math.sqrt(1 - Math.abs(offsetFromCenter) ** 1.7)
+  return MIN_ROW_WIDTH_RATIO + (1 - MIN_ROW_WIDTH_RATIO) * profile
+}
+
+/** Ring capacity grows with `n`, so total slots are ~3n²; invert for a row count. */
+const estimateRowCount = (count: number) => {
+  if (count <= 3) {
+    return 1
+  }
+  if (count <= 6) {
+    return 3
+  }
+  if (count <= 12) {
+    return 4
+  }
+  if (count <= 20) {
+    return 6
+  }
+  return Math.min(15, Math.max(6, Math.round(Math.sqrt(count / 0.55))))
+}
+
+/** Split `count` photos into `rows` rows following the ellipse profile. */
+const planRowCounts = (count: number, rows: number) => {
+  const profile = Array.from({ length: rows }, (_, row) => rowWidthFactor(row, rows))
+  const weights = profile.map((factor) => factor ** 1.35)
+  const weightSum = weights.reduce((sum, weight) => sum + weight, 0)
+
+  const counts = weights.map((weight) => Math.max(1, Math.round((count * weight) / weightSum)))
+
+  // Push the rounding drift into the widest rows so the total always matches.
+  const widest = () => counts.indexOf(Math.max(...counts))
+  let total = counts.reduce((sum, n) => sum + n, 0)
+  while (total > count) {
+    const target = widest()
+    if (counts[target] <= 1) {
+      break
+    }
+    counts[target] -= 1
+    total -= 1
+  }
+  while (total < count) {
+    counts[widest()] += 1
+    total += 1
+  }
+
+  return counts
+}
 
 export const createWallLayout = (photos: WallPhotoInput[], options: WallLayoutOptions): WallLayout => {
   const items: WallLayoutItem[] = []
   const rows: WallLayoutRow[] = []
 
+  const { contentWidth, frame, gutter, maxOffset, maxRotation, rowGap } = options
+
   if (photos.length === 0) {
-    return { items, rows, width: options.contentWidth, height: 0, topPadding: options.topPadding }
+    return { items, rows, width: contentWidth, height: 0, centerRow: 0 }
   }
 
-  const { bottomPadding, contentWidth, frame, gutter, maxOffset, maxRotation, rowGap } = options
-  const frameSideWidth = frame.side * 2
-  const frameExtraHeight = frame.top + frame.bottom
+  const rowCount = Math.min(estimateRowCount(photos.length), photos.length)
+  const rowCounts = planRowCounts(photos.length, rowCount)
 
-  let cursorY = options.topPadding
   let index = 0
-  let rowIndex = 0
+  let cursorY = options.topPadding
+  const totalRows = rowCounts.length
 
-  while (index < photos.length) {
-    let count = 0
-    let aspectSum = 0
-    let photoHeight = options.targetRowHeight
-
-    while (index + count < photos.length) {
-      aspectSum += resolveAspect(photos[index + count])
-      count += 1
-      const availableWidth = contentWidth - count * frameSideWidth - (count - 1) * gutter
-      photoHeight = availableWidth / aspectSum
-      if (photoHeight <= options.targetRowHeight) {
-        break
-      }
+  for (let row = 0; row < totalRows; row++) {
+    const count = rowCounts[row]
+    if (count === 0) {
+      continue
     }
 
-    photoHeight = Math.min(Math.max(photoHeight, options.minRowHeight), options.maxRowHeight)
+    // The ellipse profile sets both how wide this row is *and* how large its
+    // photos may be, so every row fills its band and the taper is visible.
+    const heightFactor = rowWidthFactor(row, totalRows)
+    const rowWidth = contentWidth * heightFactor
+    const rowPhotos = photos.slice(index, index + count)
 
-    const frameWidths: number[] = []
-    for (let offset = 0; offset < count; offset++) {
-      frameWidths.push(round(resolveAspect(photos[index + offset]) * photoHeight + frameSideWidth))
-    }
+    // Solve for the photo height that makes the row exactly as wide as its band.
+    // Frame chrome (side padding, gutters) is fixed, so it comes out first and
+    // the remaining width is shared by the photos in proportion to their aspect.
+    const availableWidth = rowWidth - count * frame.side * 2 - (count - 1) * gutter
+    const aspectSum = rowPhotos.reduce((sum, photo) => sum + resolveAspect(photo), 0)
+    const maxPhotoHeight = Math.max(
+      options.minRowHeight,
+      Math.round(options.maxRowHeight * (MIN_ROW_PHOTO_RATIO + (1 - MIN_ROW_PHOTO_RATIO) * heightFactor)),
+    )
+    const fittedHeight = Math.floor(availableWidth / Math.max(aspectSum, 0.1))
+    const rowPhotoHeight = Math.max(1, Math.min(maxPhotoHeight, fittedHeight))
+    // No row may exceed the canvas, whatever the caps above produced.
+    const safePhotoHeight = rowPhotoHeight
 
-    const totalWidth = frameWidths.reduce((sum, width) => sum + width, 0) + gutter * (count - 1)
-    const frameHeight = round(photoHeight + frameExtraHeight)
+    const frames = rowPhotos.map((photo) => {
+      const width = round(resolveAspect(photo) * safePhotoHeight + frame.side * 2)
+      return { photo, width, height: round(safePhotoHeight + frame.top + frame.bottom) }
+    })
 
-    let cursorX = centeredStart(contentWidth, totalWidth)
+    const rowFrameWidth = frames.reduce((sum, item) => sum + item.width, 0) + gutter * (count - 1)
+    const startX = (contentWidth - rowFrameWidth) / 2
+
+    let cursorX = startX
     let rowTop = Number.POSITIVE_INFINITY
     let rowBottom = Number.NEGATIVE_INFINITY
 
-    for (let offset = 0; offset < count; offset++) {
-      const photo = photos[index + offset]
-      const seed = hashString(photo.id)
+    for (let offset = 0; offset < frames.length; offset++) {
+      const entry = frames[offset]
+      const seed = hashString(entry.photo.id)
       const rotation = round((random01(seed, 1) * 2 - 1) * maxRotation)
       const offsetY = round((random01(seed, 2) * 2 - 1) * maxOffset)
-      const frameWidth = frameWidths[offset]
       const y = round(cursorY + offsetY)
 
       items.push({
-        id: photo.id,
+        id: entry.photo.id,
         index: index + offset,
-        row: rowIndex,
+        row,
         x: round(cursorX),
         y,
-        width: frameWidth,
-        height: frameHeight,
-        photoWidth: round(frameWidth - frameSideWidth),
-        photoHeight,
+        width: entry.width,
+        height: entry.height,
+        photoWidth: round(entry.width - frame.side * 2),
+        photoHeight: round(entry.height - frame.top - frame.bottom),
         rotation,
       })
 
       rowTop = Math.min(rowTop, y)
-      rowBottom = Math.max(rowBottom, y + frameHeight)
-      cursorX += frameWidth + gutter
+      rowBottom = Math.max(rowBottom, y + entry.height)
+      cursorX += entry.width + gutter
     }
 
     rows.push({
-      index: rowIndex,
+      index: row,
       startIndex: index,
       endIndex: index + count - 1,
       top: round(rowTop),
@@ -173,71 +243,49 @@ export const createWallLayout = (photos: WallPhotoInput[], options: WallLayoutOp
 
     cursorY = rowBottom + rowGap
     index += count
-    rowIndex += 1
   }
 
   const lastRow = rows.at(-1)
+  const centerRow = rowCounts.indexOf(Math.max(...rowCounts))
 
   return {
     items,
     rows,
     width: contentWidth,
-    height: round((lastRow?.bottom ?? 0) + bottomPadding),
-    topPadding: options.topPadding,
+    height: round((lastRow?.bottom ?? 0) + options.bottomPadding),
+    centerRow,
   }
 }
 
-export const findVisibleRowRange = (
-  rows: WallLayoutRow[],
-  viewportTop: number,
-  viewportBottom: number,
-): WallVisibleRange | null => {
-  if (rows.length === 0 || viewportBottom < viewportTop) {
-    return null
-  }
-
-  let low = 0
-  let high = rows.length - 1
-  let first = -1
-
-  while (low <= high) {
-    const mid = (low + high) >> 1
-    if (rows[mid].bottom >= viewportTop) {
-      first = mid
-      high = mid - 1
-    } else {
-      low = mid + 1
-    }
-  }
-
-  if (first === -1) {
-    return null
-  }
-
-  low = first
-  high = rows.length - 1
-  let last = -1
-
-  while (low <= high) {
-    const mid = (low + high) >> 1
-    if (rows[mid].top <= viewportBottom) {
-      last = mid
-      low = mid + 1
-    } else {
-      high = mid - 1
-    }
-  }
-
-  return last === -1 ? null : { first, last }
+export interface WallViewport {
+  /** Visible rectangle in canvas coordinates. */
+  left: number
+  top: number
+  width: number
+  height: number
+  /** Extra canvas-space margin kept mounted around the viewport. */
+  margin?: number
 }
 
-export const sliceVisibleItems = (layout: WallLayout, range: WallVisibleRange) => {
-  const firstRow = layout.rows[range.first]
-  const lastRow = layout.rows[range.last]
-
-  if (!firstRow || !lastRow) {
+/**
+ * Rows are culled by vertical intersection only, which is enough: a row spans
+ * the full canvas width by construction, so the horizontal position of the
+ * viewport never changes which rows are visible.
+ */
+export const sliceVisibleItems = (layout: WallLayout, viewport: WallViewport) => {
+  if (!layout.items.length) {
     return []
   }
 
-  return layout.items.slice(firstRow.startIndex, lastRow.endIndex + 1)
+  const margin = viewport.margin ?? 0
+  const top = viewport.top - margin
+  const bottom = viewport.top + viewport.height + margin
+
+  const items: WallLayoutItem[] = []
+  for (const row of layout.rows) {
+    if (row.bottom >= top && row.top <= bottom) {
+      items.push(...layout.items.slice(row.startIndex, row.endIndex + 1))
+    }
+  }
+  return items
 }

@@ -15,16 +15,15 @@ import { useViewport } from '~/hooks/useViewport'
 import type { PhotoManifest } from '~/types/photo'
 
 import styles from './wall.module.css'
-import type { WallFrameInsets, WallLayout, WallLayoutOptions, WallVisibleRange } from './wall-layout'
-import { createWallLayout, findVisibleRowRange, sliceVisibleItems, WALL_TOP_INSET } from './wall-layout'
+import type { WallFrameInsets, WallLayout, WallLayoutOptions } from './wall-layout'
+import { createWallLayout, sliceVisibleItems, WALL_TOP_INSET } from './wall-layout'
 import { WallFrame } from './WallFrame'
 
 const DESKTOP_OPTIONS: Omit<WallLayoutOptions, 'contentWidth'> = {
-  targetRowHeight: 300,
-  minRowHeight: 190,
-  maxRowHeight: 380,
-  gutter: 56,
-  rowGap: 76,
+  minRowHeight: 130,
+  maxRowHeight: 230,
+  gutter: 48,
+  rowGap: 64,
   frame: { side: 18, top: 18, bottom: 58 },
   maxRotation: 2.4,
   maxOffset: 14,
@@ -33,11 +32,10 @@ const DESKTOP_OPTIONS: Omit<WallLayoutOptions, 'contentWidth'> = {
 }
 
 const MOBILE_OPTIONS: Omit<WallLayoutOptions, 'contentWidth'> = {
-  targetRowHeight: 156,
-  minRowHeight: 112,
-  maxRowHeight: 240,
-  gutter: 16,
-  rowGap: 32,
+  minRowHeight: 76,
+  maxRowHeight: 150,
+  gutter: 14,
+  rowGap: 24,
   frame: { side: 10, top: 10, bottom: 34 },
   maxRotation: 2,
   maxOffset: 8,
@@ -50,6 +48,7 @@ const MAX_SCALE = 3
 const MIN_INITIAL_SCALE = 0.55
 const CULLING_MARGIN = 700
 const CLICK_SUPPRESS_MS = 280
+const GESTURE_WATCHDOG_MS = 260
 const ZOOM_ANIMATION_MS = 240
 const EASING = 'easeOut' as const
 
@@ -58,23 +57,39 @@ interface WallViewProps {
   onVisibleRangeChange?: (startIndex: number, stopIndex: number, items: PhotoManifest[]) => void
 }
 
+/**
+ * The packing square is a sizing hint, not a hard bound: the layout expands the
+ * canvas to whatever the circular cluster actually needs.
+ */
 const resolveWallWidth = (viewportWidth: number, isMobile: boolean) => {
   if (isMobile) {
-    return Math.max(viewportWidth, 360) * 1.12
+    return Math.max(viewportWidth * 2.6, 1000)
   }
-  return Math.min(Math.max(viewportWidth * 1.3, 1280), 2600)
+  return Math.max(Math.min(viewportWidth * 2.2, 3000), 2200)
 }
 
-const createInitialView = (viewportWidth: number, viewportHeight: number, layout: WallLayout) => {
-  const fittedScale = viewportWidth / layout.width
-  const scale = Math.min(Math.max(fittedScale, MIN_INITIAL_SCALE), 1)
-  const scaledHeight = layout.height * scale
-  const verticalSlack = viewportHeight - scaledHeight
+/**
+ * Start on the centre of the cluster so the first screen reads as a circle of
+ * photos, letting the user pan outward instead of landing on the canvas edge.
+ */
+const createInitialView = (viewportWidth: number, viewportHeight: number, layout: WallLayout, isMobile: boolean) => {
+  // Centre on the widest row so the first screen shows the belly of the circle;
+  // the narrower rows above and below are a short pan away.
+  // Fit the whole silhouette on open, so the circular arrangement is obvious
+  // before the user starts panning into individual rows.
+  const fitScale = Math.min(
+    viewportWidth / layout.width,
+    (viewportHeight - WALL_TOP_INSET * 2) / Math.max(layout.height, 1),
+  )
+  const targetScale = Math.min(Math.max(fitScale, MIN_INITIAL_SCALE), isMobile ? 1.1 : 1.05)
+  const centerRow = layout.rows[layout.centerRow] ?? layout.rows[0]
+  const centerY = centerRow ? (centerRow.top + centerRow.bottom) / 2 : 0
+  const visibleHeight = viewportHeight - WALL_TOP_INSET
 
   return {
-    scale,
-    x: Math.round((viewportWidth - layout.width * scale) / 2),
-    y: verticalSlack > WALL_TOP_INSET + 150 ? 0 : verticalSlack > 0 ? Math.round(verticalSlack / 2) : 0,
+    scale: targetScale,
+    x: Math.round(viewportWidth / 2 - (layout.width / 2) * targetScale),
+    y: Math.round(WALL_TOP_INSET + visibleHeight / 2 - centerY * targetScale),
   }
 }
 
@@ -107,20 +122,47 @@ const useRafTransform = () => {
   return { instance, schedule, callbackRef }
 }
 
-const useWallRange = (layout: WallLayout, viewportHeight: number) => {
+interface WallViewportBox {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+/**
+ * Reads the canvas-space viewport, but only re-renders when the set of mounted
+ * rings actually changes. Continuous panning otherwise schedules a React update
+ * per animation frame, which is what made dragging feel sticky on mobile.
+ */
+const useWallViewport = (layout: WallLayout, viewportWidth: number, viewportHeight: number): WallViewportBox | null => {
   const { instance, schedule, callbackRef } = useRafTransform()
-  const [range, setRange] = useState<WallVisibleRange | null>(null)
+  const [box, setBox] = useState<WallViewportBox | null>(null)
+  const lastKeyRef = useRef('')
 
   const read = useCallback(() => {
-    const { scale, positionY } = instance.state
-    if (!scale || !viewportHeight) {
+    const { scale, positionX, positionY } = instance.state
+    if (!scale || !viewportHeight || !viewportWidth) {
       return
     }
-    const top = -positionY / scale - CULLING_MARGIN
-    const bottom = (viewportHeight - positionY) / scale + CULLING_MARGIN
-    const next = findVisibleRowRange(layout.rows, top, bottom)
-    setRange((previous) => (previous?.first === next?.first && previous?.last === next?.last ? previous : next))
-  }, [instance, layout.rows, viewportHeight])
+    const next: WallViewportBox = {
+      left: -positionX / scale,
+      top: -positionY / scale,
+      width: viewportWidth / scale,
+      height: viewportHeight / scale,
+    }
+
+    // Key on the culled row band, not raw coordinates: staying inside the same
+    // rows keeps the mounted DOM untouched while panning.
+    const visible = sliceVisibleItems(layout, { ...next, margin: CULLING_MARGIN })
+    const first = visible[0]?.row ?? -1
+    const last = visible.at(-1)?.row ?? -1
+    const key = `${first}:${last}`
+    if (key === lastKeyRef.current) {
+      return
+    }
+    lastKeyRef.current = key
+    setBox(next)
+  }, [instance, layout, viewportHeight, viewportWidth])
 
   useTransformInit(read)
 
@@ -133,15 +175,15 @@ const useWallRange = (layout: WallLayout, viewportHeight: number) => {
     schedule()
   }, [schedule])
 
-  return range
+  return box
 }
 
 const useWallScale = () => {
   const { instance, schedule, callbackRef } = useRafTransform()
-  const [scale, setScale] = useState(() => Math.round(instance.state.scale * 100) / 100)
+  const [scale, setScale] = useState(() => Math.round(instance.state.scale * 100))
 
   const read = useCallback(() => {
-    const next = Math.round(instance.state.scale * 100) / 100
+    const next = Math.round(instance.state.scale * 100)
     setScale((previous) => (previous === next ? previous : next))
   }, [instance])
 
@@ -172,28 +214,31 @@ const WallCanvas = ({
   onOpen: (index: number, element: HTMLElement) => void
   onVisibleRangeChange?: WallViewProps['onVisibleRangeChange']
 }) => {
+  const viewportWidth = useViewport((viewport) => viewport.w)
   const viewportHeight = useViewport((viewport) => viewport.h)
-  const range = useWallRange(layout, viewportHeight)
-  const lastReportedRef = useRef<WallVisibleRange | null>(null)
+  const box = useWallViewport(layout, viewportWidth, viewportHeight)
+  const lastReportedRef = useRef<{ first: number; last: number } | null>(null)
 
-  const visibleItems = useMemo(() => (range ? sliceVisibleItems(layout, range) : []), [layout, range])
+  const visibleItems = useMemo(
+    () => (box ? sliceVisibleItems(layout, { ...box, margin: CULLING_MARGIN }) : []),
+    [box, layout],
+  )
 
   useEffect(() => {
-    if (!onVisibleRangeChange || !range) {
+    if (!onVisibleRangeChange || !visibleItems.length) {
       return
     }
-    const firstRow = layout.rows[range.first]
-    const lastRow = layout.rows[range.last]
-    if (!firstRow || !lastRow) {
-      return
-    }
+    // Items come back in layout order; the first/last indices describe the
+    // mounted band, which is what the header date range wants.
+    const first = visibleItems[0].index
+    const last = visibleItems.at(-1)?.index ?? first
     const previous = lastReportedRef.current
-    if (previous?.first === firstRow.startIndex && previous.last === lastRow.endIndex) {
+    if (previous?.first === first && previous.last === last) {
       return
     }
-    lastReportedRef.current = { first: firstRow.startIndex, last: lastRow.endIndex }
-    onVisibleRangeChange(firstRow.startIndex, lastRow.endIndex, photos)
-  }, [layout.rows, onVisibleRangeChange, photos, range])
+    lastReportedRef.current = { first, last }
+    onVisibleRangeChange(first, last, photos)
+  }, [onVisibleRangeChange, photos, visibleItems])
 
   return (
     <>
@@ -244,7 +289,7 @@ const ZoomControls = ({
         onClick={onResetZoom}
         className="text-text-secondary hover:text-text focus-visible:ring-accent/50 min-w-11 rounded-full px-1 text-xs font-medium tabular-nums transition-colors duration-200 focus-visible:ring-2 focus-visible:outline-none"
       >
-        {Math.round(scale * 100)}%
+        {scale}%
       </button>
       <button
         type="button"
@@ -298,6 +343,52 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
   const panMovedRef = useRef(false)
   const pointerRef = useRef<{ x: number; y: number } | null>(null)
   const [hasInteracted, setHasInteracted] = useState(false)
+  const gestureRef = useRef(false)
+  const gestureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const applyGesture = useCallback((active: boolean) => {
+    if (gestureRef.current === active) {
+      return
+    }
+    gestureRef.current = active
+    const wall = transformRef.current?.instance.wrapperComponent
+    if (!wall) {
+      return
+    }
+    if (active) {
+      wall.dataset.wallGesture = 'true'
+    } else {
+      delete wall.dataset.wallGesture
+    }
+  }, [])
+
+  const setGesture = useCallback(
+    (active: boolean) => {
+      if (gestureTimerRef.current) {
+        clearTimeout(gestureTimerRef.current)
+        gestureTimerRef.current = null
+      }
+      applyGesture(active)
+      if (active) {
+        gestureTimerRef.current = setTimeout(() => {
+          gestureTimerRef.current = null
+          applyGesture(false)
+        }, GESTURE_WATCHDOG_MS)
+      }
+    },
+    [applyGesture],
+  )
+
+  useEffect(
+    () => () => {
+      if (gestureTimerRef.current) {
+        clearTimeout(gestureTimerRef.current)
+        gestureTimerRef.current = null
+      }
+      applyGesture(false)
+    },
+    [applyGesture],
+  )
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -322,7 +413,7 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
   const layout = useMemo(() => createWallLayout(photos, options), [options, photos])
   const insets = useMemo(() => options.frame, [options])
 
-  const initialViewRef = useRef(createInitialView(viewportWidth || 1440, viewportHeight || 900, layout))
+  const initialViewRef = useRef(createInitialView(viewportWidth || 1440, viewportHeight || 900, layout, isMobile))
   const fittedLayoutRef = useRef(layout)
 
   useEffect(() => {
@@ -330,13 +421,13 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
       return
     }
     fittedLayoutRef.current = layout
-    const next = createInitialView(viewportWidth || 1440, viewportHeight || 900, layout)
+    const next = createInitialView(viewportWidth || 1440, viewportHeight || 900, layout, isMobile)
     initialViewRef.current = next
     const frame = requestAnimationFrame(() => {
       transformRef.current?.setTransform(next.x, next.y, next.scale, ZOOM_ANIMATION_MS, EASING)
     })
     return () => cancelAnimationFrame(frame)
-  }, [layout, viewportHeight, viewportWidth])
+  }, [isMobile, layout, viewportHeight, viewportWidth])
 
   const markInteracted = useCallback(() => {
     setHasInteracted(true)
@@ -425,23 +516,40 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
         velocityAnimation={{ animationTime: 260, maxAnimationTime: 700 }}
         onPanningStart={() => {
           panMovedRef.current = false
+          setGesture(true)
           markInteracted()
         }}
         onPanning={() => {
           panMovedRef.current = true
         }}
         onPanningStop={() => {
+          setGesture(false)
           if (panMovedRef.current) {
             suppressClickUntilRef.current = Date.now() + CLICK_SUPPRESS_MS
           }
         }}
-        onZoomStart={markInteracted}
-        onWheelStart={markInteracted}
+        onZoomStart={() => {
+          setGesture(true)
+          markInteracted()
+        }}
+        onZoomStop={() => setGesture(false)}
+        onWheelStart={() => {
+          setGesture(true)
+          markInteracted()
+        }}
+        onWheelStop={() => setGesture(false)}
       >
         <TransformComponent
           wrapperClass={styles.wall}
           wrapperStyle={{ width: '100%', height: '100%', cursor: 'grab' }}
-          contentStyle={{ position: 'relative', display: 'block', width: layout.width, height: layout.height }}
+          contentStyle={{
+            position: 'relative',
+            display: 'block',
+            width: layout.width,
+            height: layout.height,
+            backfaceVisibility: 'hidden',
+            contain: 'layout style',
+          }}
         >
           <WallCanvas
             layout={layout}
