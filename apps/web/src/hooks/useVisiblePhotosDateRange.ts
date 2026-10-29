@@ -157,12 +157,14 @@ export const useVisiblePhotosDateRange = (_photos: PhotoManifest[]) => {
       const formattedRange = formatDateRange(startDate, endDate)
       const location = extractLocation(visiblePhotos)
 
-      setDateRange({
-        startDate,
-        endDate,
-        formattedRange,
-        location,
-      })
+      // Only publish a new range when the label actually changes. The scroll
+      // handler fires on every sampled frame; without this guard each one
+      // re-renders the whole gallery subtree above the scroll container.
+      setDateRange((previous) =>
+        previous.formattedRange === formattedRange && previous.location === location
+          ? previous
+          : { startDate, endDate, formattedRange, location },
+      )
 
       // 更新当前范围
       currentRange.current = { start: startIndex, end: endIndex }

@@ -1,7 +1,8 @@
-import { Thumbhash } from '@afilmory/ui'
+import { decompressUint8Array } from '@afilmory/utils'
 import { getViewerTransitionTriggerProps } from '@afilmory/viewer-motion'
 import { memo, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { thumbHashToDataURL } from 'thumbhash'
 
 import type { PhotoManifest } from '~/types/photo'
 
@@ -29,6 +30,17 @@ export const WallFrame = memo(({ item, photo, insets, onOpen }: WallFrameProps) 
   const { i18n } = useTranslation()
   const [isLoaded, setIsLoaded] = useState(false)
   const [hasError, setHasError] = useState(false)
+
+  // A CSS background instead of an <img>: the placeholder never contributes a
+  // decoded bitmap to the compositor, which matters when dozens of frames are
+  // on screen at once.
+  const placeholder = useMemo(() => {
+    if (!photo.thumbHash) {
+      return null
+    }
+    const hash = typeof photo.thumbHash === 'string' ? decompressUint8Array(photo.thumbHash) : photo.thumbHash
+    return thumbHashToDataURL(hash)
+  }, [photo.thumbHash])
 
   const capturedAt = useMemo(() => resolveCapturedAt(photo), [photo])
   const caption = useMemo(() => {
@@ -70,10 +82,11 @@ export const WallFrame = memo(({ item, photo, insets, onOpen }: WallFrameProps) 
           top: insets.top,
           width: item.photoWidth,
           height: item.photoHeight,
+          backgroundImage: placeholder ? `url("${placeholder}")` : undefined,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
         }}
       >
-        {photo.thumbHash && <Thumbhash thumbHash={photo.thumbHash} className="absolute inset-0" />}
-
         {!hasError && (
           <img
             src={photo.thumbnailUrl || photo.originalUrl}

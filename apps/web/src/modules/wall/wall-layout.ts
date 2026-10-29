@@ -65,7 +65,7 @@ const DEFAULT_ASPECT = 4 / 3
 const MIN_ASPECT = 0.3
 const MAX_ASPECT = 5
 /** Rows never get narrower than this fraction of the widest row. */
-const MIN_ROW_WIDTH_RATIO = 0.26
+const MIN_ROW_WIDTH_RATIO = 0.12
 /** Photos in narrower rows are scaled down so the silhouette reads as a circle. */
 const MIN_ROW_PHOTO_RATIO = 0.72
 
@@ -104,8 +104,10 @@ const rowWidthFactor = (row: number, totalRows: number) => {
     return 1
   }
   const center = (totalRows - 1) / 2
-  const offsetFromCenter = center === 0 ? 0 : (row - center) / center
-  const profile = Math.sqrt(1 - Math.abs(offsetFromCenter) ** 1.7)
+  const offsetFromCenter = center === 0 ? 0 : Math.abs(row - center) / center
+  // Circular arc: r = sqrt(1 - t²). Squaring the offset keeps the belly full
+  // and only pinches the outermost rows, which is what reads as "round".
+  const profile = Math.sqrt(Math.max(0, 1 - offsetFromCenter ** 2))
   return MIN_ROW_WIDTH_RATIO + (1 - MIN_ROW_WIDTH_RATIO) * profile
 }
 
@@ -129,7 +131,7 @@ const estimateRowCount = (count: number) => {
 /** Split `count` photos into `rows` rows following the ellipse profile. */
 const planRowCounts = (count: number, rows: number) => {
   const profile = Array.from({ length: rows }, (_, row) => rowWidthFactor(row, rows))
-  const weights = profile.map((factor) => factor ** 1.35)
+  const weights = profile.map((factor) => factor ** 2.1)
   const weightSum = weights.reduce((sum, weight) => sum + weight, 0)
 
   const counts = weights.map((weight) => Math.max(1, Math.round((count * weight) / weightSum)))
@@ -281,11 +283,22 @@ export const sliceVisibleItems = (layout: WallLayout, viewport: WallViewport) =>
   const top = viewport.top - margin
   const bottom = viewport.top + viewport.height + margin
 
-  const items: WallLayoutItem[] = []
+  let firstVisible = -1
+  let lastVisible = -1
   for (const row of layout.rows) {
     if (row.bottom >= top && row.top <= bottom) {
-      items.push(...layout.items.slice(row.startIndex, row.endIndex + 1))
+      if (firstVisible === -1) {
+        firstVisible = row.startIndex
+      }
+      lastVisible = row.endIndex
     }
   }
-  return items
+
+  if (firstVisible === -1) {
+    return []
+  }
+
+  // Contiguous slice: rows are stored in order, so the visible band is always a
+  // single range of items.
+  return layout.items.slice(firstVisible, lastVisible + 1)
 }

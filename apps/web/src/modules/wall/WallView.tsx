@@ -46,9 +46,11 @@ const MOBILE_OPTIONS: Omit<WallLayoutOptions, 'contentWidth'> = {
 const MIN_SCALE = 0.25
 const MAX_SCALE = 3
 const MIN_INITIAL_SCALE = 0.55
-const CULLING_MARGIN = 700
+const CULLING_MARGIN = 240
 const CLICK_SUPPRESS_MS = 280
 const GESTURE_WATCHDOG_MS = 260
+/** Pointer speed (px/ms) above which detail rendering is dropped. */
+const FAST_PAN_SPEED = 0.9
 const ZOOM_ANIMATION_MS = 240
 const EASING = 'easeOut' as const
 
@@ -122,11 +124,9 @@ const useRafTransform = () => {
   return { instance, schedule, callbackRef }
 }
 
-interface WallViewportBox {
-  left: number
-  top: number
-  width: number
-  height: number
+interface WallRowBand {
+  first: number
+  last: number
 }
 
 /**
@@ -134,9 +134,9 @@ interface WallViewportBox {
  * rings actually changes. Continuous panning otherwise schedules a React update
  * per animation frame, which is what made dragging feel sticky on mobile.
  */
-const useWallViewport = (layout: WallLayout, viewportWidth: number, viewportHeight: number): WallViewportBox | null => {
+const useWallRowBand = (layout: WallLayout, viewportWidth: number, viewportHeight: number): WallRowBand | null => {
   const { instance, schedule, callbackRef } = useRafTransform()
-  const [box, setBox] = useState<WallViewportBox | null>(null)
+  const [band, setBand] = useState<WallRowBand | null>(null)
   const lastKeyRef = useRef('')
 
   const read = useCallback(() => {
@@ -144,24 +144,47 @@ const useWallViewport = (layout: WallLayout, viewportWidth: number, viewportHeig
     if (!scale || !viewportHeight || !viewportWidth) {
       return
     }
-    const next: WallViewportBox = {
+    const next: { left: number; top: number; width: number; height: number } = {
       left: -positionX / scale,
       top: -positionY / scale,
       width: viewportWidth / scale,
       height: viewportHeight / scale,
     }
 
-    // Key on the culled row band, not raw coordinates: staying inside the same
-    // rows keeps the mounted DOM untouched while panning.
+    // Mounted band with hysteresis. Zooming out reveals rows, and unmounting
+    // them on the way back in would throw away decoded bitmaps and re-fetch
+    // them on the next zoom-out — the main cause of zoom hitches. The band
+    // therefore only ever grows, and shrinks once it is well beyond the
+    // viewport.
     const visible = sliceVisibleItems(layout, { ...next, margin: CULLING_MARGIN })
     const first = visible[0]?.row ?? -1
     const last = visible.at(-1)?.row ?? -1
-    const key = `${first}:${last}`
+    if (first === -1 || last === -1) {
+      return
+    }
+
+    const previous = lastKeyRef.current ? lastKeyRef.current.split(':').map(Number) : null
+    const nextWidth = last - first
+
+    let bandFirst = first
+    let bandLast = last
+    if (previous) {
+      // Grow immediately, shrink only when the band would be more than twice
+      // the visible span (i.e. after zooming back in substantially).
+      bandFirst = Math.min(previous[0], first)
+      bandLast = Math.max(previous[1], last)
+      if (bandLast - bandFirst > nextWidth * 2 + 2) {
+        bandFirst = first
+        bandLast = last
+      }
+    }
+
+    const key = `${bandFirst}:${bandLast}`
     if (key === lastKeyRef.current) {
       return
     }
     lastKeyRef.current = key
-    setBox(next)
+    setBand({ first: bandFirst, last: bandLast })
   }, [instance, layout, viewportHeight, viewportWidth])
 
   useTransformInit(read)
@@ -175,7 +198,7 @@ const useWallViewport = (layout: WallLayout, viewportWidth: number, viewportHeig
     schedule()
   }, [schedule])
 
-  return box
+  return band
 }
 
 const useWallScale = () => {
@@ -216,13 +239,20 @@ const WallCanvas = ({
 }) => {
   const viewportWidth = useViewport((viewport) => viewport.w)
   const viewportHeight = useViewport((viewport) => viewport.h)
-  const box = useWallViewport(layout, viewportWidth, viewportHeight)
+  const band = useWallRowBand(layout, viewportWidth, viewportHeight)
   const lastReportedRef = useRef<{ first: number; last: number } | null>(null)
 
-  const visibleItems = useMemo(
-    () => (box ? sliceVisibleItems(layout, { ...box, margin: CULLING_MARGIN }) : []),
-    [box, layout],
-  )
+  const visibleItems = useMemo(() => {
+    if (!band) {
+      return []
+    }
+    const firstRow = layout.rows[band.first]
+    const lastRow = layout.rows[band.last]
+    if (!firstRow || !lastRow) {
+      return []
+    }
+    return layout.items.slice(firstRow.startIndex, lastRow.endIndex + 1)
+  }, [band, layout])
 
   useEffect(() => {
     if (!onVisibleRangeChange || !visibleItems.length) {
@@ -362,6 +392,18 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
     }
   }, [])
 
+  const applyFast = useCallback((fast: boolean) => {
+    const wall = transformRef.current?.instance.wrapperComponent
+    if (!wall) {
+      return
+    }
+    if (fast) {
+      wall.dataset.wallFast = 'true'
+    } else {
+      delete wall.dataset.wallFast
+    }
+  }, [])
+
   const setGesture = useCallback(
     (active: boolean) => {
       if (gestureTimerRef.current) {
@@ -369,14 +411,17 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
         gestureTimerRef.current = null
       }
       applyGesture(active)
-      if (active) {
-        gestureTimerRef.current = setTimeout(() => {
-          gestureTimerRef.current = null
-          applyGesture(false)
-        }, GESTURE_WATCHDOG_MS)
+      if (!active) {
+        applyFast(false)
+        return
       }
+      gestureTimerRef.current = setTimeout(() => {
+        gestureTimerRef.current = null
+        applyGesture(false)
+        applyFast(false)
+      }, GESTURE_WATCHDOG_MS)
     },
-    [applyGesture],
+    [applyFast, applyGesture],
   )
 
   useEffect(
@@ -399,8 +444,31 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
       pointerRef.current = { x: event.clientX, y: event.clientY }
     }
     window.addEventListener('pointermove', handlePointerMove, { passive: true })
-    return () => window.removeEventListener('pointermove', handlePointerMove)
-  }, [])
+
+    // Fast drags swap photos for their thumbhash (a solid ~35% frame-time win
+    // with dozens of frames on screen); slow, precise drags keep them sharp.
+    let lastMove = 0
+    let lastX = 0
+    let lastY = 0
+    const handleSpeed = (event: PointerEvent) => {
+      const now = performance.now()
+      const dt = now - lastMove
+      if (dt > 0 && lastMove) {
+        const distance = Math.hypot(event.clientX - lastX, event.clientY - lastY)
+        const speed = distance / dt // px per ms
+        applyFast(speed > FAST_PAN_SPEED)
+      }
+      lastMove = now
+      lastX = event.clientX
+      lastY = event.clientY
+    }
+    window.addEventListener('pointermove', handleSpeed, { passive: true })
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointermove', handleSpeed)
+    }
+  }, [applyFast])
 
   const options = useMemo<WallLayoutOptions>(
     () => ({
