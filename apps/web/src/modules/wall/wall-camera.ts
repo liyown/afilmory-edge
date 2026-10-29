@@ -95,3 +95,25 @@ export const toCanvasPoint = (camera: WallCamera, screenX: number, screenY: numb
   x: (screenX - camera.positionX) / (camera.scale || 1),
   y: (screenY - camera.positionY) / (camera.scale || 1),
 })
+
+/**
+ * Clamps a pan axis so the wall never leaves the screen.
+ *
+ * - Wall larger than the viewport: the wall edge may not move past the viewport
+ *   edge, plus `margin` of slack so it feels rubbery rather than hard-stopped.
+ * - Wall smaller than the viewport: it is kept fully on screen and centred when
+ *   there is room, again with `margin` of slack.
+ */
+export const clampPanAxis = (position: number, wallSize: number, viewportSize: number, margin: number) => {
+  // The wall is narrower than the viewport, so there is no travel at all: keep
+  // it centred instead of pinning it to one edge.
+  if (wallSize + margin * 2 <= viewportSize) {
+    return (viewportSize - wallSize) / 2
+  }
+
+  // The wall may be nudged past the viewport edge, but never so far that most
+  // of it disappears: everything past `margin` is pulled back.
+  const min = viewportSize - wallSize - margin
+  const max = margin
+  return Math.min(max, Math.max(min, position))
+}

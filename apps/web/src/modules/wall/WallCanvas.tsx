@@ -228,7 +228,16 @@ export const WallCanvas = ({ layout, photos, insets, accent, onOpen }: WallCanva
     <canvas
       ref={canvasRef}
       className="pointer-events-auto"
-      style={{ display: 'block', width: '100%', height: '100%' }}
+      style={{
+        display: 'block',
+        // The content box is the full wall size (that is what the library uses
+        // for pan bounds), but the canvas only ever needs to cover the viewport.
+        // `fixed` keeps it viewport-sized while the content transform is off.
+        position: 'fixed',
+        inset: 0,
+        width: '100vw',
+        height: '100vh',
+      }}
       onClick={handleClick}
     />
   )

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { it } from 'vitest'
 
-import { hitTest, intersects, pickItems, toCanvasPoint, visibleRect } from './wall-camera'
+import { clampPanAxis, hitTest, intersects, pickItems, toCanvasPoint, visibleRect } from './wall-camera'
 import type { WallLayoutOptions, WallPhotoInput } from './wall-layout'
 import { createWallLayout } from './wall-layout'
 
@@ -89,4 +89,26 @@ it('toCanvasPoint inverts the camera transform', () => {
 
   assert.equal(point.x, (240 - 40) / 0.5)
   assert.equal(point.y, (180 + 20) / 0.5)
+})
+
+it('clampPanAxis lets a large wall travel but keeps it on screen', () => {
+  // Wall 2000 wide in a 1000 viewport: it may move between -1000 and 0.
+  assert.equal(clampPanAxis(-1000, 2000, 1000, 0), -1000)
+  assert.equal(clampPanAxis(0, 2000, 1000, 0), 0)
+  // Beyond the edge it is pulled back rather than snapping hard (margin slack).
+  assert.ok(clampPanAxis(400, 2000, 1000, 100) <= 100)
+  assert.ok(clampPanAxis(-3000, 2000, 1000, 100) >= -1100)
+})
+
+it('clampPanAxis centres a wall smaller than the viewport', () => {
+  const centred = clampPanAxis(9999, 400, 1000, 0)
+  assert.equal(centred, 300)
+})
+
+it('clampPanAxis never returns a value outside the wall', () => {
+  for (const position of [-5000, -500, 0, 500, 5000]) {
+    const value = clampPanAxis(position, 3000, 1200, 80)
+    assert.ok(value <= 80)
+    assert.ok(value >= 1200 - 3000 - 80)
+  }
 })

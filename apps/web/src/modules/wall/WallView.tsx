@@ -9,7 +9,7 @@ import { useViewport } from '~/hooks/useViewport'
 import type { PhotoManifest } from '~/types/photo'
 
 import styles from './wall.module.css'
-import { visibleRect } from './wall-camera'
+import { clampPanAxis, visibleRect } from './wall-camera'
 import type { WallLayout, WallLayoutOptions } from './wall-layout'
 import { createWallLayout, WALL_TOP_INSET } from './wall-layout'
 import { WallCanvas } from './WallCanvas'
@@ -49,11 +49,16 @@ interface WallViewProps {
   onVisibleRangeChange?: (startIndex: number, stopIndex: number, items: PhotoManifest[]) => void
 }
 
+/**
+ * The layout's own width, independent of the viewport. It has to be clearly
+ * wider than the screen at the initial fit scale, otherwise `limitToBounds`
+ * leaves only a few dozen pixels of travel and the wall feels stuck.
+ */
 const resolveWallWidth = (viewportWidth: number, isMobile: boolean) => {
   if (isMobile) {
-    return Math.max(viewportWidth * 2.6, 1000)
+    return Math.max(viewportWidth * 4, 1600)
   }
-  return Math.max(Math.min(viewportWidth * 2.2, 3000), 2200)
+  return Math.max(Math.min(viewportWidth * 3, 4200), 3000)
 }
 
 /** Frame the whole silhouette on open so the circular arrangement is obvious. */
@@ -342,6 +347,61 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
     [markInteracted, viewportHeight, viewportWidth],
   )
 
+  /**
+   * Nothing clamps the pan (that is what makes the wall feel free), so after a
+   * gesture settles we glide back if the photos were pushed off screen.
+   */
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const settleWithinView = useCallback(() => {
+    const ref = transformRef.current
+    const wrapper = ref?.instance.wrapperComponent
+    if (!ref || !wrapper) {
+      return
+    }
+    const { scale, positionX, positionY } = ref.state
+    const width = wrapper.clientWidth
+    const height = wrapper.clientHeight
+    const wallWidth = layout.width * scale
+    const wallHeight = layout.height * scale
+
+    // Slack past the wall edge: small enough that the wall can never sit mostly
+    // off screen, large enough to feel elastic rather than hard-stopped.
+    const margin = Math.min(width, height) * 0.12
+    const x = clampPanAxis(positionX, wallWidth, width, margin)
+    const y = clampPanAxis(positionY, wallHeight, height, margin)
+    if (Math.abs(x - positionX) > 1 || Math.abs(y - positionY) > 1) {
+      void ref.setTransform(x, y, scale, 320, EASING)
+    }
+  }, [layout.height, layout.width])
+
+  const scheduleSettle = useCallback(() => {
+    if (settleTimerRef.current) {
+      clearTimeout(settleTimerRef.current)
+    }
+    settleTimerRef.current = setTimeout(() => {
+      settleTimerRef.current = null
+      settleWithinView()
+    }, 260)
+  }, [settleWithinView])
+
+  useEffect(() => {
+    // The library only reports pan end for its own gesture bookkeeping, which
+    // is not reliable in detached mode, so the settle is driven from the raw
+    // pointer lifecycle instead.
+    const end = () => scheduleSettle()
+    window.addEventListener('mouseup', end, { passive: true })
+    window.addEventListener('touchend', end, { passive: true })
+    window.addEventListener('touchcancel', end, { passive: true })
+    return () => {
+      window.removeEventListener('mouseup', end)
+      window.removeEventListener('touchend', end)
+      window.removeEventListener('touchcancel', end)
+      if (settleTimerRef.current) {
+        clearTimeout(settleTimerRef.current)
+      }
+    }
+  }, [scheduleSettle])
+
   const resetZoom = useCallback(() => {
     const ref = transformRef.current
     if (!ref) {
@@ -369,7 +429,7 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
         initialPositionY={initialViewRef.current.y}
         minScale={MIN_SCALE}
         maxScale={MAX_SCALE}
-        limitToBounds
+        limitToBounds={false}
         centerZoomedOut={false}
         detached
         doubleClick={{ disabled: true }}
@@ -380,8 +440,11 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
         zoomAnimation={{ animationTime: ZOOM_ANIMATION_MS }}
         velocityAnimation={{ animationTime: 260, maxAnimationTime: 700 }}
         onPanningStart={markInteracted}
+        onPanningStop={scheduleSettle}
         onZoomStart={markInteracted}
+        onZoomStop={scheduleSettle}
         onWheelStart={markInteracted}
+        onWheelStop={scheduleSettle}
       >
         {/*
           `detached` keeps the library from writing its own `transform` to the
@@ -394,7 +457,10 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
           wrapperClass={styles.wall}
           wrapperStyle={{ width: '100%', height: '100%' }}
           contentClass={styles.surfaceContent}
-          contentStyle={{ position: 'relative', width: '100%', height: '100%' }}
+          // The library derives its pan bounds from this box, so it has to be
+          // the real wall size, not the viewport. The canvas filling it is
+          // pinned to the viewport independently.
+          contentStyle={{ position: 'relative', width: layout.width, height: layout.height }}
         >
           <WallSurface
             layout={layout}
