@@ -376,6 +376,7 @@
   "gallery.view.list": "List View",
   "gallery.view.map": "Map View",
   "gallery.view.masonry": "Masonry",
+  "gallery.view.wall": "Wall",
   "inspector.tab.comments": "Comments",
   "inspector.tab.info": "Info",
   "language.en": "English",
@@ -466,5 +467,13 @@
   "video.conversion.webcodecs.not.supported": "WebCodecs is not supported in this browser",
   "video.format.mov.not.supported": "Browser does not support MOV format, conversion required",
   "video.format.mov.supported": "Browser natively supports MOV format, skipping conversion",
-  "video.motion-photo.extracting": "Extracting embedded video..."
+  "video.motion-photo.extracting": "Extracting embedded video...",
+  "wall.canvas": "Photo wall canvas",
+  "wall.empty": "No photos match the current filters",
+  "wall.hint.pan": "Drag to move",
+  "wall.hint.zoom": "Scroll or pinch to zoom",
+  "wall.view.reset": "Reset view",
+  "wall.zoom.in": "Zoom in",
+  "wall.zoom.level": "Reset to 100%",
+  "wall.zoom.out": "Zoom out"
 }

@@ -9,6 +9,8 @@ import { useHasActiveFilters } from '~/hooks/useHasActiveFilters'
 import { useContextPhotos } from '~/hooks/usePhotoViewer'
 import { useSemanticSearch } from '~/hooks/useSemanticSearch'
 import { useVisiblePhotosDateRange } from '~/hooks/useVisiblePhotosDateRange'
+import { WallFilterBar } from '~/modules/wall/WallFilterBar'
+import { WallView } from '~/modules/wall/WallView'
 
 import type { PanelType } from './ActionPanel'
 import { ActionPanel } from './ActionPanel'
@@ -33,6 +35,10 @@ export const PhotosRoot = () => {
 
   // 监听滚动，控制浮动组件的显示
   useEffect(() => {
+    if (viewMode === 'wall') {
+      setShowFloatingActions(false)
+      return
+    }
     if (!scrollElement) return
 
     const handleScroll = () => {
@@ -44,13 +50,15 @@ export const PhotosRoot = () => {
     return () => {
       scrollElement.removeEventListener('scroll', handleScroll)
     }
-  }, [scrollElement])
+  }, [scrollElement, viewMode])
 
   const hasActiveFilters = useHasActiveFilters()
+  const isWall = viewMode === 'wall'
+  const hasSearch = Boolean(searchQuery.trim())
 
   // The editorial composition only owns the default, unfiltered archive. Any
   // search or filter falls back to the plain masonry so results stay obvious.
-  const showEditorial = !hasActiveFilters && !searchQuery.trim() && viewMode === 'masonry' && photos.length > 6
+  const showEditorial = !hasActiveFilters && !hasSearch && viewMode === 'masonry' && photos.length > 6
   const { featuredPhotos, masonryPhotos } = useMemo(() => {
     if (!showEditorial) {
       return { featuredPhotos: [] as typeof photos, masonryPhotos: photos }
@@ -68,41 +76,67 @@ export const PhotosRoot = () => {
         showDateRange={showFloatingActions && !!dateRange.formattedRange}
       />
 
-      {hasActiveFilters && <ActiveFiltersHero />}
+      {isWall ? (
+        <>
+          <WallView photos={photos} onVisibleRangeChange={handleRender} />
 
-      {searchQuery.trim() && (
-        <div className="px-4 pt-14 text-center text-xs text-white/45 lg:pt-14">
-          {search.isPending
-            ? t('search.loading')
-            : photos.length === 0
-              ? t('search.empty')
-              : search.degraded
-                ? t('search.aiUnavailable')
-                : t('action.search.results', { count: photos.length })}
-        </div>
-      )}
+          {(hasActiveFilters || hasSearch) && (
+            <div className="pointer-events-none fixed inset-x-0 top-14 z-30 flex flex-col items-center gap-2 px-4 lg:top-16">
+              {hasActiveFilters && <WallFilterBar />}
 
-      <div className={clsx('pb-20 lg:pb-24', !hasActiveFilters && 'mt-12')}>
-        {showEditorial && (
-          <div className="px-4 lg:px-8 xl:px-12">
-            <EditorialIntro photos={photos} featured={featuredPhotos} />
-          </div>
-        )}
+              {hasSearch && (
+                <span className="bg-material-medium/70 border-white/10 text-text-secondary rounded-full border px-3.5 py-1.5 text-xs backdrop-blur-2xl">
+                  {search.isPending
+                    ? t('search.loading')
+                    : photos.length === 0
+                      ? t('search.empty')
+                      : search.degraded
+                        ? t('search.aiUnavailable')
+                        : t('action.search.results', { count: photos.length })}
+                </span>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {hasActiveFilters && <ActiveFiltersHero />}
 
-        {viewMode === 'list' ? (
-          <ListView photos={photos} />
-        ) : (
-          <div className={clsx('px-4 lg:px-8 xl:px-12', showEditorial && 'mt-12 lg:mt-16')}>
+          {hasSearch && (
+            <div className="px-4 pt-14 text-center text-xs text-white/45 lg:pt-14">
+              {search.isPending
+                ? t('search.loading')
+                : photos.length === 0
+                  ? t('search.empty')
+                  : search.degraded
+                    ? t('search.aiUnavailable')
+                    : t('action.search.results', { count: photos.length })}
+            </div>
+          )}
+
+          <div className={clsx('pb-20 lg:pb-24', !hasActiveFilters && 'mt-12')}>
             {showEditorial && (
-              <div className="mb-5 flex items-baseline justify-between border-t border-white/10 pt-4 font-mono text-[9px] tracking-[0.28em] text-white/35 uppercase">
-                <span>The Archive</span>
-                <span className="tabular-nums">{masonryPhotos.length}</span>
+              <div className="px-4 lg:px-8 xl:px-12">
+                <EditorialIntro photos={photos} featured={featuredPhotos} />
               </div>
             )}
-            <MasonryView photos={masonryPhotos} onRender={handleRender} />
+
+            {viewMode === 'list' ? (
+              <ListView photos={photos} />
+            ) : (
+              <div className={clsx('px-4 lg:px-8 xl:px-12', showEditorial && 'mt-12 lg:mt-16')}>
+                {showEditorial && (
+                  <div className="mb-5 flex items-baseline justify-between border-t border-white/10 pt-4 font-mono text-[9px] tracking-[0.28em] text-white/35 uppercase">
+                    <span>The Archive</span>
+                    <span className="tabular-nums">{masonryPhotos.length}</span>
+                  </div>
+                )}
+                <MasonryView photos={masonryPhotos} onRender={handleRender} />
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       <PageFooter />
 

@@ -376,6 +376,7 @@
   "gallery.view.list": "列表视图",
   "gallery.view.map": "地图视图",
   "gallery.view.masonry": "瀑布流",
+  "gallery.view.wall": "照片墙",
   "inspector.tab.comments": "评论",
   "inspector.tab.info": "信息",
   "language.en": "English",
@@ -466,5 +467,13 @@
   "video.conversion.webcodecs.not.supported": "此浏览器不支持 WebCodecs",
   "video.format.mov.not.supported": "浏览器不支持 MOV 格式，需要转换",
   "video.format.mov.supported": "浏览器原生支持 MOV 格式，跳过转换",
-  "video.motion-photo.extracting": "正在提取嵌入的视频..."
+  "video.motion-photo.extracting": "正在提取嵌入的视频...",
+  "wall.canvas": "照片墙画布",
+  "wall.empty": "没有符合当前筛选条件的照片",
+  "wall.hint.pan": "拖动画布",
+  "wall.hint.zoom": "滚轮或双指缩放",
+  "wall.view.reset": "回到初始视图",
+  "wall.zoom.in": "放大",
+  "wall.zoom.level": "重置为 100%",
+  "wall.zoom.out": "缩小"
 }

@@ -345,6 +345,7 @@
   "gallery.view.list": "リスト表示",
   "gallery.view.map": "マップ表示",
   "gallery.view.masonry": "ウォーターフォール",
+  "gallery.view.wall": "フォトウォール",
   "language.en": "English",
   "language.jp": "日本語",
   "language.ko": "한국어",
@@ -430,5 +431,13 @@
   "video.conversion.webcodecs.not.supported": "このブラウザは WebCodecs をサポートしていません",
   "video.format.mov.not.supported": "ブラウザが MOV 形式をサポートしていないため、変換が必要です",
   "video.format.mov.supported": "ブラウザが MOV 形式をネイティブでサポートしているため、変換をスキップします",
-  "video.motion-photo.extracting": "埋め込み動画を抽出しています..."
+  "video.motion-photo.extracting": "埋め込み動画を抽出しています...",
+  "wall.canvas": "フォトウォールのキャンバス",
+  "wall.empty": "現在のフィルターに一致する写真がありません",
+  "wall.hint.pan": "ドラッグで移動",
+  "wall.hint.zoom": "スクロールまたはピンチでズーム",
+  "wall.view.reset": "表示をリセット",
+  "wall.zoom.in": "拡大",
+  "wall.zoom.level": "100% にリセット",
+  "wall.zoom.out": "縮小"
 }

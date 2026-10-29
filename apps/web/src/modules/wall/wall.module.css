@@ -1,0 +1,167 @@
+.wall {
+  background-color: var(--color-background);
+  background-image:
+    radial-gradient(1100px 760px at 50% -8%, color-mix(in srgb, var(--color-accent) 7%, transparent), transparent 68%),
+    radial-gradient(900px 700px at 85% 110%, rgba(255, 255, 255, 0.035), transparent 70%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.014) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px 3px);
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+.vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.42) 100%);
+}
+
+.frame {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #fcfaf4 0%, #f7f3e7 58%, #f1ecdd 100%);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 10px 18px -10px rgba(0, 0, 0, 0.5),
+    0 28px 46px -18px rgba(0, 0, 0, 0.62);
+  transform-origin: 50% 10px;
+  will-change: transform;
+  transition: box-shadow 240ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgba(120, 108, 88, 0.18),
+    inset 0 -14px 24px -18px rgba(96, 82, 58, 0.28);
+  background-image: repeating-linear-gradient(118deg, rgba(120, 104, 74, 0.03) 0 1px, transparent 1px 4px);
+}
+
+.frame:hover {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 16px 26px -12px rgba(0, 0, 0, 0.55),
+    0 40px 64px -22px rgba(0, 0, 0, 0.72);
+  z-index: 5;
+}
+
+.photo {
+  position: absolute;
+  overflow: hidden;
+  background: #e7e1d2;
+  box-shadow: inset 0 0 0 1px rgba(70, 60, 44, 0.16);
+}
+
+.image {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition:
+    transform 320ms ease,
+    opacity 240ms ease;
+}
+
+.frame:hover .image {
+  transform: scale(1.035);
+}
+
+.caption {
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  left: 12px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: #514a3e;
+}
+
+.captionTitle {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.captionDate {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #8f8675;
+  font-variant-numeric: tabular-nums;
+}
+
+.pin {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle at 34% 28%,
+    color-mix(in srgb, var(--color-accent) 30%, white) 0%,
+    var(--color-accent) 46%,
+    color-mix(in srgb, var(--color-accent) 62%, black) 100%
+  );
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.28),
+    inset 0 1px 1px rgba(255, 255, 255, 0.65);
+}
+
+.pin::after {
+  content: '';
+  position: absolute;
+  top: 13px;
+  left: 50%;
+  width: 6px;
+  height: 4px;
+  margin-left: -3px;
+  border-radius: 9999px;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.34), transparent 70%);
+}
+
+.liveBadge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 10px;
+  line-height: 1.2;
+  backdrop-filter: blur(6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image,
+  .frame {
+    transition: none;
+  }
+
+  .frame:hover .image {
+    transform: none;
+  }
+}

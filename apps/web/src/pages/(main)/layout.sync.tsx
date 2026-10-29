@@ -18,7 +18,9 @@ export const Component = () => {
   useSyncViewerCloseShortcut()
 
   const isMobile = useMobile()
+  const { viewMode } = useAtomValue(gallerySettingAtom)
   const photos = usePhotos()
+  const isWallView = viewMode === 'wall'
 
   return (
     <>
@@ -37,7 +39,7 @@ export const Component = () => {
           />
         )}
 
-        {isMobile ? (
+        {isMobile || isWallView ? (
           <ScrollElementContext value={document.body}>
             <PhotosRoot />
           </ScrollElementContext>

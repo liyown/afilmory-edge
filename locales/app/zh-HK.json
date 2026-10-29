@@ -345,6 +345,7 @@
   "gallery.view.list": "清單檢視",
   "gallery.view.map": "地圖檢視",
   "gallery.view.masonry": "瀑布流",
+  "gallery.view.wall": "相片牆",
   "language.en": "English",
   "language.jp": "日本語",
   "language.ko": "한국어",
@@ -430,5 +431,13 @@
   "video.conversion.webcodecs.not.supported": "此瀏覽器不支援 WebCodecs",
   "video.format.mov.not.supported": "瀏覽器不支援 MOV 格式，需要轉換",
   "video.format.mov.supported": "瀏覽器原生支援 MOV 格式，跳過轉換",
-  "video.motion-photo.extracting": "正在提取嵌入的影片..."
+  "video.motion-photo.extracting": "正在提取嵌入的影片...",
+  "wall.canvas": "相片牆畫布",
+  "wall.empty": "沒有符合目前篩選條件的相片",
+  "wall.hint.pan": "拖動畫布",
+  "wall.hint.zoom": "滾輪或雙指縮放",
+  "wall.view.reset": "返回初始檢視",
+  "wall.zoom.in": "放大",
+  "wall.zoom.level": "重設為 100%",
+  "wall.zoom.out": "縮小"
 }

@@ -2,7 +2,7 @@ import { atom } from 'jotai'
 
 export type GallerySortBy = 'date'
 export type GallerySortOrder = 'asc' | 'desc'
-export type GalleryViewMode = 'masonry' | 'list'
+export type GalleryViewMode = 'wall' | 'masonry' | 'list'
 
 export interface DateRangeFilter {
   from: string | null
@@ -21,7 +21,7 @@ export const gallerySettingAtom = atom({
   searchQuery: '',
 
   columns: 'auto' as number | 'auto', // 自定义列数，auto 表示自动计算
-  viewMode: 'masonry' as GalleryViewMode, // 视图模式：瀑布流或列表详情
+  viewMode: 'wall' as GalleryViewMode, // 视图模式：照片墙、瀑布流或列表详情
 })
 
 export const isExiftoolLoadedAtom = atom(false)

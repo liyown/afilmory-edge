@@ -345,6 +345,7 @@
   "gallery.view.list": "목록 보기",
   "gallery.view.map": "지도 보기",
   "gallery.view.masonry": "폭포수",
+  "gallery.view.wall": "포토 월",
   "language.en": "English",
   "language.jp": "日本語",
   "language.ko": "한국어",
@@ -430,5 +431,13 @@
   "video.conversion.webcodecs.not.supported": "이 브라우저는 WebCodecs 를 지원하지 않습니다",
   "video.format.mov.not.supported": "브라우저가 MOV 형식을 지원하지 않아 변환이 필요합니다.",
   "video.format.mov.supported": "브라우저가 MOV 형식을 기본적으로 지원하므로 변환을 건너뜁니다.",
-  "video.motion-photo.extracting": "내장된 비디오 추출 중..."
+  "video.motion-photo.extracting": "내장된 비디오 추출 중...",
+  "wall.canvas": "포토 월 캔버스",
+  "wall.empty": "현재 필터와 일치하는 사진이 없습니다",
+  "wall.hint.pan": "드래그하여 이동",
+  "wall.hint.zoom": "스크롤 또는 핀치로 확대",
+  "wall.view.reset": "보기 초기화",
+  "wall.zoom.in": "확대",
+  "wall.zoom.level": "100%로 초기화",
+  "wall.zoom.out": "축소"
 }

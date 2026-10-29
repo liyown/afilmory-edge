@@ -141,6 +141,16 @@ const MoreActionMenu = () => {
         <DropdownMenuSeparator />
         <div className="px-2 py-1.5 text-xs font-medium text-white/50">{t('action.view.title')}</div>
         <DropdownMenuItem
+          onClick={() => setSettings((prev) => ({ ...prev, viewMode: 'wall' }))}
+          className="justify-between"
+        >
+          <span className="flex items-center gap-2">
+            <i className="i-mingcute-layout-5-line text-base" />
+            {t('gallery.view.wall')}
+          </span>
+          {settings.viewMode === 'wall' && <i className="i-mingcute-check-line text-base" />}
+        </DropdownMenuItem>
+        <DropdownMenuItem
           onClick={() => setSettings((prev) => ({ ...prev, viewMode: 'masonry' }))}
           className="justify-between"
         >
