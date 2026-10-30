@@ -117,3 +117,14 @@ export const clampPanAxis = (position: number, wallSize: number, viewportSize: n
   const max = margin
   return Math.min(max, Math.max(min, position))
 }
+
+/**
+ * A drag still ends with a native `click`. Compare where the pointer went down
+ * with where the click landed: beyond a few pixels it was a pan, not a tap.
+ */
+export const isTap = (press: { x: number; y: number } | null, click: { x: number; y: number }, slop = 6) => {
+  if (!press) {
+    return true
+  }
+  return Math.hypot(click.x - press.x, click.y - press.y) <= slop
+}

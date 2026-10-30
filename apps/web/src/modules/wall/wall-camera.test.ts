@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { it } from 'vitest'
 
-import { clampPanAxis, hitTest, intersects, pickItems, toCanvasPoint, visibleRect } from './wall-camera'
+import { clampPanAxis, hitTest, intersects, isTap, pickItems, toCanvasPoint, visibleRect } from './wall-camera'
 import type { WallLayoutOptions, WallPhotoInput } from './wall-layout'
 import { createWallLayout } from './wall-layout'
 
@@ -111,4 +111,17 @@ it('clampPanAxis never returns a value outside the wall', () => {
     assert.ok(value <= 80)
     assert.ok(value >= 1200 - 3000 - 80)
   }
+})
+
+it('isTap treats a press that barely moved as a tap', () => {
+  assert.equal(isTap({ x: 100, y: 100 }, { x: 103, y: 102 }), true)
+})
+
+it('isTap rejects a press that travelled', () => {
+  assert.equal(isTap({ x: 100, y: 100 }, { x: 160, y: 100 }), false)
+  assert.equal(isTap({ x: 100, y: 100 }, { x: 100, y: 140 }), false)
+})
+
+it('isTap accepts a click with no recorded press', () => {
+  assert.equal(isTap(null, { x: 10, y: 10 }), true)
 })

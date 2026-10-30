@@ -6,7 +6,7 @@ import { thumbHashToDataURL } from 'thumbhash'
 
 import type { PhotoManifest } from '~/types/photo'
 
-import { hitTest, toCanvasPoint } from './wall-camera'
+import { hitTest, isTap, toCanvasPoint } from './wall-camera'
 import type { WallFrameInsets, WallLayout } from './wall-layout'
 import { PIVOT_RATIO, renderWall } from './wall-render'
 
@@ -20,6 +20,8 @@ interface WallCanvasProps {
 
 const MAX_CONCURRENT_DECODES = 6
 const DECODE_AHEAD_PX = 220
+/** Movement (CSS px) below which a press counts as a tap rather than a pan. */
+const TAP_SLOP_PX = 6
 
 /**
  * Draws the whole wall into one canvas.
@@ -40,7 +42,8 @@ export const WallCanvas = ({ layout, photos, insets, accent, onOpen }: WallCanva
   const queueRef = useRef<string[]>([])
   const activeRef = useRef(0)
   const reducedRef = useRef(false)
-  const suppressClickRef = useRef(0)
+  /** Pointer-down origin, used to tell a tap apart from a pan. */
+  const pressRef = useRef<{ x: number; y: number } | null>(null)
 
   // Refs keep the per-frame draw free of React renders; props are mirrored in.
   const propsRef = useRef({ accent, insets, layout, photos, locale: i18n.language })
@@ -203,11 +206,23 @@ export const WallCanvas = ({ layout, photos, insets, accent, onOpen }: WallCanva
     enqueueAroundViewport()
   }, [enqueueAroundViewport, layout, photos])
 
+  const handlePointerDown = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {
+    pressRef.current = { x: event.clientX, y: event.clientY }
+  }, [])
+
+  /**
+   * Opens the frame under a tap. A drag also ends with a native `click`, so the
+   * pointer's travel is measured against its press point: anything beyond a
+   * few pixels was a pan, not a tap.
+   */
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
-      if (Date.now() < suppressClickRef.current) {
+      const press = pressRef.current
+      pressRef.current = null
+      if (!isTap(press, { x: event.clientX, y: event.clientY }, TAP_SLOP_PX)) {
         return
       }
+
       const canvas = canvasRef.current
       if (!canvas) {
         return
@@ -218,7 +233,6 @@ export const WallCanvas = ({ layout, photos, insets, accent, onOpen }: WallCanva
       if (!hit) {
         return
       }
-      suppressClickRef.current = Date.now() + 280
       onOpen(hit.index, canvas)
     },
     [instance, onOpen],
@@ -228,6 +242,7 @@ export const WallCanvas = ({ layout, photos, insets, accent, onOpen }: WallCanva
     <canvas
       ref={canvasRef}
       className="pointer-events-auto"
+      onPointerDown={handlePointerDown}
       style={{
         display: 'block',
         // The content box is the full wall size (that is what the library uses
