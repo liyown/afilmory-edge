@@ -6,7 +6,7 @@
 // Both tasks are idempotent, so a retried cron invocation is safe.
 
 import type { CronEnv } from './cron-maintenance'
-import { backupD1, cleanupOrphanUploads, deleteKeys, listAll } from './cron-maintenance'
+import { backupD1, cleanupOrphanUploads, deleteKeys, listAll, repairMissingThumbnails } from './cron-maintenance'
 import { loadManifest } from './html'
 import { runPhotoAiBackfill } from './modules/photos/photo-ai-backfill'
 import { renderHomepageOgImage, renderPhotoOgImage } from './og'
@@ -151,13 +151,19 @@ export async function prewarmOgImages(env: CronEnv): Promise<OgResult> {
 
 export async function runHourlyMaintenance(env: CronEnv): Promise<void> {
   const [cleanup, og] = await Promise.all([cleanupOrphanUploads(env), prewarmOgImages(env)])
+  let thumbs = { scanned: 0, repaired: 0, failed: 0, supported: true }
+  try {
+    thumbs = await repairMissingThumbnails(env)
+  } catch (error) {
+    log('cron.thumbnails.failed', { message: errorMessage(error) })
+  }
   let aiIndexed = 0
   try {
     aiIndexed = await runPhotoAiBackfill(10)
   } catch (error) {
     log('cron.ai.failed', { message: errorMessage(error) })
   }
-  log('cron.hourly', { cleanup, og, aiIndexed })
+  log('cron.hourly', { cleanup, og, thumbs, aiIndexed })
 }
 
 export async function runDailyBackup(env: CronEnv): Promise<void> {

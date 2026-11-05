@@ -15,11 +15,7 @@ interface VisionResult {
   choices?: Array<{ message?: { content?: unknown } }>
 }
 
-export function thumbnailKeyFor(storageKey: string): string {
-  const dotIndex = storageKey.lastIndexOf('.')
-  const base = dotIndex > 0 ? storageKey.slice(0, dotIndex) : storageKey
-  return `${base}-thumb.jpg`
-}
+export { thumbnailKeyFor } from './thumbnail-key'
 
 export function normalizeTags(raw: unknown): string[] {
   if (!Array.isArray(raw)) {

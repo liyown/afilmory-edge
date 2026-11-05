@@ -105,8 +105,12 @@ export function encodeKeyPath(key: string): string {
 }
 
 /** Virtual-hosted-style bucket URL; the endpoint must already include the bucket. */
-function objectUrl(key: string): URL {
-  return new URL(`${endpoint()}/${encodeKeyPath(key)}`)
+function objectUrl(key: string, process?: string): URL {
+  const url = new URL(`${endpoint()}/${encodeKeyPath(key)}`)
+  if (process) {
+    url.searchParams.set('x-oss-process', process)
+  }
+  return url
 }
 
 export function mediaUrl(key: string): string {
@@ -150,7 +154,7 @@ export async function signedStorageFetch(
   return await client().fetch(url.toString(), init)
 }
 
-export async function storageHead(key: string): Promise<StorageObjectInfo | null> {
+export async function storageHead(key: string, process?: string): Promise<StorageObjectInfo | null> {
   if (storageDriver() === 'r2') {
     const object = await requireR2().head(key)
     if (!object) {
@@ -168,7 +172,7 @@ export async function storageHead(key: string): Promise<StorageObjectInfo | null
   // few times before surfacing the failure to the upload client.
   const retryDelays = [200, 600, 1200]
   for (let attempt = 0; ; attempt += 1) {
-    const response = await client().fetch(objectUrl(key).toString(), { method: 'HEAD' })
+    const response = await client().fetch(objectUrl(key, process).toString(), { method: 'HEAD' })
     if (response.status === 404) {
       return null
     }
@@ -194,6 +198,7 @@ export async function storageHead(key: string): Promise<StorageObjectInfo | null
 export async function storageGet(
   key: string,
   range?: { offset: number; length: number },
+  process?: string,
 ): Promise<StorageObject | null> {
   if (storageDriver() === 'r2') {
     const object = await requireR2().get(
@@ -232,7 +237,7 @@ export async function storageGet(
     headers.range = `bytes=${range.offset}-${range.offset + range.length - 1}`
   }
 
-  const response = await client().fetch(objectUrl(key).toString(), { headers })
+  const response = await client().fetch(objectUrl(key, range ? undefined : process).toString(), { headers })
   if (response.status === 404) {
     return null
   }

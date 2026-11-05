@@ -5,10 +5,11 @@ import { getDatabaseHealthApp } from './core-database'
 import { homepageOgCacheKey, photoOgCacheKey, runScheduled } from './cron'
 import { loadManifest, serveAppShell, servePhotoShell, serveWebManifest, toInlineJson } from './html'
 import { decodeMediaKey, isPublicMediaKey } from './media-key'
+import { sourceKeysForThumbnail, THUMBNAIL_PROCESS } from './media-variants'
 import { renderHomepageOgImage, renderPhotoOgImage } from './og'
 import { loadOgSiteConfig } from './og-site'
 import type { OgPhoto } from './og-template'
-import { storageGet, storageHead, storagePut } from './storage'
+import { storageGet, storageHead, storageProvider, storagePut } from './storage'
 
 const DASHBOARD_BASENAME = '/platform'
 const DASHBOARD_ALIAS = '/dashboard'
@@ -248,6 +249,16 @@ async function handleRequest(request: Request, executionCtx?: ExecutionContext):
       }
     }
 
+    // Optional on-the-fly resize (`?w=600`). This keeps deployments that are
+    // missing stored thumbnails working: OSS renders the preview from the
+    // original and the result is cached at the edge like any other media.
+    // Ranged reads (video) are never processed.
+    const requestedWidth = Number.parseInt(url.searchParams.get('w') ?? '', 10)
+    const resize =
+      !requestedRange && Number.isFinite(requestedWidth) && requestedWidth >= 64 && requestedWidth <= 2000
+        ? `image/resize,w_${requestedWidth}/format,jpg/quality,q_85`
+        : undefined
+
     // Thumbnails are immutable and requested by every visitor on every cold
     // visit. Without an edge cache each one is a Worker -> OSS round-trip,
     // which dominated first-screen time. Cache full (non-range) reads in the
@@ -267,10 +278,29 @@ async function handleRequest(request: Request, executionCtx?: ExecutionContext):
       }
     }
 
-    const object = await storageGet(
+    let object = await storageGet(
       key,
       requestedRange ? { offset: requestedRange.offset, length: requestedRange.length } : undefined,
+      resize,
     )
+    if (!object && !requestedRange && !resize && storageProvider() === 'oss') {
+      // The stored preview is missing (older uploads, or thumbnails removed
+      // before the cleanup fix). Render it from the original so every consumer
+      // of the existing `-thumb.jpg` URL keeps working; the result is cached
+      // below like any other media response.
+      for (const sourceKey of sourceKeysForThumbnail(key)) {
+        try {
+          object = await storageGet(sourceKey, undefined, THUMBNAIL_PROCESS)
+        } catch {
+          // A missing source or an unsupported format is not fatal: try the
+          // next candidate and fall through to 404.
+          object = null
+        }
+        if (object) {
+          break
+        }
+      }
+    }
     if (!object) {
       return new Response('Not Found', { status: 404 })
     }

@@ -14,6 +14,7 @@ import { ManifestPublisher } from './manifest-publisher.service'
 import { PhotoAiIndexer } from './photo-ai-indexer'
 import type { MultipartPart, UploadIntentResult } from './photo-storage.service'
 import { PhotoStorageService } from './photo-storage.service'
+import { thumbnailKeyFor } from './thumbnail-key'
 
 const KEY_PREFIX = 'photos'
 export const MAX_UPLOAD_FILE_BYTES = 1024 * 1024 * 1024
@@ -334,7 +335,7 @@ export class PersonalPhotoService {
     }
 
     const originalUrl = this.storage.publicUrl(input.key)
-    const thumbnailKey = this.thumbnailKeyFor(input.key)
+    const thumbnailKey = thumbnailKeyFor(input.key)
     const thumbnailObject = await this.storage.head(thumbnailKey)
 
     const manifest = {
@@ -346,7 +347,13 @@ export class PersonalPhotoService {
         dateTaken: input.takenAt || metadata.dateTaken || lastModified,
         tags: [],
         originalUrl,
-        thumbnailUrl: thumbnailObject ? this.storage.publicUrl(thumbnailKey) : this.storage.thumbnailUrl(input.key),
+        thumbnailUrl: thumbnailObject
+          ? this.storage.publicUrl(thumbnailKey)
+          : storageProvider() === 'oss'
+            ? // The media route can render the preview on demand; pointing at
+              // the full original here made cold visits download multi-MB files.
+              `${this.storage.publicUrl(input.key)}?w=600`
+            : this.storage.thumbnailUrl(input.key),
         thumbHash: input.thumbHash ?? null,
         width,
         height,
@@ -531,7 +538,7 @@ export class PersonalPhotoService {
     if (deleteFromStorage) {
       const keys = new Set(targets.map((target) => target.storageKey))
       for (const target of targets) {
-        keys.add(this.thumbnailKeyFor(target.storageKey))
+        keys.add(thumbnailKeyFor(target.storageKey))
         const video = target.manifest?.data?.video
         if (video?.type === 'live-photo') {
           keys.add(video.s3Key)
@@ -570,12 +577,6 @@ export class PersonalPhotoService {
     return [KEY_PREFIX, sanitizeDirectory(directory), `${sanitizeSegment(base, 'photo')}-${photoId}-thumb.jpg`]
       .filter(Boolean)
       .join('/')
-  }
-
-  private thumbnailKeyFor(storageKey: string): string {
-    const dotIndex = storageKey.lastIndexOf('.')
-    const base = dotIndex > 0 ? storageKey.slice(0, dotIndex) : storageKey
-    return `${base}-thumb.jpg`
   }
 
   private buildStorageKey(filename: string, directory?: string | null, photoId?: string | null): string {

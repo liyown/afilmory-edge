@@ -1,8 +1,10 @@
 // Storage maintenance shared by the scheduled handler. Kept free of OG
 // rendering so it can be exercised outside workerd (no wasm imports).
 
+import { readJpegSize, THUMBNAIL_PROCESS } from './media-variants'
+import { thumbnailKeyFor } from './modules/photos/thumbnail-key'
 import type { StorageObjectInfo } from './storage'
-import { storageDelete, storageList, storagePut } from './storage'
+import { storageDelete, storageDriver, storageGet, storageHead, storageList, storagePut } from './storage'
 
 const PHOTO_PREFIX = 'photos/'
 const BACKUP_PREFIX = 'backups/d1/'
@@ -47,6 +49,10 @@ async function referencedPhotoKeys(db: D1Database): Promise<Set<string>> {
   for (const row of results ?? []) {
     if (row.storageKey) {
       keys.add(row.storageKey)
+      // The 600px preview is written next to the original. Missing it here is
+      // what used to make the hourly cleanup delete every thumbnail 24h after
+      // upload.
+      keys.add(thumbnailKeyFor(row.storageKey))
     }
     if (!row.manifest) {
       continue
@@ -86,6 +92,83 @@ export async function cleanupOrphanUploads(env: CronEnv, now = Date.now()): Prom
 
   await deleteKeys(orphans)
   return { scanned: objects.length, deleted: orphans.length, keys: orphans }
+}
+
+/** Kept small: each repair costs one HEAD + GET + PUT subrequest. */
+const MAX_THUMBNAIL_REPAIRS = 10
+const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024
+const MAX_THUMBNAIL_EDGE = 1000
+
+export interface ThumbnailRepairResult {
+  scanned: number
+  repaired: number
+  failed: number
+  /** False when the storage backend does not support image processing. */
+  supported: boolean
+}
+
+/**
+ * Rebuilds previews that are missing from the bucket. Uploads normally write
+ * them, but older objects (and any that the cleanup job removed before this
+ * was fixed) have none, which leaves the gallery showing ThumbHash blurs.
+ */
+export async function repairMissingThumbnails(
+  env: CronEnv,
+  limit = MAX_THUMBNAIL_REPAIRS,
+): Promise<ThumbnailRepairResult> {
+  const result: ThumbnailRepairResult = { scanned: 0, repaired: 0, failed: 0, supported: true }
+  if (storageDriver() !== 's3') {
+    return { ...result, supported: false }
+  }
+
+  const { results } = await env.DB.prepare(
+    'select "storage_key" as storageKey from "photo_asset" where "storage_key" is not null',
+  ).all<{ storageKey: string }>()
+
+  for (const row of results ?? []) {
+    if (result.repaired + result.failed >= limit) {
+      break
+    }
+    const storageKey = row.storageKey?.trim()
+    if (!storageKey) {
+      continue
+    }
+
+    const thumbKey = thumbnailKeyFor(storageKey)
+    if (await storageHead(thumbKey)) {
+      continue
+    }
+
+    result.scanned += 1
+    try {
+      const source = await storageGet(storageKey, undefined, THUMBNAIL_PROCESS)
+      if (!source) {
+        result.failed += 1
+        continue
+      }
+      const bytes = new Uint8Array(await source.response.arrayBuffer())
+      const size = readJpegSize(bytes)
+      if (!size) {
+        result.failed += 1
+        continue
+      }
+      if (Math.max(size.width, size.height) > MAX_THUMBNAIL_EDGE || bytes.byteLength > MAX_THUMBNAIL_BYTES) {
+        // The backend ignored the resize parameter; stop instead of writing
+        // originals as previews.
+        result.supported = false
+        break
+      }
+      await storagePut(thumbKey, bytes, {
+        contentType: 'image/jpeg',
+        cacheControl: 'public, max-age=31536000, immutable',
+      })
+      result.repaired += 1
+    } catch {
+      result.failed += 1
+    }
+  }
+
+  return result
 }
 
 function backupKey(now: Date): string {
