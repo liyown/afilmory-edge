@@ -21,7 +21,7 @@ export const gallerySettingAtom = atom({
   searchQuery: '',
 
   columns: 'auto' as number | 'auto', // 自定义列数，auto 表示自动计算
-  viewMode: 'wall' as GalleryViewMode, // 视图模式：照片墙、瀑布流或列表详情
+  viewMode: 'masonry' as GalleryViewMode, // 默认视图模式：瀑布流（可切换照片墙或列表详情）
 })
 
 export const isExiftoolLoadedAtom = atom(false)
