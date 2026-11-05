@@ -73,7 +73,7 @@ export const PhotosRoot = () => {
       <PageHeader
         dateRange={dateRange.formattedRange}
         location={dateRange.location}
-        showDateRange={showFloatingActions && !!dateRange.formattedRange}
+        showDateRange={isWall ? Boolean(dateRange.formattedRange) : showFloatingActions && !!dateRange.formattedRange}
       />
 
       {isWall ? (

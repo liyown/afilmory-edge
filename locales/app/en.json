@@ -472,6 +472,8 @@
   "wall.empty": "No photos match the current filters",
   "wall.hint.pan": "Drag to move",
   "wall.hint.zoom": "Scroll or pinch to zoom",
+  "wall.photo.list": "Photos",
+  "wall.photo.untitled": "Untitled photo",
   "wall.view.reset": "Reset view",
   "wall.zoom.in": "Zoom in",
   "wall.zoom.level": "Reset to 100%",

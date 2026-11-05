@@ -1,13 +1,15 @@
 import { decompressUint8Array } from '@afilmory/utils'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTransformContext, useTransformEffect, useTransformInit } from 'react-zoom-pan-pinch'
 import { thumbHashToDataURL } from 'thumbhash'
 
 import type { PhotoManifest } from '~/types/photo'
 
-import { hitTest, isTap, toCanvasPoint } from './wall-camera'
+import type { WallCamera } from './wall-camera'
+import { hitTest, intersects, isTap, toCanvasPoint, visibleRect } from './wall-camera'
 import type { WallFrameInsets, WallLayout } from './wall-layout'
+import { sliceVisibleItems } from './wall-layout'
 import { PIVOT_RATIO, renderWall } from './wall-render'
 
 interface WallCanvasProps {
@@ -19,9 +21,36 @@ interface WallCanvasProps {
 }
 
 const MAX_CONCURRENT_DECODES = 6
+/** Originals are large; one at a time keeps decode memory bounded. */
+const MAX_CONCURRENT_HIRES = 1
+/** Extra canvas-space (screen px) around the viewport that is decoded ahead. */
 const DECODE_AHEAD_PX = 220
+/** Placeholders are cheap but not free, so build them just around the viewport. */
+const PLACEHOLDER_AHEAD_PX = 80
+/** Do not rescan the layout until the camera has moved this far (screen px). */
+const DECODE_SCAN_STEP_PX = 140
+const MAX_QUEUE = 64
+/** Decoded thumbnails are evicted beyond this count once they leave the area. */
+const MAX_DECODED_IMAGES = 160
+const MAX_HIRES_IMAGES = 4
+/** Above this camera scale the thumbnails are upscaled visibly. */
+const HIRES_SCALE = 1.6
+const HIRES_AHEAD_PX = 80
+/** Time without camera movement before the cheap "moving" frame is redrawn. */
+const MOTION_SETTLE_MS = 140
 /** Movement (CSS px) below which a press counts as a tap rather than a pan. */
 const TAP_SLOP_PX = 6
+
+const releaseImage = (image: HTMLImageElement) => {
+  image.onload = null
+  image.onerror = null
+  image.src = ''
+}
+
+const readViewport = (canvas: HTMLCanvasElement | null) => ({
+  width: canvas?.clientWidth ?? window.innerWidth,
+  height: canvas?.clientHeight ?? window.innerHeight,
+})
 
 /**
  * Draws the whole wall into one canvas.
@@ -36,21 +65,39 @@ export const WallCanvas = ({ layout, photos, insets, accent, onOpen }: WallCanva
   const { i18n } = useTranslation()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const imagesRef = useRef(new Map<string, HTMLImageElement>())
+  const hiresRef = useRef(new Map<string, HTMLImageElement>())
   const placeholdersRef = useRef(new Map<string, HTMLImageElement>())
   const frameRef = useRef(0)
   const pendingRef = useRef(new Set<string>())
+  const failedRef = useRef(new Set<string>())
   const queueRef = useRef<string[]>([])
   const activeRef = useRef(0)
+  const hiresPendingRef = useRef(new Set<string>())
+  const hiresFailedRef = useRef(new Set<string>())
+  const hiresQueueRef = useRef<string[]>([])
+  const hiresActiveRef = useRef(0)
   const reducedRef = useRef(false)
+  const disposedRef = useRef(false)
+  /** Camera of the last painted frame; used to detect motion and idle. */
+  const lastDrawnCameraRef = useRef<WallCamera | null>(null)
+  const settleTimerRef = useRef<number | null>(null)
+  /** Camera of the last decode scan, so scans can be throttled. */
+  const scanCameraRef = useRef<WallCamera | null>(null)
   /** Pointer-down origin, used to tell a tap apart from a pan. */
   const pressRef = useRef<{ x: number; y: number } | null>(null)
 
+  const photoMap = useMemo(() => new Map(photos.map((photo) => [photo.id, photo])), [photos])
+  const itemMap = useMemo(() => new Map(layout.items.map((item) => [item.id, item])), [layout])
+
   // Refs keep the per-frame draw free of React renders; props are mirrored in.
-  const propsRef = useRef({ accent, insets, layout, photos, locale: i18n.language })
-  propsRef.current = { accent, insets, layout, photos, locale: i18n.language }
+  const propsRef = useRef({ accent, insets, layout, photos, locale: i18n.language, photoMap, itemMap })
+  propsRef.current = { accent, insets, layout, photos, locale: i18n.language, photoMap, itemMap }
 
   const draw = useCallback(() => {
     frameRef.current = 0
+    if (disposedRef.current) {
+      return
+    }
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
     if (!canvas || !ctx) {
@@ -66,8 +113,9 @@ export const WallCanvas = ({ layout, photos, insets, accent, onOpen }: WallCanva
     }
 
     const current = propsRef.current
+    const camera = instance.state
     renderWall({
-      camera: instance.state,
+      camera,
       ctx,
       dpr,
       viewportWidth: width,
@@ -78,24 +126,360 @@ export const WallCanvas = ({ layout, photos, insets, accent, onOpen }: WallCanva
       accent: current.accent,
       locale: current.locale,
       images: imagesRef.current,
+      hires: hiresRef.current,
       placeholders: placeholdersRef.current,
       reduced: reducedRef.current,
     })
+
+    lastDrawnCameraRef.current = { scale: camera.scale, positionX: camera.positionX, positionY: camera.positionY }
   }, [instance])
 
   const schedule = useCallback(() => {
-    if (frameRef.current) {
+    if (disposedRef.current || frameRef.current) {
       return
     }
     frameRef.current = requestAnimationFrame(draw)
   }, [draw])
 
-  useTransformEffect(schedule)
-  useTransformInit(() => schedule())
+  /** Drops decoded thumbnails that are far outside the viewport. */
+  const pruneDecodedImages = useCallback(() => {
+    const images = imagesRef.current
+    if (images.size <= MAX_DECODED_IMAGES) {
+      return
+    }
+
+    const { width, height } = readViewport(canvasRef.current)
+    const camera = instance.state
+    const margin = Math.max(width, height) / Math.max(camera.scale, 0.01)
+    const rect = visibleRect(camera, width, height, margin)
+    const target = Math.floor(MAX_DECODED_IMAGES * 0.75)
+
+    for (const [id, image] of images) {
+      if (images.size <= target) {
+        break
+      }
+      const item = propsRef.current.itemMap.get(id)
+      if (item && intersects(item, rect)) {
+        continue
+      }
+      releaseImage(image)
+      images.delete(id)
+    }
+  }, [instance])
+
+  const pumpRef = useRef<() => void>(() => {})
+  const scanRef = useRef<(force?: boolean) => void>(() => {})
+
+  const pump = useCallback(() => {
+    while (activeRef.current < MAX_CONCURRENT_DECODES && queueRef.current.length > 0) {
+      const id = queueRef.current.shift()!
+      const photo = propsRef.current.photoMap.get(id)
+      if (!photo || imagesRef.current.has(id)) {
+        continue
+      }
+
+      pendingRef.current.add(id)
+      activeRef.current += 1
+      const image = new Image()
+      image.decoding = 'async'
+
+      const settle = (ok: boolean) => {
+        activeRef.current -= 1
+        pendingRef.current.delete(id)
+        if (!ok) {
+          failedRef.current.add(id)
+        }
+        schedule()
+        pumpRef.current()
+        // Once the queue drains, look again: the camera may have stopped on
+        // photos that were not queued during the last scan.
+        if (queueRef.current.length === 0) {
+          scanRef.current(true)
+        }
+      }
+
+      image.onload = () => {
+        // `onload` fires before the bitmap is decoded; waiting for `decode()`
+        // keeps the first drawImage from blocking the main thread.
+        void image
+          .decode()
+          .catch(() => undefined)
+          .finally(() => {
+            if (image.naturalWidth > 0) {
+              imagesRef.current.set(id, image)
+              pruneDecodedImages()
+              settle(true)
+            } else {
+              settle(false)
+            }
+          })
+      }
+      image.onerror = () => settle(false)
+      image.src = photo.thumbnailUrl || photo.originalUrl
+    }
+  }, [pruneDecodedImages, schedule])
+  pumpRef.current = pump
+
+  const ensurePlaceholder = useCallback(
+    (photo: PhotoManifest) => {
+      if (!photo.thumbHash || placeholdersRef.current.has(photo.id)) {
+        return
+      }
+      const hash = typeof photo.thumbHash === 'string' ? decompressUint8Array(photo.thumbHash) : photo.thumbHash
+      const image = new Image()
+      image.onload = schedule
+      image.src = thumbHashToDataURL(hash)
+      placeholdersRef.current.set(photo.id, image)
+    },
+    [schedule],
+  )
+
+  /** Items near the viewport, plus the rect they were selected with. */
+  const nearItems = useCallback((camera: WallCamera, marginPx: number) => {
+    const { width, height } = readViewport(canvasRef.current)
+    const margin = marginPx / Math.max(camera.scale, 0.01)
+    const rect = visibleRect(camera, width, height, margin)
+    // Rows are contiguous, so only the intersecting band has to be examined.
+    const rows = sliceVisibleItems(propsRef.current.layout, {
+      left: rect.left,
+      top: rect.top,
+      width: rect.right - rect.left,
+      height: rect.bottom - rect.top,
+    })
+    return { rect, items: rows.filter((item) => intersects(item, rect)) }
+  }, [])
+
+  const pruneHires = useCallback(() => {
+    const hires = hiresRef.current
+    if (hires.size <= MAX_HIRES_IMAGES) {
+      return
+    }
+
+    const { rect } = nearItems(instance.state, 0)
+    for (const [id, image] of hires) {
+      if (hires.size <= MAX_HIRES_IMAGES) {
+        break
+      }
+      const item = propsRef.current.itemMap.get(id)
+      if (item && intersects(item, rect)) {
+        continue
+      }
+      releaseImage(image)
+      hires.delete(id)
+    }
+  }, [instance, nearItems])
+
+  const pumpHiresRef = useRef<() => void>(() => {})
+
+  const pumpHires = useCallback(() => {
+    while (hiresActiveRef.current < MAX_CONCURRENT_HIRES && hiresQueueRef.current.length > 0) {
+      const id = hiresQueueRef.current.shift()!
+      const photo = propsRef.current.photoMap.get(id)
+      if (!photo || hiresRef.current.has(id)) {
+        continue
+      }
+
+      hiresPendingRef.current.add(id)
+      hiresActiveRef.current += 1
+      const image = new Image()
+      image.decoding = 'async'
+
+      const finish = () => {
+        hiresActiveRef.current -= 1
+        hiresPendingRef.current.delete(id)
+        schedule()
+        pumpHiresRef.current()
+        if (hiresQueueRef.current.length === 0) {
+          scanRef.current(true)
+        }
+      }
+
+      const settle = (ok: boolean) => {
+        if (!ok) {
+          hiresFailedRef.current.add(id)
+        }
+        finish()
+      }
+
+      image.onload = () => {
+        void image
+          .decode()
+          .catch(() => undefined)
+          .finally(() => {
+            // The user may have zoomed back out while the original was in
+            // flight; do not resurrect it after the cache was cleared.
+            if (image.naturalWidth > 0 && instance.state.scale >= HIRES_SCALE) {
+              hiresRef.current.set(id, image)
+              pruneHires()
+              finish()
+            } else {
+              if (image.naturalWidth > 0) {
+                releaseImage(image)
+              }
+              // Not a failure: the photo can be requested again on the next
+              // zoom-in, so it must not enter the failed set.
+              finish()
+            }
+          })
+      }
+      image.onerror = () => settle(false)
+      image.src = photo.originalUrl
+    }
+  }, [instance, pruneHires, schedule])
+  pumpHiresRef.current = pumpHires
+
+  const scanHires = useCallback(
+    (camera: WallCamera) => {
+      const hires = hiresRef.current
+      if (camera.scale < HIRES_SCALE) {
+        if (hires.size > 0) {
+          for (const image of hires.values()) {
+            releaseImage(image)
+          }
+          hires.clear()
+          schedule()
+        }
+        hiresQueueRef.current = []
+        return
+      }
+
+      const { rect, items } = nearItems(camera, HIRES_AHEAD_PX)
+      const centerX = (rect.left + rect.right) / 2
+      const centerY = (rect.top + rect.bottom) / 2
+      const candidates: { id: string; distance: number }[] = []
+
+      for (const item of items) {
+        const photo = propsRef.current.photoMap.get(item.id)
+        if (!photo?.originalUrl) {
+          continue
+        }
+        if (hires.has(item.id) || hiresPendingRef.current.has(item.id) || hiresFailedRef.current.has(item.id)) {
+          continue
+        }
+        // Wait for the thumbnail: it tells us whether a bigger bitmap is
+        // actually needed for the current on-screen size.
+        const thumb = imagesRef.current.get(item.id)
+        if (!thumb) {
+          continue
+        }
+        if (thumb.naturalWidth >= item.photoWidth * camera.scale) {
+          continue
+        }
+        const dx = item.x + item.width / 2 - centerX
+        const dy = item.y + item.height / 2 - centerY
+        candidates.push({ id: item.id, distance: dx * dx + dy * dy })
+      }
+
+      candidates.sort((a, b) => a.distance - b.distance)
+      hiresQueueRef.current = candidates.slice(0, MAX_HIRES_IMAGES).map((entry) => entry.id)
+      pumpHiresRef.current()
+    },
+    [nearItems, schedule],
+  )
+
+  /**
+   * Rebuilds the decode queue for the current viewport. The queue is replaced
+   * rather than appended to, which prunes photos the user has already left;
+   * re-running is cheap and throttled by camera movement.
+   */
+  const scan = useCallback(
+    (force = false) => {
+      const camera = instance.state
+      const previous = scanCameraRef.current
+      if (!force && previous) {
+        const moved = Math.abs(previous.positionX - camera.positionX) + Math.abs(previous.positionY - camera.positionY)
+        const zoomed = previous.scale > 0 && Math.abs(previous.scale - camera.scale) / previous.scale > 0.02
+        if (moved < DECODE_SCAN_STEP_PX && !zoomed) {
+          return
+        }
+      }
+      scanCameraRef.current = {
+        scale: camera.scale,
+        positionX: camera.positionX,
+        positionY: camera.positionY,
+      }
+
+      const { width, height } = readViewport(canvasRef.current)
+      const { rect, items } = nearItems(camera, DECODE_AHEAD_PX)
+      const placeholderRect = visibleRect(camera, width, height, PLACEHOLDER_AHEAD_PX / Math.max(camera.scale, 0.01))
+      const centerX = (rect.left + rect.right) / 2
+      const centerY = (rect.top + rect.bottom) / 2
+      const candidates: { id: string; distance: number }[] = []
+
+      for (const item of items) {
+        const photo = propsRef.current.photoMap.get(item.id)
+        if (!photo) {
+          continue
+        }
+        if (intersects(item, placeholderRect)) {
+          ensurePlaceholder(photo)
+        }
+        if (imagesRef.current.has(item.id) || pendingRef.current.has(item.id) || failedRef.current.has(item.id)) {
+          continue
+        }
+        const dx = item.x + item.width / 2 - centerX
+        const dy = item.y + item.height / 2 - centerY
+        candidates.push({ id: item.id, distance: dx * dx + dy * dy })
+      }
+
+      // Nearest-to-centre first: a drag over the wall never hammers the
+      // network with corners the user is about to leave again.
+      candidates.sort((a, b) => a.distance - b.distance)
+      queueRef.current = candidates.slice(0, MAX_QUEUE).map((entry) => entry.id)
+      pumpRef.current()
+      scanHires(camera)
+    },
+    [ensurePlaceholder, instance, nearItems, scanHires],
+  )
+  scanRef.current = scan
+
+  const onCameraChange = useCallback(() => {
+    const camera = instance.state
+    const previous = lastDrawnCameraRef.current
+    if (previous) {
+      const moved =
+        Math.abs(previous.scale - camera.scale) > 1e-4 ||
+        Math.abs(previous.positionX - camera.positionX) > 0.5 ||
+        Math.abs(previous.positionY - camera.positionY) > 0.5
+      if (moved) {
+        // While the camera is moving, drop the expensive parts of the frame;
+        // one clean frame is drawn once the gesture settles.
+        reducedRef.current = true
+        if (settleTimerRef.current !== null) {
+          window.clearTimeout(settleTimerRef.current)
+        }
+        settleTimerRef.current = window.setTimeout(() => {
+          settleTimerRef.current = null
+          reducedRef.current = false
+          schedule()
+        }, MOTION_SETTLE_MS)
+      }
+    }
+    schedule()
+    scan()
+  }, [instance, schedule, scan])
+
+  useTransformEffect(onCameraChange)
+  useTransformInit(() => {
+    schedule()
+    scan(true)
+  })
+
+  // A changed photo set invalidates the originals that were loaded for the old
+  // layout; they are keyed by id, so they cannot be matched against new items.
+  useEffect(() => {
+    for (const image of hiresRef.current.values()) {
+      releaseImage(image)
+    }
+    hiresRef.current.clear()
+    hiresQueueRef.current = []
+  }, [photos])
 
   useEffect(() => {
+    scanCameraRef.current = null
     schedule()
-  }, [layout, photos, accent, insets, schedule])
+    scan(true)
+  }, [accent, i18n.language, insets, layout, photos, schedule, scan])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -109,102 +493,19 @@ export const WallCanvas = ({ layout, photos, insets, accent, onOpen }: WallCanva
 
   useEffect(() => {
     return () => {
+      disposedRef.current = true
       if (frameRef.current) {
         cancelAnimationFrame(frameRef.current)
         frameRef.current = 0
       }
+      if (settleTimerRef.current !== null) {
+        window.clearTimeout(settleTimerRef.current)
+        settleTimerRef.current = null
+      }
+      queueRef.current = []
+      hiresQueueRef.current = []
     }
   }, [])
-
-  // Thumbhash placeholders decode instantly and make the first paint look
-  // intentional instead of empty.
-  useEffect(() => {
-    let changed = false
-    for (const photo of photos) {
-      if (!photo.thumbHash || placeholdersRef.current.has(photo.id)) {
-        continue
-      }
-      const hash = typeof photo.thumbHash === 'string' ? decompressUint8Array(photo.thumbHash) : photo.thumbHash
-      const image = new Image()
-      image.src = thumbHashToDataURL(hash)
-      placeholdersRef.current.set(photo.id, image)
-      changed = true
-    }
-    if (changed) {
-      schedule()
-    }
-  }, [photos, schedule])
-
-  const pump = useCallback(() => {
-    while (activeRef.current < MAX_CONCURRENT_DECODES && queueRef.current.length > 0) {
-      const id = queueRef.current.shift()!
-      const photo = propsRef.current.photos.find((item) => item.id === id)
-      if (!photo) {
-        continue
-      }
-      activeRef.current += 1
-      const image = new Image()
-      image.decoding = 'async'
-      const settle = () => {
-        activeRef.current -= 1
-        pendingRef.current.delete(id)
-        schedule()
-        pump()
-      }
-      image.onload = () => {
-        imagesRef.current.set(id, image)
-        settle()
-      }
-      image.onerror = settle
-      image.src = photo.thumbnailUrl || photo.originalUrl
-    }
-  }, [schedule])
-
-  // Queue thumbnails that are near the viewport; thumbnails are only decoded
-  // shortly before they are needed, so first paint stays cheap.
-  const enqueueAroundViewport = useCallback(() => {
-    const { scale, positionX, positionY } = instance.state
-    if (!scale) {
-      return
-    }
-    const width = canvasRef.current?.clientWidth ?? window.innerWidth
-    const height = canvasRef.current?.clientHeight ?? window.innerHeight
-    const rect = {
-      left: -positionX / scale - DECODE_AHEAD_PX,
-      top: -positionY / scale - DECODE_AHEAD_PX,
-      right: (width - positionX) / scale + DECODE_AHEAD_PX,
-      bottom: (height - positionY) / scale + DECODE_AHEAD_PX,
-    }
-
-    let queued = 0
-    for (const item of propsRef.current.layout.items) {
-      const photo = propsRef.current.photos[item.index]
-      if (!photo || imagesRef.current.has(photo.id) || pendingRef.current.has(photo.id)) {
-        continue
-      }
-      const near =
-        item.x + item.width >= rect.left &&
-        item.x <= rect.right &&
-        item.y + item.height >= rect.top &&
-        item.y <= rect.bottom
-      if (!near) {
-        continue
-      }
-      pendingRef.current.add(photo.id)
-      queueRef.current.push(photo.id)
-      queued += 1
-      if (queued >= 32) {
-        break
-      }
-    }
-    pump()
-  }, [instance, pump])
-
-  useTransformEffect(enqueueAroundViewport)
-  useTransformInit(() => enqueueAroundViewport())
-  useEffect(() => {
-    enqueueAroundViewport()
-  }, [enqueueAroundViewport, layout, photos])
 
   const handlePointerDown = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {
     pressRef.current = { x: event.clientX, y: event.clientY }
@@ -241,6 +542,9 @@ export const WallCanvas = ({ layout, photos, insets, accent, onOpen }: WallCanva
   return (
     <canvas
       ref={canvasRef}
+      // The photo wall is exposed to assistive technology through the hidden
+      // list rendered by WallView; the canvas itself is a picture.
+      aria-hidden="true"
       className="pointer-events-auto"
       onPointerDown={handlePointerDown}
       style={{

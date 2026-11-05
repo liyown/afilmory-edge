@@ -436,6 +436,8 @@
   "wall.empty": "현재 필터와 일치하는 사진이 없습니다",
   "wall.hint.pan": "드래그하여 이동",
   "wall.hint.zoom": "스크롤 또는 핀치로 확대",
+  "wall.photo.list": "사진",
+  "wall.photo.untitled": "제목 없는 사진",
   "wall.view.reset": "보기 초기화",
   "wall.zoom.in": "확대",
   "wall.zoom.level": "100%로 초기화",

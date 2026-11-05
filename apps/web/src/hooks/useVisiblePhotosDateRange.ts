@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { toIntlLocale } from '~/lib/intl'
 import type { PhotoManifest } from '~/types/photo'
 
 interface DateRange {
@@ -13,6 +14,28 @@ interface DateRange {
 interface VisibleRange {
   start: number
   end: number
+}
+
+/**
+ * Formatters are expensive to construct, so one is kept per locale. The range
+ * is formatted by `Intl` rather than by hand: the old hand-written branches
+ * emitted Chinese "年/月" for every locale.
+ */
+const rangeFormatters = new Map<string, Intl.DateTimeFormat>()
+
+const getRangeFormatter = (locale: string) => {
+  const cached = rangeFormatters.get(locale)
+  if (cached) {
+    return cached
+  }
+  let formatter: Intl.DateTimeFormat
+  try {
+    formatter = new Intl.DateTimeFormat(toIntlLocale(locale), { year: 'numeric', month: 'short', day: 'numeric' })
+  } catch {
+    formatter = new Intl.DateTimeFormat('en', { year: 'numeric', month: 'short', day: 'numeric' })
+  }
+  rangeFormatters.set(locale, formatter)
+  return formatter
 }
 
 /**
@@ -48,32 +71,16 @@ export const useVisiblePhotosDateRange = (_photos: PhotoManifest[]) => {
 
   const formatDateRange = useCallback(
     (startDate: Date, endDate: Date): string => {
-      const startYear = startDate.getFullYear()
-      const endYear = endDate.getFullYear()
-      const startMonth = startDate.getMonth()
-      const endMonth = endDate.getMonth()
-
-      // 如果是同一天
-      if (startDate.toDateString() === endDate.toDateString()) {
-        return startDate.toLocaleDateString(i18n.language, {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        })
-      }
-
-      // 如果是同一年
-      if (startYear === endYear) {
-        // 如果是同一个月
-        if (startMonth === endMonth) {
-          return `${startYear}年${startDate.getMonth() + 1}月${startDate.getDate()}日 - ${endDate.getDate()}日`
-        } else {
-          return `${startYear}年${startDate.getMonth() + 1}月 - ${endDate.getMonth() + 1}月`
+      const formatter = getRangeFormatter(i18n.language)
+      if (typeof formatter.formatRange === 'function') {
+        try {
+          return formatter.formatRange(startDate, endDate)
+        } catch {
+          // Fall through for engines that reject the range but can format both
+          // ends individually.
         }
       }
-
-      // 不同年份
-      return `${startYear}年${startDate.getMonth() + 1}月 - ${endYear}年${endDate.getMonth() + 1}月`
+      return `${formatter.format(startDate)} – ${formatter.format(endDate)}`
     },
     [i18n.language],
   )
