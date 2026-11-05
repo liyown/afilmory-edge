@@ -105,10 +105,11 @@ export const toCanvasPoint = (camera: WallCamera, screenX: number, screenY: numb
  *   there is room, again with `margin` of slack.
  */
 export const clampPanAxis = (position: number, wallSize: number, viewportSize: number, margin: number) => {
-  // The wall is narrower than the viewport, so there is no travel at all: keep
-  // it centred instead of pinning it to one edge.
+  // The wall is narrower than the viewport, so there is no travel at all. Keep
+  // it fully on screen instead of snapping it to the centre: that snap was
+  // visible as a jump every time the user zoomed out and let go.
   if (wallSize + margin * 2 <= viewportSize) {
-    return (viewportSize - wallSize) / 2
+    return Math.min(viewportSize - wallSize, Math.max(0, position))
   }
 
   // The wall may be nudged past the viewport edge, but never so far that most

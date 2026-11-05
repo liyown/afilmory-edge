@@ -100,9 +100,12 @@ it('clampPanAxis lets a large wall travel but keeps it on screen', () => {
   assert.ok(clampPanAxis(-3000, 2000, 1000, 100) >= -1100)
 })
 
-it('clampPanAxis centres a wall smaller than the viewport', () => {
-  const centred = clampPanAxis(9999, 400, 1000, 0)
-  assert.equal(centred, 300)
+it('clampPanAxis keeps a wall smaller than the viewport fully on screen', () => {
+  // Wall 400 wide in a 1000 viewport: it may sit between 0 and 600, without a
+  // forced centre (which used to read as a jump on zoom-out).
+  assert.equal(clampPanAxis(9999, 400, 1000, 0), 600)
+  assert.equal(clampPanAxis(-50, 400, 1000, 0), 0)
+  assert.equal(clampPanAxis(200, 400, 1000, 0), 200)
 })
 
 it('clampPanAxis never returns a value outside the wall', () => {

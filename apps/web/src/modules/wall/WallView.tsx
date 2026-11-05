@@ -42,6 +42,8 @@ const MIN_SCALE = 0.25
 const MAX_SCALE = 3
 const MIN_INITIAL_SCALE = 0.55
 const ZOOM_ANIMATION_MS = 240
+/** Longer than the library's momentum so the clamp never runs mid-flight. */
+const SETTLE_DELAY_MS = 760
 const EASING = 'easeOut' as const
 
 interface WallViewProps {
@@ -279,18 +281,41 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
   )
   const initialViewRef = useRef(initialView)
   initialViewRef.current = initialView
-  const fittedLayoutRef = useRef(layout)
+  const fittedSizeRef = useRef({ width: layout.width, height: layout.height })
+  const gestureRef = useRef(false)
+  const fitFrameRef = useRef(0)
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (fittedLayoutRef.current === layout) {
+    const previous = fittedSizeRef.current
+    fittedSizeRef.current = { width: layout.width, height: layout.height }
+
+    // Only re-fit when the wall really changed shape. Identity churn (and
+    // viewport height changes) used to re-frame the wall while the user was
+    // already dragging it, which read as a teleport.
+    if (Math.abs(previous.width - layout.width) < 2 && Math.abs(previous.height - layout.height) < 2) {
       return
     }
-    fittedLayoutRef.current = layout
+    if (gestureRef.current) {
+      return
+    }
+
     const next = initialViewRef.current
-    const frame = requestAnimationFrame(() => {
-      transformRef.current?.setTransform(next.x, next.y, next.scale, ZOOM_ANIMATION_MS, EASING)
+    if (fitFrameRef.current) {
+      cancelAnimationFrame(fitFrameRef.current)
+    }
+    fitFrameRef.current = requestAnimationFrame(() => {
+      fitFrameRef.current = 0
+      // Instant rather than animated: a 240ms fit can still be running when a
+      // drag begins, and then the two camera updates fight.
+      transformRef.current?.setTransform(next.x, next.y, next.scale)
     })
-    return () => cancelAnimationFrame(frame)
+    return () => {
+      if (fitFrameRef.current) {
+        cancelAnimationFrame(fitFrameRef.current)
+        fitFrameRef.current = 0
+      }
+    }
   }, [layout])
 
   useEffect(() => {
@@ -305,8 +330,17 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
     return () => window.removeEventListener('pointermove', handlePointerMove)
   }, [])
 
-  const markInteracted = useCallback(() => {
+  const beginGesture = useCallback(() => {
     setHasInteracted(true)
+    gestureRef.current = true
+    if (fitFrameRef.current) {
+      cancelAnimationFrame(fitFrameRef.current)
+      fitFrameRef.current = 0
+    }
+    if (settleTimerRef.current) {
+      clearTimeout(settleTimerRef.current)
+      settleTimerRef.current = null
+    }
   }, [])
 
   const openViewerRef = useRef(photoViewer.openViewer)
@@ -350,16 +384,15 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
             ? rect.top + rect.height / 2
             : viewportHeight / 2
       void ref.zoomToPoint(targetScale, clientX, clientY, ZOOM_ANIMATION_MS, EASING)
-      markInteracted()
+      beginGesture()
     },
-    [markInteracted, viewportHeight, viewportWidth],
+    [beginGesture, viewportHeight, viewportWidth],
   )
 
   /**
    * Nothing clamps the pan (that is what makes the wall feel free), so after a
    * gesture settles we glide back if the photos were pushed off screen.
    */
-  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const settleWithinView = useCallback(() => {
     const ref = transformRef.current
     const wrapper = ref?.instance.wrapperComponent
@@ -388,8 +421,11 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
     }
     settleTimerRef.current = setTimeout(() => {
       settleTimerRef.current = null
+      // Wait out the library's momentum (up to 700ms) before clamping: doing
+      // it mid-flight is what made the wall jump after a fling.
+      gestureRef.current = false
       settleWithinView()
-    }, 260)
+    }, SETTLE_DELAY_MS)
   }, [settleWithinView])
 
   useEffect(() => {
@@ -464,11 +500,11 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
         keyboard={{ disabled: false, panStep: 90, zoomStep: 0.2 }}
         zoomAnimation={{ animationTime: ZOOM_ANIMATION_MS }}
         velocityAnimation={{ animationTime: 260, maxAnimationTime: 700 }}
-        onPanningStart={markInteracted}
+        onPanningStart={beginGesture}
         onPanningStop={scheduleSettle}
-        onZoomStart={markInteracted}
+        onZoomStart={beginGesture}
         onZoomStop={scheduleSettle}
-        onWheelStart={markInteracted}
+        onWheelStart={beginGesture}
         onWheelStop={scheduleSettle}
       >
         {/*

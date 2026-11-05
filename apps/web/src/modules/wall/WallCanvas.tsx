@@ -1,5 +1,5 @@
 import { decompressUint8Array } from '@afilmory/utils'
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTransformContext, useTransformEffect, useTransformInit } from 'react-zoom-pan-pinch'
 import { thumbHashToDataURL } from 'thumbhash'
@@ -47,10 +47,34 @@ const releaseImage = (image: HTMLImageElement) => {
   image.src = ''
 }
 
+/** The media route turns `?w=` into an OSS resize for deployments without stored previews. */
+const resizeUrl = (url: string, width: number) =>
+  `${url}${url.includes('?') ? '&' : '?'}w=${Math.max(64, Math.round(width))}`
+
 const readViewport = (canvas: HTMLCanvasElement | null) => ({
   width: canvas?.clientWidth ?? window.innerWidth,
   height: canvas?.clientHeight ?? window.innerHeight,
 })
+
+/** Opt-in diagnostics for reporting jank from a real device: `?wallDebug=1`. */
+const DEBUG_ENABLED = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('wallDebug')
+
+const WallDebugHud = ({ read }: { read: () => string }) => {
+  const [text, setText] = useState('')
+
+  useEffect(() => {
+    const tick = () => setText(read())
+    tick()
+    const id = window.setInterval(tick, 500)
+    return () => window.clearInterval(id)
+  }, [read])
+
+  return (
+    <div className="bg-material-thick/80 border-accent/20 text-text-secondary pointer-events-none fixed top-16 left-3 z-30 rounded-lg border px-2.5 py-2 font-mono text-[10px] leading-relaxed whitespace-pre backdrop-blur-2xl">
+      {text}
+    </div>
+  )
+}
 
 /**
  * Draws the whole wall into one canvas.
@@ -78,6 +102,8 @@ export const WallCanvas = ({ layout, photos, insets, accent, onOpen }: WallCanva
   const hiresActiveRef = useRef(0)
   const reducedRef = useRef(false)
   const disposedRef = useRef(false)
+  /** Draw timestamps inside the last second, for the optional HUD. */
+  const drawTimesRef = useRef<number[]>([])
   /** Camera of the last painted frame; used to detect motion and idle. */
   const lastDrawnCameraRef = useRef<WallCamera | null>(null)
   const settleTimerRef = useRef<number | null>(null)
@@ -132,6 +158,15 @@ export const WallCanvas = ({ layout, photos, insets, accent, onOpen }: WallCanva
     })
 
     lastDrawnCameraRef.current = { scale: camera.scale, positionX: camera.positionX, positionY: camera.positionY }
+
+    if (DEBUG_ENABLED) {
+      const stamp = performance.now()
+      const times = drawTimesRef.current
+      times.push(stamp)
+      while (times.length > 0 && stamp - times[0] > 1000) {
+        times.shift()
+      }
+    }
   }, [instance])
 
   const schedule = useCallback(() => {
@@ -182,6 +217,7 @@ export const WallCanvas = ({ layout, photos, insets, accent, onOpen }: WallCanva
       activeRef.current += 1
       const image = new Image()
       image.decoding = 'async'
+      let fellBack = false
 
       const settle = (ok: boolean) => {
         activeRef.current -= 1
@@ -214,8 +250,18 @@ export const WallCanvas = ({ layout, photos, insets, accent, onOpen }: WallCanva
             }
           })
       }
-      image.onerror = () => settle(false)
-      image.src = photo.thumbnailUrl || photo.originalUrl
+      image.onerror = () => {
+        // Uploads normally store a 600px preview next to the original, but
+        // older objects (and anything the cleanup cron removed before it was
+        // fixed) do not. OSS can render that preview on demand.
+        if (!fellBack) {
+          fellBack = true
+          image.src = resizeUrl(photo.originalUrl, 600)
+          return
+        }
+        settle(false)
+      }
+      image.src = photo.thumbnailUrl || resizeUrl(photo.originalUrl, 600)
     }
   }, [pruneDecodedImages, schedule])
   pumpRef.current = pump
@@ -323,7 +369,15 @@ export const WallCanvas = ({ layout, photos, insets, accent, onOpen }: WallCanva
           })
       }
       image.onerror = () => settle(false)
-      image.src = photo.originalUrl
+      // Ask for only as many pixels as this frame occupies on screen instead
+      // of pulling the (often multi-megabyte) original.
+      const item = propsRef.current.itemMap.get(id)
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      const targetWidth = Math.min(
+        2048,
+        Math.max(600, Math.ceil((item?.photoWidth ?? 600) * instance.state.scale * dpr)),
+      )
+      image.src = resizeUrl(photo.originalUrl, targetWidth)
     }
   }, [instance, pruneHires, schedule])
   pumpHiresRef.current = pumpHires
@@ -539,25 +593,41 @@ export const WallCanvas = ({ layout, photos, insets, accent, onOpen }: WallCanva
     [instance, onOpen],
   )
 
+  const readDebug = useCallback(() => {
+    const camera = instance.state
+    const lines = [
+      // Draws are on demand, so an idle wall legitimately shows a low number.
+      `draws ${drawTimesRef.current.length}/s`,
+      `scale ${camera.scale.toFixed(2)}`,
+      `cam   ${Math.round(camera.positionX)}, ${Math.round(camera.positionY)}`,
+      `thumbs ${imagesRef.current.size}/${photos.length}  hires ${hiresRef.current.size}`,
+      `queue ${queueRef.current.length}  moving ${reducedRef.current ? 'yes' : 'no'}`,
+    ]
+    return lines.join('\n')
+  }, [instance, photos.length])
+
   return (
-    <canvas
-      ref={canvasRef}
-      // The photo wall is exposed to assistive technology through the hidden
-      // list rendered by WallView; the canvas itself is a picture.
-      aria-hidden="true"
-      className="pointer-events-auto"
-      onPointerDown={handlePointerDown}
-      style={{
-        display: 'block',
-        // The content box is the full wall size (that is what the library uses
-        // for pan bounds), but the canvas only ever needs to cover the viewport.
-        // `fixed` keeps it viewport-sized while the content transform is off.
-        position: 'fixed',
-        inset: 0,
-        width: '100vw',
-        height: '100vh',
-      }}
-      onClick={handleClick}
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        // The photo wall is exposed to assistive technology through the hidden
+        // list rendered by WallView; the canvas itself is a picture.
+        aria-hidden="true"
+        className="pointer-events-auto"
+        onPointerDown={handlePointerDown}
+        style={{
+          display: 'block',
+          // The content box is the full wall size (that is what the library uses
+          // for pan bounds), but the canvas only ever needs to cover the viewport.
+          // `fixed` keeps it viewport-sized while the content transform is off.
+          position: 'fixed',
+          inset: 0,
+          width: '100vw',
+          height: '100vh',
+        }}
+        onClick={handleClick}
+      />
+      {DEBUG_ENABLED && <WallDebugHud read={readDebug} />}
+    </>
   )
 }
