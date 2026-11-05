@@ -436,6 +436,8 @@
   "wall.empty": "現在のフィルターに一致する写真がありません",
   "wall.hint.pan": "ドラッグで移動",
   "wall.hint.zoom": "スクロールまたはピンチでズーム",
+  "wall.photo.list": "写真",
+  "wall.photo.untitled": "タイトルなしの写真",
   "wall.view.reset": "表示をリセット",
   "wall.zoom.in": "拡大",
   "wall.zoom.level": "100% にリセット",

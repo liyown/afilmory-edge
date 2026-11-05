@@ -273,7 +273,12 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
     return getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim() || '#007aff'
   }, [])
 
-  const initialViewRef = useRef(createInitialView(viewportWidth || 1440, viewportHeight || 900, layout, isMobile))
+  const initialView = useMemo(
+    () => createInitialView(viewportWidth || 1440, viewportHeight || 900, layout, isMobile),
+    [isMobile, layout, viewportHeight, viewportWidth],
+  )
+  const initialViewRef = useRef(initialView)
+  initialViewRef.current = initialView
   const fittedLayoutRef = useRef(layout)
 
   useEffect(() => {
@@ -281,13 +286,12 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
       return
     }
     fittedLayoutRef.current = layout
-    const next = createInitialView(viewportWidth || 1440, viewportHeight || 900, layout, isMobile)
-    initialViewRef.current = next
+    const next = initialViewRef.current
     const frame = requestAnimationFrame(() => {
       transformRef.current?.setTransform(next.x, next.y, next.scale, ZOOM_ANIMATION_MS, EASING)
     })
     return () => cancelAnimationFrame(frame)
-  }, [isMobile, layout, viewportHeight, viewportWidth])
+  }, [layout])
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -312,6 +316,10 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
 
   const handleOpen = useCallback((index: number, element: HTMLElement) => {
     openViewerRef.current(index, element)
+  }, [])
+
+  const openPhoto = useCallback((index: number) => {
+    openViewerRef.current(index)
   }, [])
 
   const resetView = useCallback(() => {
@@ -422,11 +430,28 @@ export const WallView = ({ photos, onVisibleRangeChange }: WallViewProps) => {
 
   return (
     <div className="fixed inset-0 z-0" role="region" aria-label={t('gallery.view.wall')}>
+      {/*
+        The wall itself is a bitmap, which a screen reader cannot see. This
+        hidden list carries the same photos as ordinary buttons, so the gallery
+        stays reachable with a keyboard and assistive technology.
+      */}
+      <div className="sr-only">
+        <ul aria-label={t('wall.photo.list')}>
+          {photos.map((photo, index) => (
+            <li key={photo.id}>
+              <button type="button" onClick={() => openPhoto(index)}>
+                {photo.title || t('wall.photo.untitled')}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+
       <TransformWrapper
         ref={transformRef}
-        initialScale={initialViewRef.current.scale}
-        initialPositionX={initialViewRef.current.x}
-        initialPositionY={initialViewRef.current.y}
+        initialScale={initialView.scale}
+        initialPositionX={initialView.x}
+        initialPositionY={initialView.y}
         minScale={MIN_SCALE}
         maxScale={MAX_SCALE}
         limitToBounds={false}

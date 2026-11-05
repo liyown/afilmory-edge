@@ -435,6 +435,8 @@
   "wall.empty": "沒有符合目前篩選條件的相片",
   "wall.hint.pan": "拖動畫布",
   "wall.hint.zoom": "滾輪或雙指縮放",
+  "wall.photo.list": "相片",
+  "wall.photo.untitled": "未命名相片",
   "wall.view.reset": "回到初始檢視",
   "wall.zoom.in": "放大",
   "wall.zoom.level": "重設為 100%",
