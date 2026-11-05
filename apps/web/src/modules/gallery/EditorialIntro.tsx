@@ -1,4 +1,5 @@
 import { Thumbhash } from '@afilmory/ui'
+import { Spring } from '@afilmory/utils'
 import { getViewerTransitionTriggerProps } from '@afilmory/viewer-motion'
 import clsx from 'clsx'
 import { m, useReducedMotion } from 'motion/react'
@@ -10,7 +11,6 @@ import type { PhotoManifest } from '~/types/photo'
 
 const HERO_PHOTO_COUNT = 6
 const HERO_CANDIDATE_COUNT = 12
-const EASE_OUT = [0.22, 1, 0.36, 1] as const
 
 function parseTakenAt(photo: PhotoManifest): Date | null {
   const raw = photo.exif?.DateTimeOriginal
@@ -38,11 +38,6 @@ function resolvePlace(photo: PhotoManifest): string | null {
   return photo.location?.city || photo.location?.locationName || photo.location?.country || null
 }
 
-/**
- * Pick the first six photos for the editorial composition. A vertical image is
- * promoted into the tall slot so the mosaic keeps a portrait anchor instead of
- * depending on whatever order the manifest happens to use.
- */
 export function selectEditorialPhotos(photos: PhotoManifest[]): PhotoManifest[] {
   if (photos.length <= HERO_PHOTO_COUNT) {
     return photos
@@ -117,18 +112,17 @@ const HeroPhoto = memo(({ photo, index, order, eager, className }: HeroPhotoProp
 
   return (
     <m.figure
-      className={clsx('group/photo m-0', className)}
-      initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+      className={clsx('group/photo m-0 flex w-full min-w-0 flex-col', className)}
+      initial={reduceMotion ? false : { opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.8, delay: order * 0.06, ease: EASE_OUT }}
+      transition={{ ...Spring.smooth(0.72), delay: order * 0.055 }}
     >
       <button
         ref={triggerRef}
         type="button"
         aria-label={photo.title}
         onClick={handleClick}
-        className="bg-fill-quaternary relative block w-full cursor-pointer overflow-hidden"
-        style={{ aspectRatio: `${photo.width} / ${photo.height}` }}
+        className="bg-fill-quaternary focus-visible:ring-accent/50 relative block aspect-[4/3] w-full cursor-pointer overflow-hidden rounded-sm focus-visible:ring-2 focus-visible:outline-none lg:aspect-auto lg:min-h-0 lg:flex-1"
         {...getViewerTransitionTriggerProps(photo.id)}
       >
         {photo.thumbHash && <Thumbhash thumbHash={photo.thumbHash} className="absolute inset-0" />}
@@ -139,13 +133,13 @@ const HeroPhoto = memo(({ photo, index, order, eager, className }: HeroPhotoProp
           decoding="async"
           onLoad={() => setLoaded(true)}
           className={clsx(
-            'absolute inset-0 h-full w-full object-cover transition-[opacity,transform] duration-700 ease-out group-hover/photo:scale-[1.02]',
+            'absolute inset-0 h-full w-full object-cover transition-opacity duration-300',
             loaded ? 'opacity-100' : 'opacity-0',
           )}
         />
       </button>
 
-      <figcaption className="mt-2 flex items-baseline gap-2 font-mono text-[9px] tracking-[0.22em] text-white/35 uppercase transition-colors duration-300 group-hover/photo:text-white/65">
+      <figcaption className="border-border mt-2 flex items-baseline gap-2 border-t pt-1.5 font-mono text-[9px] tracking-[0.18em] text-text-tertiary uppercase transition-colors duration-200 group-hover/photo:text-text-secondary">
         <span className="tabular-nums">{indexLabel}</span>
         {placeLabel && <span className="truncate">{placeLabel}</span>}
         {dateLabel && <span className="ml-auto tabular-nums">{dateLabel}</span>}
@@ -166,60 +160,72 @@ export function EditorialIntro({ photos, featured }: EditorialIntroProps) {
   const wordmark = siteConfig.name.trim().toLowerCase()
 
   return (
-    <section className="pt-4 lg:pt-20" aria-label="Photographic archive">
-      <div className="grid grid-cols-12 gap-x-3 gap-y-10 lg:gap-x-6">
-        <m.div
-          className="col-span-12 flex flex-col lg:col-span-3 lg:min-h-[66vh] lg:justify-between lg:pr-8"
-          initial={reduceMotion ? false : { opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, ease: EASE_OUT }}
-        >
-          <div>
-            <h1 className="text-[clamp(2.75rem,5vw,4.5rem)] leading-[0.85] font-extralight tracking-[-0.045em] text-white lowercase">
-              {wordmark}
-              <span className="text-white/45">.</span>
-            </h1>
-            <p className="mt-5 font-mono text-[9px] tracking-[0.42em] text-white/40 uppercase">Photographic Archive</p>
-            {years && (
-              <p className="mt-1.5 font-mono text-[9px] tracking-[0.3em] text-white/25 tabular-nums">{years}</p>
-            )}
-
-            <div className="mt-8 hidden h-14 w-px bg-white/15 lg:block" aria-hidden="true" />
-
-            {tags.length > 0 && (
-              <ul className="mt-5 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[9px] tracking-[0.24em] text-white/40 uppercase lg:mt-6 lg:block lg:space-y-1">
-                {tags.map((tag) => (
-                  <li key={tag} className="truncate">
-                    {tag}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <p className="mt-6 font-mono text-[9px] tracking-[0.24em] text-white/25 uppercase lg:mt-0">
-            {photos.length} photographs
+    <section className="pt-4 lg:pt-16" aria-label="Photographic archive">
+      <m.header
+        className="mb-10 grid grid-cols-12 gap-x-4 gap-y-6 lg:mb-14 lg:gap-x-6"
+        initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={Spring.smooth(0.7)}
+      >
+        <div className="col-span-12 lg:col-span-7">
+          <p className="text-text-tertiary mb-4 flex items-center gap-2.5 font-mono text-[9px] tracking-[0.32em] uppercase">
+            <span className="bg-accent/60 size-1 rounded-full" aria-hidden="true" />
+            Photographic Archive
           </p>
-        </m.div>
-
-        {/* Tall portrait anchor */}
-        <div className="col-span-7 flex flex-col gap-3 sm:col-span-4 lg:col-span-3">
-          {featured[0] && <HeroPhoto photo={featured[0]} index={0} order={1} eager />}
+          <h1 className="text-text max-w-[9ch] text-[clamp(2.5rem,6.2vw,6rem)] leading-[0.92] font-extralight tracking-[-0.055em] lowercase break-words">
+            {wordmark}
+            <span className="text-accent/70">.</span>
+          </h1>
+          {years && (
+            <p className="text-text-quaternary mt-4 font-mono text-[10px] tracking-[0.3em] tabular-nums">{years}</p>
+          )}
         </div>
 
-        {/* Offset column keeps the composition asymmetric */}
-        <div className="col-span-5 flex flex-col gap-3 sm:col-span-4 lg:col-span-2 lg:gap-5 lg:pt-24">
-          {featured[1] && <HeroPhoto photo={featured[1]} index={1} order={2} />}
-          {featured[2] && <HeroPhoto photo={featured[2]} index={2} order={3} />}
-        </div>
-
-        {/* Wide landscape plus a paired diptych */}
-        <div className="col-span-12 flex flex-col gap-3 sm:col-span-4 lg:col-span-4 lg:gap-5">
-          {featured[3] && <HeroPhoto photo={featured[3]} index={3} order={4} />}
-          <div className="grid grid-cols-2 gap-3 lg:gap-5">
-            {featured[4] && <HeroPhoto photo={featured[4]} index={4} order={5} />}
-            {featured[5] && <HeroPhoto photo={featured[5]} index={5} order={6} />}
+        <div className="col-span-12 flex flex-col justify-end gap-5 lg:col-span-4 lg:col-start-9">
+          {tags.length > 0 && (
+            <ul className="text-text-tertiary flex flex-wrap gap-x-5 gap-y-1.5 font-mono text-[9px] tracking-[0.24em] uppercase">
+              {tags.map((tag) => (
+                <li key={tag} className="flex items-center gap-2">
+                  <span className="bg-fill-tertiary size-1 rounded-full" aria-hidden="true" />
+                  {tag}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="border-border flex items-baseline justify-between border-t pt-3">
+            <span className="text-text-quaternary font-mono text-[9px] tracking-[0.28em] uppercase">
+              In this archive
+            </span>
+            <span className="text-text-secondary font-mono text-lg font-light tabular-nums">
+              {String(photos.length).padStart(2, '0')}
+            </span>
           </div>
+        </div>
+      </m.header>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:h-[min(88vh,820px)] lg:grid-cols-12 lg:grid-rows-3 lg:gap-x-6 lg:gap-y-8">
+        <div className="col-span-2 flex min-h-0 sm:col-span-4 lg:col-span-5 lg:col-start-1 lg:row-span-2 lg:row-start-1">
+          {featured[0] && <HeroPhoto photo={featured[0]} index={0} order={1} eager className="h-full" />}
+        </div>
+
+        <div className="col-span-1 flex min-h-0 sm:col-span-2 lg:col-span-3 lg:col-start-6 lg:row-start-1">
+          {featured[1] && <HeroPhoto photo={featured[1]} index={1} order={2} className="h-full" />}
+        </div>
+
+        <div className="col-span-1 flex min-h-0 sm:col-span-2 lg:col-span-4 lg:col-start-9 lg:row-span-2 lg:row-start-1">
+          {featured[2] && <HeroPhoto photo={featured[2]} index={2} order={3} className="h-full" />}
+        </div>
+
+        <div className="col-span-1 flex min-h-0 sm:col-span-2 lg:col-span-3 lg:col-start-6 lg:row-start-2">
+          {featured[3] && <HeroPhoto photo={featured[3]} index={3} order={4} className="h-full" />}
+        </div>
+
+        <div className="col-span-1 flex min-h-0 sm:col-span-2 lg:col-span-5 lg:col-start-1 lg:row-start-3">
+          {featured[4] && <HeroPhoto photo={featured[4]} index={4} order={5} className="h-full" />}
+        </div>
+
+        <div className="col-span-2 flex min-h-0 sm:col-span-4 lg:col-span-7 lg:col-start-6 lg:row-start-3">
+          {featured[5] && <HeroPhoto photo={featured[5]} index={5} order={6} className="h-full" />}
         </div>
       </div>
     </section>
